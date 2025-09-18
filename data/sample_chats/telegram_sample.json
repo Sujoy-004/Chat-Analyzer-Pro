@@ -1,1 +1,42 @@
-
+{
+    "name": "Telegram Chat with Project Team",
+    "type": "personal_chat",
+    "id": 123456789,
+    "messages": [
+        {
+            "id": 1,
+            "type": "message",
+            "date": "2025-09-15T09:45:00",
+            "from": "Sujoy",
+            "text": "Hey team, did you check the new repo update?"
+        },
+        {
+            "id": 2,
+            "type": "message",
+            "date": "2025-09-15T09:46:12",
+            "from": "Ravi",
+            "text": "Yes, I saw the commit. Looks good."
+        },
+        {
+            "id": 3,
+            "type": "message",
+            "date": "2025-09-15T09:47:35",
+            "from": "Ananya",
+            "text": "We should add more test cases before merging."
+        },
+        {
+            "id": 4,
+            "type": "message",
+            "date": "2025-09-15T09:48:00",
+            "from": "Sujoy",
+            "text": "Agree. I'll push test cases tonight."
+        },
+        {
+            "id": 5,
+            "type": "message",
+            "date": "2025-09-15T10:00:00",
+            "from": "Ravi",
+            "text": "Cool. Let\u2019s finalize by tomorrow."
+        }
+    ]
+}
