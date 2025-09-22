@@ -7,8 +7,6 @@ This module analyzes relationship health through conversation patterns including
 - Dominance scores (message count, length, conversation control)
 - Overall relationship health scoring
 
-Author: Chat Analyzer Pro
-Created: Day 5 of development
 """
 
 import pandas as pd
