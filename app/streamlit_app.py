@@ -14,6 +14,17 @@ import requests
 import warnings
 warnings.filterwarnings('ignore')
 
+# Install required packages for advanced ingestion
+try:
+    from PIL import Image
+    import pytesseract
+    import pdfplumber
+    from pdf2image import convert_from_bytes
+    ADVANCED_FEATURES = True
+except ImportError:
+    ADVANCED_FEATURES = False
+    st.warning("⚠️ Some packages missing for advanced features. Install: pip install pillow pytesseract pdfplumber pdf2image")
+
 # Configure page
 st.set_page_config(
     page_title="Chat Analyzer Pro",
@@ -27,7 +38,7 @@ def load_css():
     """Load custom CSS from GitHub"""
     try:
         css_url = "https://raw.githubusercontent.com/Sujoy-004/Chat-Analyzer-Pro/refs/heads/main/app/assets/style.css"
-        response = requests.get(css_url, timeout=5)
+        response = requests.get(css_url)
         if response.status_code == 200:
             st.markdown(f"<style>{response.text}</style>", unsafe_allow_html=True)
     except:
@@ -38,9 +49,7 @@ def load_css():
             font-size: 3rem;
             font-weight: bold;
             text-align: center;
-            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+            color: #1f77b4;
             margin-bottom: 2rem;
         }
         .health-score {
@@ -53,19 +62,55 @@ def load_css():
         .good { color: #17a2b8; }
         .fair { color: #ffc107; }
         .poor { color: #dc3545; }
-        .metric-card {
-            background: white;
-            padding: 1rem;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            margin: 0.5rem 0;
+        .ocr-result {
+            background-color: #f8f9fa;
+            border-left: 4px solid #007bff;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 4px;
         }
         </style>
         """, unsafe_allow_html=True)
 
-# WhatsApp parser function
+# Load ingestion module
+@st.cache_data
+def load_ingestion_module():
+    """Load advanced ingestion module from GitHub"""
+    try:
+        ingestion_url = "https://raw.githubusercontent.com/Sujoy-004/Chat-Analyzer-Pro/refs/heads/main/src/ingest/ingestion.py"
+        response = requests.get(ingestion_url)
+        if response.status_code == 200:
+            exec(response.text, globals())
+            return True
+    except Exception as e:
+        st.error(f"Failed to load advanced ingestion: {e}")
+    return False
+
+# Load all analysis modules
+@st.cache_data
+def load_analysis_modules():
+    """Load analysis modules from GitHub"""
+    modules = {}
+    module_urls = {
+        "whatsapp_parser": "https://raw.githubusercontent.com/Sujoy-004/Chat-Analyzer-Pro/refs/heads/main/src/parser/whatsapp_parser.py",
+        "telegram_parser": "https://raw.githubusercontent.com/Sujoy-004/Chat-Analyzer-Pro/refs/heads/main/src/parser/telegram_parser.py",
+        "relationship_health": "https://raw.githubusercontent.com/Sujoy-004/Chat-Analyzer-Pro/refs/heads/main/src/analysis/relationship_health.py",
+        "pdf_generator": "https://raw.githubusercontent.com/Sujoy-004/Chat-Analyzer-Pro/refs/heads/main/src/reporting/pdf_report.py"
+    }
+    
+    for name, url in module_urls.items():
+        try:
+            response = requests.get(url)
+            if response.status_code == 200:
+                modules[name] = response.text
+        except Exception as e:
+            st.error(f"Failed to load {name}: {e}")
+    
+    return modules
+
+# Fallback parsers for when ingestion module isn't available
 def parse_whatsapp_simple(content):
-    """Enhanced WhatsApp parser for Streamlit"""
+    """Simple WhatsApp parser for Streamlit"""
     messages = []
     lines = content.strip().split('\n')
     
@@ -73,53 +118,27 @@ def parse_whatsapp_simple(content):
         if not line.strip():
             continue
             
-        # Multiple WhatsApp format patterns
-        patterns = [
-            r'\[?(\d{1,2}/\d{1,2}/\d{2,4}),?\s+(\d{1,2}:\d{2}(?::\d{2})?(?:\s?[APap][Mm])?)\]?\s*-?\s*([^:]+):\s*(.+)',
-            r'(\d{1,2}/\d{1,2}/\d{2,4}),\s+(\d{1,2}:\d{2}(?::\d{2})?(?:\s?[APap][Mm])?)\s*-\s*([^:]+):\s*(.+)',
-            r'\[(\d{1,2}/\d{1,2}/\d{2,4}),\s+(\d{1,2}:\d{2}(?::\d{2})?(?:\s?[APap][Mm])?)\]\s+([^:]+):\s*(.+)'
-        ]
+        # Match WhatsApp format: [DD/MM/YY, HH:MM:SS] Name: Message
+        pattern = r'\[?(\d{1,2}/\d{1,2}/\d{2,4}),?\s+(\d{1,2}:\d{2}(?::\d{2})?(?:\s?[APap][Mm])?)\]?\s*-?\s*([^:]+):\s*(.+)'
+        match = re.match(pattern, line)
         
-        match = None
-        for pattern in patterns:
-            match = re.match(pattern, line)
-            if match:
-                break
-                
         if match:
             date_str, time_str, sender, message = match.groups()
             
             try:
-                # Parse date with multiple formats
-                date_formats = ['%d/%m/%y', '%d/%m/%Y', '%m/%d/%y', '%m/%d/%Y']
-                date_obj = None
-                for date_format in date_formats:
-                    try:
-                        date_obj = datetime.strptime(date_str, date_format)
-                        break
-                    except:
-                        continue
-                
-                if date_obj is None:
-                    continue
+                # Parse date
+                if len(date_str.split('/')[2]) == 2:
+                    date_obj = datetime.strptime(date_str, '%d/%m/%y')
+                else:
+                    date_obj = datetime.strptime(date_str, '%d/%m/%Y')
                 
                 # Parse time
                 try:
-                    if 'AM' in time_str.upper() or 'PM' in time_str.upper():
-                        time_obj = datetime.strptime(time_str, '%I:%M %p').time()
-                    else:
-                        try:
-                            time_obj = datetime.strptime(time_str, '%H:%M:%S').time()
-                        except:
-                            time_obj = datetime.strptime(time_str, '%H:%M').time()
+                    time_obj = datetime.strptime(time_str, '%H:%M:%S').time()
                 except:
-                    continue
+                    time_obj = datetime.strptime(time_str, '%H:%M').time()
                 
                 full_datetime = datetime.combine(date_obj.date(), time_obj)
-                
-                # Skip system messages
-                if sender.lower() in ['system', 'whatsapp', 'messages to this chat']:
-                    continue
                 
                 messages.append({
                     'datetime': full_datetime,
@@ -135,9 +154,8 @@ def parse_whatsapp_simple(content):
     
     return pd.DataFrame(messages)
 
-# Telegram parser function
 def parse_telegram_simple(json_data):
-    """Enhanced Telegram parser for Streamlit"""
+    """Simple Telegram parser for Streamlit"""
     messages = []
     
     try:
@@ -147,39 +165,21 @@ def parse_telegram_simple(json_data):
         for msg in chat_messages:
             if msg.get('type') == 'message' and 'text' in msg:
                 try:
-                    # Handle different date formats
-                    date_str = msg['date']
-                    if 'T' in date_str:
-                        datetime_obj = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
-                    else:
-                        datetime_obj = datetime.fromisoformat(date_str)
-                    
-                    # Get sender name
-                    sender = msg.get('from', msg.get('from_id', 'Unknown'))
-                    if isinstance(sender, dict):
-                        sender = sender.get('first_name', 'Unknown')
-                    
-                    # Process text content
+                    datetime_obj = datetime.fromisoformat(msg['date'].replace('Z', '+00:00'))
+                    sender = msg.get('from', 'Unknown')
                     text_content = msg['text']
-                    if isinstance(text_content, list):
-                        text_content = ''.join([
-                            item['text'] if isinstance(item, dict) and 'text' in item 
-                            else str(item) if not isinstance(item, dict) 
-                            else '' for item in text_content
-                        ])
                     
-                    # Skip empty messages
-                    if not text_content or text_content.strip() == '':
-                        continue
+                    if isinstance(text_content, list):
+                        text_content = ''.join([item if isinstance(item, str) else '' for item in text_content])
                     
                     messages.append({
                         'datetime': datetime_obj,
-                        'sender': str(sender).strip(),
-                        'message': str(text_content).strip(),
+                        'sender': sender,
+                        'message': text_content,
                         'date': datetime_obj.date().strftime('%Y-%m-%d'),
                         'time': datetime_obj.time().strftime('%H:%M:%S'),
                         'hour': datetime_obj.hour,
-                        'message_length': len(str(text_content).strip())
+                        'message_length': len(text_content)
                     })
                 except Exception:
                     continue
@@ -291,13 +291,75 @@ def calculate_health_score(df):
         'initiators_df': initiators_df
     }
 
-# Create download link for data
-def create_download_link(df, filename):
-    """Create download link for processed data"""
-    csv = df.to_csv(index=False)
-    b64 = base64.b64encode(csv.encode()).decode()
-    href = f'<a href="data:file/csv;base64,{b64}" download="{filename}">📥 Download Processed Data (CSV)</a>'
-    return href
+def convert_messages_to_dataframe(messages):
+    """Convert normalized messages from ingestion to DataFrame"""
+    df_data = []
+    for msg in messages:
+        try:
+            # Handle datetime parsing
+            if msg.get('date') and msg.get('time'):
+                datetime_str = f"{msg['date']} {msg['time']}"
+                try:
+                    dt = datetime.strptime(datetime_str, "%Y-%m-%d %H:%M")
+                except:
+                    # Try alternative parsing
+                    try:
+                        dt = datetime.fromisoformat(datetime_str.replace('Z', '+00:00'))
+                    except:
+                        dt = datetime.now()  # fallback
+            else:
+                dt = datetime.now()  # fallback
+            
+            df_data.append({
+                'datetime': dt,
+                'sender': msg.get('author', 'Unknown'),
+                'message': msg.get('text', ''),
+                'date': msg.get('date', dt.date().strftime('%Y-%m-%d')),
+                'time': msg.get('time', dt.time().strftime('%H:%M:%S')),
+                'hour': dt.hour,
+                'message_length': len(msg.get('text', ''))
+            })
+        except Exception:
+            # Skip malformed messages
+            continue
+    
+    return pd.DataFrame(df_data)
+
+def display_ocr_results(media_ocr):
+    """Display OCR results in an organized way"""
+    if not media_ocr:
+        return
+    
+    st.subheader("📄 OCR & Media Processing Results")
+    
+    # Group by type
+    images = [item for item in media_ocr if 'ocr' in item]
+    errors = [item for item in media_ocr if 'note' in item and 'error' in item.get('note', '').lower()]
+    other = [item for item in media_ocr if item not in images and item not in errors]
+    
+    if images:
+        st.write("**🖼️ Image OCR Results:**")
+        for i, item in enumerate(images[:5], 1):  # Show first 5
+            with st.expander(f"📷 {item.get('file', f'Image {i}')}"):
+                ocr_text = item.get('ocr', '')
+                if ocr_text.strip():
+                    st.markdown(f'<div class="ocr-result">{ocr_text[:1000]}{"..." if len(ocr_text) > 1000 else ""}</div>', 
+                              unsafe_allow_html=True)
+                    if len(ocr_text) > 1000:
+                        if st.button(f"Show full text for Image {i}"):
+                            st.text_area("Full extracted text:", ocr_text, height=200, key=f"full_ocr_{i}")
+                else:
+                    st.info("No text detected in this image")
+    
+    if errors:
+        st.write("**⚠️ Processing Issues:**")
+        for item in errors:
+            st.warning(f"📁 {item.get('file', 'Unknown file')}: {item.get('note', 'Unknown error')}")
+    
+    if other:
+        st.write("**📁 Other Files Processed:**")
+        for item in other:
+            st.info(f"📄 {item.get('file', 'Unknown file')}: {item.get('note', 'Processed')}")
 
 # Main Streamlit App
 def main():
@@ -305,69 +367,80 @@ def main():
     
     # Header
     st.markdown('<h1 class="main-header">💬 Chat Analyzer Pro</h1>', unsafe_allow_html=True)
-    st.markdown("### Analyze your WhatsApp and Telegram conversations with AI-powered insights")
+    st.markdown("### Analyze your WhatsApp, Telegram conversations, images, and documents with AI-powered insights")
+    
+    # Load advanced ingestion if available
+    ingestion_loaded = load_ingestion_module() if ADVANCED_FEATURES else False
     
     # Sidebar
     st.sidebar.title("📁 Upload Your Chat")
-    st.sidebar.markdown("---")
     
-    # File upload
+    # File upload with expanded format support
+    file_types = ['txt', 'json']
+    help_text = "Upload WhatsApp exported .txt file or Telegram .json export"
+    
+    if ingestion_loaded:
+        file_types.extend(['zip', 'png', 'jpg', 'jpeg', 'pdf'])
+        help_text = "Upload chat exports, ZIP files, screenshots, or PDF documents"
+    
     uploaded_file = st.sidebar.file_uploader(
-        "Choose a chat file",
-        type=['txt', 'json'],
-        help="Upload WhatsApp exported .txt file or Telegram .json export"
+        "Choose a file",
+        type=file_types,
+        help=help_text
     )
     
-    # Instructions
-    with st.sidebar.expander("📖 How to export chats"):
-        st.markdown("""
-        **WhatsApp:**
-        1. Open the chat you want to analyze
-        2. Tap the three dots menu → More → Export chat
-        3. Choose "Without media"
-        4. Save the .txt file
-        
-        **Telegram:**
-        1. Open Telegram Desktop
-        2. Settings → Advanced → Export Telegram data
-        3. Select the chat and export as JSON
-        """)
-    
     if uploaded_file is not None:
-        # Determine file type and parse
+        # Determine file type
         file_type = uploaded_file.name.split('.')[-1].lower()
         
         try:
-            with st.spinner(f'🔍 Parsing {file_type.upper()} file...'):
-                if file_type == 'txt':
-                    # WhatsApp file
-                    content = uploaded_file.getvalue().decode('utf-8')
-                    st.sidebar.success("✅ WhatsApp file detected")
-                    df = parse_whatsapp_simple(content)
-                    
-                elif file_type == 'json':
-                    # Telegram file
-                    content = uploaded_file.getvalue().decode('utf-8')
-                    st.sidebar.success("✅ Telegram file detected")
-                    df = parse_telegram_simple(content)
-                    
-            if df.empty:
-                st.error("❌ Could not parse the uploaded file. Please check the format and try again.")
-                st.info("💡 Make sure your WhatsApp export is in the correct format or your Telegram JSON contains message data.")
-                return
+            df = None
+            media_ocr = []
+            
+            # Use advanced ingestion if available
+            if ingestion_loaded and file_type in ['zip', 'png', 'jpg', 'jpeg', 'pdf']:
+                with st.spinner('🔍 Processing file with advanced features...'):
+                    messages, media_ocr = process_uploaded_file(uploaded_file)
                 
-            # Data validation
-            if len(df) < 10:
-                st.warning("⚠️ Very few messages detected. Results may not be meaningful.")
+                if messages:
+                    df = convert_messages_to_dataframe(messages)
+                    
+                    # Success message based on file type
+                    if file_type == 'zip':
+                        st.sidebar.success(f"✅ ZIP processed: {len(messages)} messages extracted")
+                    elif file_type in ['png', 'jpg', 'jpeg']:
+                        st.sidebar.success(f"✅ Image OCR completed")
+                        if len([m for m in messages if m.get('text', '').strip()]) > 0:
+                            st.sidebar.info(f"📝 {len([m for m in messages if m.get('text', '').strip()])} text sections found")
+                    elif file_type == 'pdf':
+                        st.sidebar.success(f"✅ PDF processed: {len(messages)} text sections")
+                else:
+                    st.sidebar.warning("⚠️ No readable content found")
             
-            st.sidebar.success(f"📊 Parsed {len(df)} messages from {len(df['sender'].unique())} participants")
+            # Fallback to simple parsing for txt/json or when advanced features unavailable
+            elif file_type == 'txt':
+                content = uploaded_file.getvalue().decode('utf-8')
+                st.sidebar.success("✅ WhatsApp file detected")
+                df = parse_whatsapp_simple(content)
+                
+            elif file_type == 'json':
+                content = uploaded_file.getvalue().decode('utf-8')
+                st.sidebar.success("✅ Telegram file detected")
+                df = parse_telegram_simple(content)
             
-            # Show parsed data sample
-            with st.sidebar.expander("👀 Preview data"):
-                st.dataframe(df.head(5)[['datetime', 'sender', 'message']])
+            # If advanced features requested but not available
+            elif file_type in ['zip', 'png', 'jpg', 'jpeg', 'pdf']:
+                st.sidebar.error("❌ Advanced features not available. Install required packages.")
+                return
+            
+            if df is None or df.empty:
+                st.error("❌ Could not parse the uploaded file. Please check the format.")
+                return
+            
+            st.sidebar.success(f"📊 Analyzed {len(df)} messages from {len(df['sender'].unique())} participants")
             
             # Analysis
-            with st.spinner('🔍 Analyzing your chat...'):
+            with st.spinner('🔍 Analyzing your data...'):
                 health_results = calculate_health_score(df)
             
             if health_results:
@@ -380,28 +453,24 @@ def main():
                     if score >= 85:
                         grade = "Excellent"
                         color = "excellent"
-                        emoji = "🏆"
                     elif score >= 70:
                         grade = "Good"
                         color = "good"
-                        emoji = "👍"
                     elif score >= 55:
                         grade = "Fair"
                         color = "fair"
-                        emoji = "⚠️"
                     else:
                         grade = "Needs Improvement"
                         color = "poor"
-                        emoji = "📈"
                     
-                    st.markdown(f'<div class="health-score {color}">{emoji} {score:.1f}/100</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="health-score {color}">{score:.1f}/100</div>', unsafe_allow_html=True)
                     st.markdown(f'<h3 style="text-align: center; color: gray;">Relationship Health: {grade}</h3>', unsafe_allow_html=True)
                 
                 # Metrics
                 col1, col2, col3, col4 = st.columns(4)
                 
                 with col1:
-                    st.metric("📊 Total Messages", f"{len(df):,}")
+                    st.metric("📊 Total Messages", len(df))
                 
                 with col2:
                     st.metric("👥 Participants", len(df['sender'].unique()))
@@ -424,10 +493,8 @@ def main():
                     fig_pie = px.pie(
                         values=health_results['message_counts'].values,
                         names=health_results['message_counts'].index,
-                        title="💬 Message Distribution",
-                        color_discrete_sequence=px.colors.qualitative.Set3
+                        title="💬 Message Distribution"
                     )
-                    fig_pie.update_traces(textposition='inside', textinfo='percent+label')
                     st.plotly_chart(fig_pie, use_container_width=True)
                 
                 with chart_col2:
@@ -443,33 +510,19 @@ def main():
                     max_scores = [25, 20, 25, 15, 15]
                     
                     fig_bar = go.Figure()
-                    fig_bar.add_trace(go.Bar(x=categories, y=scores, name='Your Score', 
-                                           marker_color='#667eea', text=[f'{s:.1f}' for s in scores],
-                                           textposition='auto'))
-                    fig_bar.add_trace(go.Bar(x=categories, y=max_scores, name='Max Score', 
-                                           marker_color='lightgray', opacity=0.5))
-                    fig_bar.update_layout(title='🎯 Health Score Breakdown', barmode='overlay',
-                                         yaxis_title="Points")
+                    fig_bar.add_trace(go.Bar(x=categories, y=scores, name='Score', marker_color='#1f77b4'))
+                    fig_bar.add_trace(go.Bar(x=categories, y=max_scores, name='Max Score', marker_color='lightgray', opacity=0.5))
+                    fig_bar.update_layout(title='🎯 Health Score Breakdown', barmode='overlay')
                     st.plotly_chart(fig_bar, use_container_width=True)
                 
                 # Daily activity
                 daily_activity = df.groupby('date').size().reset_index(name='messages')
-                fig_line = px.line(daily_activity, x='date', y='messages', 
-                                 title='📅 Daily Message Activity', markers=True,
-                                 line_shape='spline')
-                fig_line.update_traces(line_color='#667eea', marker_color='#764ba2')
+                fig_line = px.line(daily_activity, x='date', y='messages', title='📅 Daily Message Activity', markers=True)
                 st.plotly_chart(fig_line, use_container_width=True)
                 
-                # Hourly activity heatmap
-                if len(df) > 50:  # Only show for larger datasets
-                    hourly_activity = df.groupby(['sender', 'hour']).size().unstack(fill_value=0)
-                    fig_heatmap = px.imshow(hourly_activity.values, 
-                                          x=hourly_activity.columns,
-                                          y=hourly_activity.index,
-                                          title='🕒 Activity Heatmap by Hour',
-                                          labels={'x': 'Hour of Day', 'y': 'Participant'},
-                                          aspect='auto')
-                    st.plotly_chart(fig_heatmap, use_container_width=True)
+                # OCR Results Display
+                if media_ocr:
+                    display_ocr_results(media_ocr)
                 
                 # Detailed insights
                 st.subheader("🔍 Detailed Insights")
@@ -477,61 +530,39 @@ def main():
                 insight_col1, insight_col2 = st.columns(2)
                 
                 with insight_col1:
-                    st.markdown("**💪 Strengths:**")
-                    strengths_found = False
+                    st.write("**💪 Strengths:**")
                     if health_results['balance_points'] >= 20:
-                        st.success("✅ Well-balanced message distribution")
-                        strengths_found = True
+                        st.write("✅ Well-balanced message distribution")
                     if health_results['init_points'] >= 16:
-                        st.success("✅ Good conversation initiation balance")
-                        strengths_found = True
+                        st.write("✅ Good conversation initiation balance")
                     if health_results['response_points'] >= 20:
-                        st.success("✅ Responsive communication")
-                        strengths_found = True
+                        st.write("✅ Responsive communication")
                     if health_results['consistency_points'] >= 12:
-                        st.success("✅ Consistent communication pattern")
-                        strengths_found = True
-                    if not strengths_found:
-                        st.info("💡 Focus on the improvement areas below")
+                        st.write("✅ Consistent communication pattern")
                 
                 with insight_col2:
-                    st.markdown("**⚠️ Areas for Improvement:**")
-                    improvements_found = False
+                    st.write("**⚠️ Areas for Improvement:**")
                     if health_results['response_points'] < 20:
-                        st.warning("🔄 Could improve response times")
-                        improvements_found = True
+                        st.write("🔄 Could improve response times")
                     if health_results['balance_points'] < 20:
-                        st.warning("⚖️ Could balance message distribution")
-                        improvements_found = True
+                        st.write("⚖️ Could balance message distribution")
                     if health_results['init_points'] < 16:
-                        st.warning("🚀 Could balance conversation initiation")
-                        improvements_found = True
-                    if health_results['consistency_points'] < 12:
-                        st.warning("📅 Could improve communication consistency")
-                        improvements_found = True
-                    if not improvements_found:
-                        st.success("🎉 Great communication patterns!")
-                
-                # Download processed data
-                st.subheader("📥 Export Data")
-                st.markdown(create_download_link(df, f"chat_analysis_{datetime.now().strftime('%Y%m%d')}.csv"), 
-                           unsafe_allow_html=True)
+                        st.write("🚀 Could balance conversation initiation")
                 
                 # Raw data preview
                 if st.checkbox("📋 Show Raw Data"):
-                    st.dataframe(df, use_container_width=True)
-                    
+                    st.dataframe(df.head(20))
+            
         except Exception as e:
-            st.error(f"❌ Error processing file: {str(e)}")
-            st.info("💡 Please check your file format and try again. Make sure it's a valid WhatsApp or Telegram export.")
+            st.error(f"❌ Error processing file: {e}")
+            st.exception(e)  # Show full traceback for debugging
     
     else:
         # Welcome message
         st.markdown("""
-        <div style="border: 2px dashed #667eea; border-radius: 15px; padding: 2rem; text-align: center; margin: 1rem 0; background: linear-gradient(135deg, rgba(102, 126, 234, 0.05), rgba(118, 75, 162, 0.05));">
+        <div style="border: 2px dashed #1f77b4; border-radius: 10px; padding: 2rem; text-align: center; margin: 1rem 0;">
             <h3>👋 Welcome to Chat Analyzer Pro!</h3>
-            <p>Upload your WhatsApp (.txt) or Telegram (.json) chat export to get started.</p>
-            <p>Get insights into your communication patterns, relationship health, and more!</p>
+            <p>Upload your chat files to get comprehensive communication insights!</p>
         </div>
         """, unsafe_allow_html=True)
         
@@ -541,55 +572,42 @@ def main():
         feature_col1, feature_col2, feature_col3 = st.columns(3)
         
         with feature_col1:
-            st.markdown("""
+            st.write("""
             **📊 Analytics**
-            - Message statistics and trends
-            - Communication patterns analysis
-            - Response time evaluation
-            - Activity heatmaps
+            - Message statistics
+            - Communication patterns
+            - Response time analysis
             """)
         
         with feature_col2:
-            st.markdown("""
-            **🏥 Health Score**
-            - Comprehensive relationship assessment
-            - Balance metrics calculation
-            - Engagement quality analysis
-            - Personalized insights
+            st.write("""
+            **📁 File Support**
+            - WhatsApp (.txt)
+            - Telegram (.json)
+            - ZIP archives
+            - Screenshots (OCR)
+            - PDF documents
             """)
         
         with feature_col3:
-            st.markdown("""
-            **📈 Visualizations**
-            - Interactive charts and graphs
-            - Daily/hourly activity timelines
-            - Distribution analysis
-            - Export processed data
+            st.write("""
+            **🏥 Health Score**
+            - Relationship assessment
+            - Balance metrics  
+            - Engagement quality
             """)
         
-        # Sample data demonstration
-        st.subheader("🎯 Try with Sample Data")
-        if st.button("📊 Load Sample Analysis"):
-            try:
-                sample_url = "https://raw.githubusercontent.com/Sujoy-004/Chat-Analyzer-Pro/refs/heads/main/data/processed/example_parsed.csv"
-                sample_df = pd.read_csv(sample_url)
-                sample_df['datetime'] = pd.to_datetime(sample_df['datetime'])
-                
-                st.success("✅ Sample data loaded!")
-                health_results = calculate_health_score(sample_df)
-                
-                if health_results:
-                    score = health_results['total_score']
-                    st.metric("Sample Health Score", f"{score:.1f}/100")
-                    
-                    # Quick sample visualization
-                    fig_sample = px.pie(values=health_results['message_counts'].values,
-                                       names=health_results['message_counts'].index,
-                                       title="Sample: Message Distribution")
-                    st.plotly_chart(fig_sample, use_container_width=True)
-                    
-            except Exception as e:
-                st.error("Could not load sample data")
+        # Installation instructions if advanced features not available
+        if not ADVANCED_FEATURES:
+            st.info("""
+            **📦 Enable Advanced Features:**
+            Install additional packages for ZIP, OCR, and PDF support:
+            ```bash
+            pip install pillow pytesseract pdfplumber pdf2image
+            ```
+            Also install system packages: `tesseract-ocr` and `poppler-utils`
+            """)
 
 if __name__ == "__main__":
     main()
+    
