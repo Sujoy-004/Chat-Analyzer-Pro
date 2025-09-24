@@ -15,15 +15,74 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # Install required packages for advanced ingestion
-try:
-    from PIL import Image
-    import pytesseract
-    import pdfplumber
-    from pdf2image import convert_from_bytes
-    ADVANCED_FEATURES = True
-except ImportError:
+def setup_advanced_features():
+    """Setup advanced features with automatic installation and configuration"""
+    global ADVANCED_FEATURES
     ADVANCED_FEATURES = False
-    st.warning("⚠️ Some packages missing for advanced features. Install: pip install pillow pytesseract pdfplumber pdf2image")
+    
+    # Try to import and configure required packages
+    try:
+        # Install packages if missing
+        import subprocess
+        import sys
+        
+        # Check and install Python packages
+        required_packages = ['pillow', 'pytesseract', 'pdfplumber', 'pdf2image']
+        for package in required_packages:
+            try:
+                __import__(package.replace('-', '_'))
+            except ImportError:
+                st.info(f"Installing {package}...")
+                subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+        
+        # Now import the packages
+        from PIL import Image
+        import pytesseract
+        import pdfplumber
+        from pdf2image import convert_from_bytes
+        
+        # Configure Tesseract path for Windows
+        import platform
+        if platform.system() == "Windows":
+            possible_paths = [
+                r'C:\Program Files\Tesseract-OCR\tesseract.exe',
+                r'C:\Program Files (x86)\Tesseract-OCR\tesseract.exe',
+                r'C:\Tesseract-OCR\tesseract.exe'
+            ]
+            
+            tesseract_found = False
+            for path in possible_paths:
+                if os.path.exists(path):
+                    pytesseract.pytesseract.tesseract_cmd = path
+                    tesseract_found = True
+                    break
+            
+            if not tesseract_found:
+                st.warning("Tesseract not found. OCR features will be limited.")
+                return False
+        
+        ADVANCED_FEATURES = True
+        return True
+        
+    except Exception as e:
+        st.error(f"Could not setup advanced features: {e}")
+        return False
+
+# Simple OCR fallback using basic text extraction
+def simple_ocr_fallback(image_bytes):
+    """Basic image text extraction without tesseract"""
+    try:
+        from PIL import Image
+        import io
+        
+        # Just return basic info about the image
+        img = Image.open(io.BytesIO(image_bytes))
+        return f"[Image detected: {img.size[0]}x{img.size[1]} pixels, format: {img.format}]"
+    except:
+        return "[Image file detected but could not process]"
+
+# Setup advanced features
+ADVANCED_FEATURES = setup_advanced_features()
 
 # Configure page
 st.set_page_config(
@@ -72,19 +131,193 @@ def load_css():
         </style>
         """, unsafe_allow_html=True)
 
-# Load ingestion module
-@st.cache_data
-def load_ingestion_module():
-    """Load advanced ingestion module from GitHub"""
+# Robust ingestion function with fallbacks
+def process_uploaded_file_with_fallbacks(uploaded_file):
+    """
+    Process uploaded file with graceful fallbacks when advanced features aren't available
+    """
+    filename = uploaded_file.name
+    content = uploaded_file.getvalue()
+    file_type = filename.lower().split('.')[-1]
+    
+    messages = []
+    media_ocr = []
+    
     try:
-        ingestion_url = "https://raw.githubusercontent.com/Sujoy-004/Chat-Analyzer-Pro/refs/heads/main/src/ingest/ingestion.py"
-        response = requests.get(ingestion_url)
-        if response.status_code == 200:
-            exec(response.text, globals())
-            return True
+        # ZIP files - basic extraction
+        if file_type == 'zip':
+            import zipfile
+            import io
+            
+            try:
+                with zipfile.ZipFile(io.BytesIO(content)) as z:
+                    for member in z.namelist():
+                        if member.endswith('/'):
+                            continue
+                        
+                        try:
+                            with z.open(member) as f:
+                                file_content = f.read()
+                                
+                            # Process based on file extension
+                            member_ext = member.lower().split('.')[-1]
+                            
+                            if member_ext == 'txt':
+                                # WhatsApp text file
+                                text_content = file_content.decode('utf-8', errors='ignore')
+                                df = parse_whatsapp_simple(text_content)
+                                
+                                for _, row in df.iterrows():
+                                    messages.append({
+                                        'author': row['sender'],
+                                        'text': row['message'],
+                                        'date': row['date'],
+                                        'time': row['time']
+                                    })
+                            
+                            elif member_ext == 'json':
+                                # Telegram JSON file
+                                json_content = file_content.decode('utf-8', errors='ignore')
+                                df = parse_telegram_simple(json_content)
+                                
+                                for _, row in df.iterrows():
+                                    messages.append({
+                                        'author': row['sender'],
+                                        'text': row['message'],
+                                        'date': row['date'],
+                                        'time': row['time']
+                                    })
+                            
+                            elif member_ext in ['png', 'jpg', 'jpeg']:
+                                # Image file - use simple fallback
+                                ocr_result = simple_ocr_fallback(file_content)
+                                media_ocr.append({
+                                    'file': member,
+                                    'ocr': ocr_result,
+                                    'note': 'Basic image detection (install Tesseract for OCR)'
+                                })
+                                
+                            else:
+                                media_ocr.append({
+                                    'file': member,
+                                    'note': f'File detected but not processed ({member_ext})'
+                                })
+                                
+                        except Exception as e:
+                            media_ocr.append({
+                                'file': member,
+                                'note': f'Error processing: {e}'
+                            })
+                            
+            except zipfile.BadZipFile:
+                raise Exception("Invalid ZIP file")
+                
+        # Image files - basic handling
+        elif file_type in ['png', 'jpg', 'jpeg']:
+            if ADVANCED_FEATURES:
+                # Use tesseract if available
+                try:
+                    import pytesseract
+                    from PIL import Image
+                    import io
+                    
+                    img = Image.open(io.BytesIO(content))
+                    ocr_text = pytesseract.image_to_string(img)
+                    
+                    media_ocr.append({
+                        'file': filename,
+                        'ocr': ocr_text
+                    })
+                    
+                    if ocr_text.strip():
+                        messages.append({
+                            'author': 'OCR_Extract',
+                            'text': ocr_text,
+                            'date': '',
+                            'time': ''
+                        })
+                        
+                except Exception as e:
+                    ocr_result = simple_ocr_fallback(content)
+                    media_ocr.append({
+                        'file': filename,
+                        'ocr': ocr_result,
+                        'note': f'OCR failed: {e}'
+                    })
+            else:
+                # Basic image info
+                ocr_result = simple_ocr_fallback(content)
+                media_ocr.append({
+                    'file': filename,
+                    'ocr': ocr_result,
+                    'note': 'Install Tesseract for text extraction'
+                })
+        
+        # PDF files - basic handling
+        elif file_type == 'pdf':
+            if ADVANCED_FEATURES:
+                try:
+                    import pdfplumber
+                    import io
+                    
+                    pdf_text = ""
+                    with pdfplumber.open(io.BytesIO(content)) as pdf:
+                        for page in pdf.pages:
+                            text = page.extract_text()
+                            if text:
+                                pdf_text += text + "\n"
+                    
+                    if pdf_text.strip():
+                        messages.append({
+                            'author': 'PDF_Extract',
+                            'text': pdf_text,
+                            'date': '',
+                            'time': ''
+                        })
+                        
+                except Exception as e:
+                    media_ocr.append({
+                        'file': filename,
+                        'note': f'PDF processing failed: {e}'
+                    })
+            else:
+                media_ocr.append({
+                    'file': filename,
+                    'note': 'PDF detected - install pdfplumber for text extraction'
+                })
+        
+        # Regular text/json files
+        elif file_type == 'txt':
+            text_content = content.decode('utf-8', errors='ignore')
+            df = parse_whatsapp_simple(text_content)
+            
+            for _, row in df.iterrows():
+                messages.append({
+                    'author': row['sender'],
+                    'text': row['message'],
+                    'date': row['date'],
+                    'time': row['time']
+                })
+                
+        elif file_type == 'json':
+            json_content = content.decode('utf-8', errors='ignore')
+            df = parse_telegram_simple(json_content)
+            
+            for _, row in df.iterrows():
+                messages.append({
+                    'author': row['sender'],
+                    'text': row['message'],
+                    'date': row['date'],
+                    'time': row['time']
+                })
+        
+        else:
+            raise Exception(f"Unsupported file type: {file_type}")
+            
     except Exception as e:
-        st.error(f"Failed to load advanced ingestion: {e}")
-    return False
+        raise Exception(f"Error processing {filename}: {e}")
+    
+    return messages, media_ocr
 
 # Load all analysis modules
 @st.cache_data
@@ -369,19 +602,12 @@ def main():
     st.markdown('<h1 class="main-header">💬 Chat Analyzer Pro</h1>', unsafe_allow_html=True)
     st.markdown("### Analyze your WhatsApp, Telegram conversations, images, and documents with AI-powered insights")
     
-    # Load advanced ingestion if available
-    ingestion_loaded = load_ingestion_module() if ADVANCED_FEATURES else False
-    
     # Sidebar
     st.sidebar.title("📁 Upload Your Chat")
     
     # File upload with expanded format support
-    file_types = ['txt', 'json']
-    help_text = "Upload WhatsApp exported .txt file or Telegram .json export"
-    
-    if ingestion_loaded:
-        file_types.extend(['zip', 'png', 'jpg', 'jpeg', 'pdf'])
-        help_text = "Upload chat exports, ZIP files, screenshots, or PDF documents"
+    file_types = ['txt', 'json', 'zip', 'png', 'jpg', 'jpeg', 'pdf']
+    help_text = "Upload chat exports, ZIP files, screenshots, or PDF documents"
     
     uploaded_file = st.sidebar.file_uploader(
         "Choose a file",
@@ -397,44 +623,31 @@ def main():
             df = None
             media_ocr = []
             
-            # Use advanced ingestion if available
-            if ingestion_loaded and file_type in ['zip', 'png', 'jpg', 'jpeg', 'pdf']:
-                with st.spinner('🔍 Processing file with advanced features...'):
-                    messages, media_ocr = process_uploaded_file(uploaded_file)
+            # Use our robust processing function
+            with st.spinner('🔍 Processing file...'):
+                messages, media_ocr = process_uploaded_file_with_fallbacks(uploaded_file)
+            
+            if messages:
+                df = convert_messages_to_dataframe(messages)
                 
-                if messages:
-                    df = convert_messages_to_dataframe(messages)
-                    
-                    # Success message based on file type
-                    if file_type == 'zip':
-                        st.sidebar.success(f"✅ ZIP processed: {len(messages)} messages extracted")
-                    elif file_type in ['png', 'jpg', 'jpeg']:
-                        st.sidebar.success(f"✅ Image OCR completed")
-                        if len([m for m in messages if m.get('text', '').strip()]) > 0:
-                            st.sidebar.info(f"📝 {len([m for m in messages if m.get('text', '').strip()])} text sections found")
-                    elif file_type == 'pdf':
-                        st.sidebar.success(f"✅ PDF processed: {len(messages)} text sections")
+                # Success message based on file type
+                if file_type == 'zip':
+                    st.sidebar.success(f"✅ ZIP processed: {len(messages)} messages found")
+                elif file_type in ['png', 'jpg', 'jpeg']:
+                    st.sidebar.success(f"✅ Image processed")
+                    if ADVANCED_FEATURES:
+                        st.sidebar.info("📝 OCR completed")
+                    else:
+                        st.sidebar.info("📝 Basic image detection (install Tesseract for OCR)")
+                elif file_type == 'pdf':
+                    st.sidebar.success(f"✅ PDF processed")
+                    if not ADVANCED_FEATURES:
+                        st.sidebar.info("📄 Install pdfplumber for better PDF processing")
                 else:
-                    st.sidebar.warning("⚠️ No readable content found")
+                    st.sidebar.success(f"✅ File processed: {len(messages)} messages")
             
-            # Fallback to simple parsing for txt/json or when advanced features unavailable
-            elif file_type == 'txt':
-                content = uploaded_file.getvalue().decode('utf-8')
-                st.sidebar.success("✅ WhatsApp file detected")
-                df = parse_whatsapp_simple(content)
-                
-            elif file_type == 'json':
-                content = uploaded_file.getvalue().decode('utf-8')
-                st.sidebar.success("✅ Telegram file detected")
-                df = parse_telegram_simple(content)
-            
-            # If advanced features requested but not available
-            elif file_type in ['zip', 'png', 'jpg', 'jpeg', 'pdf']:
-                st.sidebar.error("❌ Advanced features not available. Install required packages.")
-                return
-            
-            if df is None or df.empty:
-                st.error("❌ Could not parse the uploaded file. Please check the format.")
+            if not messages:
+                st.error("❌ No readable content found in the uploaded file.")
                 return
             
             st.sidebar.success(f"📊 Analyzed {len(df)} messages from {len(df['sender'].unique())} participants")
@@ -610,4 +823,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
