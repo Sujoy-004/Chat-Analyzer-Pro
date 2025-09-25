@@ -12,77 +12,11 @@ import json
 import re
 import requests
 import warnings
+import sys
+import os
+from typing import List, Dict, Any, Tuple
+
 warnings.filterwarnings('ignore')
-
-# Install required packages for advanced ingestion
-def setup_advanced_features():
-    """Setup advanced features with automatic installation and configuration"""
-    global ADVANCED_FEATURES
-    ADVANCED_FEATURES = False
-    
-    # Try to import and configure required packages
-    try:
-        # Install packages if missing
-        import subprocess
-        import sys
-        
-        # Check and install Python packages
-        required_packages = ['pillow', 'pytesseract', 'pdfplumber', 'pdf2image']
-        for package in required_packages:
-            try:
-                __import__(package.replace('-', '_'))
-            except ImportError:
-                st.info(f"Installing {package}...")
-                subprocess.check_call([sys.executable, "-m", "pip", "install", package])
-        
-        # Now import the packages
-        from PIL import Image
-        import pytesseract
-        import pdfplumber
-        from pdf2image import convert_from_bytes
-        
-        # Configure Tesseract path for Windows
-        import platform
-        if platform.system() == "Windows":
-            possible_paths = [
-                r'C:\Program Files\Tesseract-OCR\tesseract.exe',
-                r'C:\Program Files (x86)\Tesseract-OCR\tesseract.exe',
-                r'C:\Tesseract-OCR\tesseract.exe'
-            ]
-            
-            tesseract_found = False
-            for path in possible_paths:
-                if os.path.exists(path):
-                    pytesseract.pytesseract.tesseract_cmd = path
-                    tesseract_found = True
-                    break
-            
-            if not tesseract_found:
-                st.warning("Tesseract not found. OCR features will be limited.")
-                return False
-        
-        ADVANCED_FEATURES = True
-        return True
-        
-    except Exception as e:
-        st.error(f"Could not setup advanced features: {e}")
-        return False
-
-# Simple OCR fallback using basic text extraction
-def simple_ocr_fallback(image_bytes):
-    """Basic image text extraction without tesseract"""
-    try:
-        from PIL import Image
-        import io
-        
-        # Just return basic info about the image
-        img = Image.open(io.BytesIO(image_bytes))
-        return f"[Image detected: {img.size[0]}x{img.size[1]} pixels, format: {img.format}]"
-    except:
-        return "[Image file detected but could not process]"
-
-# Setup advanced features
-ADVANCED_FEATURES = setup_advanced_features()
 
 # Configure page
 st.set_page_config(
@@ -91,6 +25,22 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# Import your ingestion module
+@st.cache_data
+def load_ingestion_module():
+    """Load the ingestion module from GitHub"""
+    try:
+        ingestion_url = "https://raw.githubusercontent.com/Sujoy-004/Chat-Analyzer-Pro/refs/heads/main/src/ingest/ingestion.py"
+        response = requests.get(ingestion_url)
+        if response.status_code == 200:
+            # Execute the ingestion module code
+            exec(response.text, globals())
+            return True
+    except Exception as e:
+        st.error(f"Failed to load ingestion module: {e}")
+        return False
+    return False
 
 # Load custom CSS
 def load_css():
@@ -121,229 +71,46 @@ def load_css():
         .good { color: #17a2b8; }
         .fair { color: #ffc107; }
         .poor { color: #dc3545; }
-        .ocr-result {
+        .file-info {
             background-color: #f8f9fa;
             border-left: 4px solid #007bff;
-            padding: 10px;
-            margin: 5px 0;
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+        .media-info {
+            background-color: #e8f5e8;
+            border-left: 4px solid #28a745;
+            padding: 0.5rem;
+            margin: 0.5rem 0;
             border-radius: 4px;
         }
         </style>
         """, unsafe_allow_html=True)
 
-# Robust ingestion function with fallbacks
-def process_uploaded_file_with_fallbacks(uploaded_file):
-    """
-    Process uploaded file with graceful fallbacks when advanced features aren't available
-    """
-    filename = uploaded_file.name
-    content = uploaded_file.getvalue()
-    file_type = filename.lower().split('.')[-1]
+# Simplified ingestion functions for when module loading fails
+def simple_process_file(uploaded_file):
+    """Fallback simple file processing"""
+    filename = uploaded_file.name.lower()
+    content = uploaded_file.read()
     
-    messages = []
-    media_ocr = []
-    
-    try:
-        # ZIP files - basic extraction
-        if file_type == 'zip':
-            import zipfile
-            import io
-            
-            try:
-                with zipfile.ZipFile(io.BytesIO(content)) as z:
-                    for member in z.namelist():
-                        if member.endswith('/'):
-                            continue
-                        
-                        try:
-                            with z.open(member) as f:
-                                file_content = f.read()
-                                
-                            # Process based on file extension
-                            member_ext = member.lower().split('.')[-1]
-                            
-                            if member_ext == 'txt':
-                                # WhatsApp text file
-                                text_content = file_content.decode('utf-8', errors='ignore')
-                                df = parse_whatsapp_simple(text_content)
-                                
-                                for _, row in df.iterrows():
-                                    messages.append({
-                                        'author': row['sender'],
-                                        'text': row['message'],
-                                        'date': row['date'],
-                                        'time': row['time']
-                                    })
-                            
-                            elif member_ext == 'json':
-                                # Telegram JSON file
-                                json_content = file_content.decode('utf-8', errors='ignore')
-                                df = parse_telegram_simple(json_content)
-                                
-                                for _, row in df.iterrows():
-                                    messages.append({
-                                        'author': row['sender'],
-                                        'text': row['message'],
-                                        'date': row['date'],
-                                        'time': row['time']
-                                    })
-                            
-                            elif member_ext in ['png', 'jpg', 'jpeg']:
-                                # Image file - use simple fallback
-                                ocr_result = simple_ocr_fallback(file_content)
-                                media_ocr.append({
-                                    'file': member,
-                                    'ocr': ocr_result,
-                                    'note': 'Basic image detection (install Tesseract for OCR)'
-                                })
-                                
-                            else:
-                                media_ocr.append({
-                                    'file': member,
-                                    'note': f'File detected but not processed ({member_ext})'
-                                })
-                                
-                        except Exception as e:
-                            media_ocr.append({
-                                'file': member,
-                                'note': f'Error processing: {e}'
-                            })
-                            
-            except zipfile.BadZipFile:
-                raise Exception("Invalid ZIP file")
-                
-        # Image files - basic handling
-        elif file_type in ['png', 'jpg', 'jpeg']:
-            if ADVANCED_FEATURES:
-                # Use tesseract if available
-                try:
-                    import pytesseract
-                    from PIL import Image
-                    import io
-                    
-                    img = Image.open(io.BytesIO(content))
-                    ocr_text = pytesseract.image_to_string(img)
-                    
-                    media_ocr.append({
-                        'file': filename,
-                        'ocr': ocr_text
-                    })
-                    
-                    if ocr_text.strip():
-                        messages.append({
-                            'author': 'OCR_Extract',
-                            'text': ocr_text,
-                            'date': '',
-                            'time': ''
-                        })
-                        
-                except Exception as e:
-                    ocr_result = simple_ocr_fallback(content)
-                    media_ocr.append({
-                        'file': filename,
-                        'ocr': ocr_result,
-                        'note': f'OCR failed: {e}'
-                    })
-            else:
-                # Basic image info
-                ocr_result = simple_ocr_fallback(content)
-                media_ocr.append({
-                    'file': filename,
-                    'ocr': ocr_result,
-                    'note': 'Install Tesseract for text extraction'
-                })
-        
-        # PDF files - basic handling
-        elif file_type == 'pdf':
-            if ADVANCED_FEATURES:
-                try:
-                    import pdfplumber
-                    import io
-                    
-                    pdf_text = ""
-                    with pdfplumber.open(io.BytesIO(content)) as pdf:
-                        for page in pdf.pages:
-                            text = page.extract_text()
-                            if text:
-                                pdf_text += text + "\n"
-                    
-                    if pdf_text.strip():
-                        messages.append({
-                            'author': 'PDF_Extract',
-                            'text': pdf_text,
-                            'date': '',
-                            'time': ''
-                        })
-                        
-                except Exception as e:
-                    media_ocr.append({
-                        'file': filename,
-                        'note': f'PDF processing failed: {e}'
-                    })
-            else:
-                media_ocr.append({
-                    'file': filename,
-                    'note': 'PDF detected - install pdfplumber for text extraction'
-                })
-        
-        # Regular text/json files
-        elif file_type == 'txt':
-            text_content = content.decode('utf-8', errors='ignore')
-            df = parse_whatsapp_simple(text_content)
-            
-            for _, row in df.iterrows():
-                messages.append({
-                    'author': row['sender'],
-                    'text': row['message'],
-                    'date': row['date'],
-                    'time': row['time']
-                })
-                
-        elif file_type == 'json':
-            json_content = content.decode('utf-8', errors='ignore')
-            df = parse_telegram_simple(json_content)
-            
-            for _, row in df.iterrows():
-                messages.append({
-                    'author': row['sender'],
-                    'text': row['message'],
-                    'date': row['date'],
-                    'time': row['time']
-                })
-        
-        else:
-            raise Exception(f"Unsupported file type: {file_type}")
-            
-    except Exception as e:
-        raise Exception(f"Error processing {filename}: {e}")
-    
-    return messages, media_ocr
-
-# Load all analysis modules
-@st.cache_data
-def load_analysis_modules():
-    """Load analysis modules from GitHub"""
-    modules = {}
-    module_urls = {
-        "whatsapp_parser": "https://raw.githubusercontent.com/Sujoy-004/Chat-Analyzer-Pro/refs/heads/main/src/parser/whatsapp_parser.py",
-        "telegram_parser": "https://raw.githubusercontent.com/Sujoy-004/Chat-Analyzer-Pro/refs/heads/main/src/parser/telegram_parser.py",
-        "relationship_health": "https://raw.githubusercontent.com/Sujoy-004/Chat-Analyzer-Pro/refs/heads/main/src/analysis/relationship_health.py",
-        "pdf_generator": "https://raw.githubusercontent.com/Sujoy-004/Chat-Analyzer-Pro/refs/heads/main/src/reporting/pdf_report.py"
-    }
-    
-    for name, url in module_urls.items():
+    if filename.endswith('.txt'):
         try:
-            response = requests.get(url)
-            if response.status_code == 200:
-                modules[name] = response.text
-        except Exception as e:
-            st.error(f"Failed to load {name}: {e}")
-    
-    return modules
+            text = content.decode('utf-8')
+            return parse_whatsapp_simple(text), []
+        except:
+            return [], []
+    elif filename.endswith('.json'):
+        try:
+            text = content.decode('utf-8')
+            data = json.loads(text)
+            return parse_telegram_simple_from_data(data), []
+        except:
+            return [], []
+    else:
+        return [], [{"file": filename, "note": "File type not supported in fallback mode"}]
 
-# Fallback parsers for when ingestion module isn't available
 def parse_whatsapp_simple(content):
-    """Simple WhatsApp parser for Streamlit"""
+    """Simple WhatsApp parser"""
     messages = []
     lines = content.strip().split('\n')
     
@@ -351,7 +118,6 @@ def parse_whatsapp_simple(content):
         if not line.strip():
             continue
             
-        # Match WhatsApp format: [DD/MM/YY, HH:MM:SS] Name: Message
         pattern = r'\[?(\d{1,2}/\d{1,2}/\d{2,4}),?\s+(\d{1,2}:\d{2}(?::\d{2})?(?:\s?[APap][Mm])?)\]?\s*-?\s*([^:]+):\s*(.+)'
         match = re.match(pattern, line)
         
@@ -359,13 +125,11 @@ def parse_whatsapp_simple(content):
             date_str, time_str, sender, message = match.groups()
             
             try:
-                # Parse date
                 if len(date_str.split('/')[2]) == 2:
                     date_obj = datetime.strptime(date_str, '%d/%m/%y')
                 else:
                     date_obj = datetime.strptime(date_str, '%d/%m/%Y')
                 
-                # Parse time
                 try:
                     time_obj = datetime.strptime(time_str, '%H:%M:%S').time()
                 except:
@@ -374,25 +138,25 @@ def parse_whatsapp_simple(content):
                 full_datetime = datetime.combine(date_obj.date(), time_obj)
                 
                 messages.append({
-                    'datetime': full_datetime,
-                    'sender': sender.strip(),
-                    'message': message.strip(),
+                    'uid': f"{full_datetime}_{sender}_{len(messages)}",
                     'date': full_datetime.date().strftime('%Y-%m-%d'),
-                    'time': full_datetime.time().strftime('%H:%M:%S'),
-                    'hour': full_datetime.hour,
-                    'message_length': len(message.strip())
+                    'time': full_datetime.time().strftime('%H:%M'),
+                    'author': sender.strip(),
+                    'text': message.strip(),
+                    'source': 'whatsapp_txt',
+                    'media': [],
+                    'meta': {}
                 })
-            except Exception as e:
+            except Exception:
                 continue
     
-    return pd.DataFrame(messages)
+    return messages
 
-def parse_telegram_simple(json_data):
-    """Simple Telegram parser for Streamlit"""
+def parse_telegram_simple_from_data(data):
+    """Simple Telegram parser"""
     messages = []
     
     try:
-        data = json.loads(json_data)
         chat_messages = data.get('messages', [])
         
         for msg in chat_messages:
@@ -406,24 +170,64 @@ def parse_telegram_simple(json_data):
                         text_content = ''.join([item if isinstance(item, str) else '' for item in text_content])
                     
                     messages.append({
-                        'datetime': datetime_obj,
-                        'sender': sender,
-                        'message': text_content,
+                        'uid': msg.get('id', len(messages)),
                         'date': datetime_obj.date().strftime('%Y-%m-%d'),
-                        'time': datetime_obj.time().strftime('%H:%M:%S'),
-                        'hour': datetime_obj.hour,
-                        'message_length': len(text_content)
+                        'time': datetime_obj.time().strftime('%H:%M'),
+                        'author': sender,
+                        'text': text_content,
+                        'source': 'telegram_json',
+                        'media': [],
+                        'meta': {}
                     })
                 except Exception:
                     continue
     except Exception as e:
         st.error(f"Error parsing Telegram data: {e}")
     
-    return pd.DataFrame(messages)
+    return messages
 
-# Calculate relationship health (Day 4 method)
+# Convert normalized messages to DataFrame for analysis
+def messages_to_dataframe(messages: List[Dict[str, Any]]) -> pd.DataFrame:
+    """Convert normalized message list to DataFrame for analysis"""
+    if not messages:
+        return pd.DataFrame()
+    
+    df_data = []
+    for msg in messages:
+        try:
+            # Parse date and time
+            if msg['date'] and msg['time']:
+                try:
+                    datetime_str = f"{msg['date']} {msg['time']}"
+                    full_datetime = datetime.strptime(datetime_str, '%Y-%m-%d %H:%M')
+                except:
+                    # Handle partial times or different formats
+                    try:
+                        full_datetime = datetime.strptime(msg['date'], '%Y-%m-%d')
+                    except:
+                        full_datetime = datetime.now()
+            else:
+                full_datetime = datetime.now()
+            
+            df_data.append({
+                'datetime': full_datetime,
+                'sender': msg['author'],
+                'message': msg['text'],
+                'date': msg['date'] or full_datetime.strftime('%Y-%m-%d'),
+                'time': msg['time'] or full_datetime.strftime('%H:%M'),
+                'hour': full_datetime.hour,
+                'message_length': len(msg['text']),
+                'source': msg['source'],
+                'uid': msg['uid']
+            })
+        except Exception:
+            continue
+    
+    return pd.DataFrame(df_data)
+
+# Calculate relationship health (enhanced version)
 def calculate_health_score(df):
-    """Calculate relationship health score using Day 4 methodology"""
+    """Calculate relationship health score"""
     if len(df) < 2:
         return None
     
@@ -457,7 +261,7 @@ def calculate_health_score(df):
     response_df = pd.DataFrame(response_data)
     message_counts = df['sender'].value_counts()
     
-    # Calculate health score components (Day 4 method)
+    # Calculate health score components
     # 1. Communication Balance (25 points)
     participants = list(message_counts.index)
     if len(participants) >= 2:
@@ -524,136 +328,117 @@ def calculate_health_score(df):
         'initiators_df': initiators_df
     }
 
-def convert_messages_to_dataframe(messages):
-    """Convert normalized messages from ingestion to DataFrame"""
-    df_data = []
-    for msg in messages:
-        try:
-            # Handle datetime parsing
-            if msg.get('date') and msg.get('time'):
-                datetime_str = f"{msg['date']} {msg['time']}"
-                try:
-                    dt = datetime.strptime(datetime_str, "%Y-%m-%d %H:%M")
-                except:
-                    # Try alternative parsing
-                    try:
-                        dt = datetime.fromisoformat(datetime_str.replace('Z', '+00:00'))
-                    except:
-                        dt = datetime.now()  # fallback
-            else:
-                dt = datetime.now()  # fallback
-            
-            df_data.append({
-                'datetime': dt,
-                'sender': msg.get('author', 'Unknown'),
-                'message': msg.get('text', ''),
-                'date': msg.get('date', dt.date().strftime('%Y-%m-%d')),
-                'time': msg.get('time', dt.time().strftime('%H:%M:%S')),
-                'hour': dt.hour,
-                'message_length': len(msg.get('text', ''))
-            })
-        except Exception:
-            # Skip malformed messages
-            continue
-    
-    return pd.DataFrame(df_data)
-
-def display_ocr_results(media_ocr):
-    """Display OCR results in an organized way"""
+# Display media OCR results
+def display_media_results(media_ocr):
+    """Display media OCR results"""
     if not media_ocr:
         return
     
-    st.subheader("📄 OCR & Media Processing Results")
+    st.subheader("📸 Media & File Analysis")
     
-    # Group by type
-    images = [item for item in media_ocr if 'ocr' in item]
-    errors = [item for item in media_ocr if 'note' in item and 'error' in item.get('note', '').lower()]
-    other = [item for item in media_ocr if item not in images and item not in errors]
-    
-    if images:
-        st.write("**🖼️ Image OCR Results:**")
-        for i, item in enumerate(images[:5], 1):  # Show first 5
-            with st.expander(f"📷 {item.get('file', f'Image {i}')}"):
-                ocr_text = item.get('ocr', '')
-                if ocr_text.strip():
-                    st.markdown(f'<div class="ocr-result">{ocr_text[:1000]}{"..." if len(ocr_text) > 1000 else ""}</div>', 
-                              unsafe_allow_html=True)
-                    if len(ocr_text) > 1000:
-                        if st.button(f"Show full text for Image {i}"):
-                            st.text_area("Full extracted text:", ocr_text, height=200, key=f"full_ocr_{i}")
-                else:
-                    st.info("No text detected in this image")
-    
-    if errors:
-        st.write("**⚠️ Processing Issues:**")
-        for item in errors:
-            st.warning(f"📁 {item.get('file', 'Unknown file')}: {item.get('note', 'Unknown error')}")
-    
-    if other:
-        st.write("**📁 Other Files Processed:**")
-        for item in other:
-            st.info(f"📄 {item.get('file', 'Unknown file')}: {item.get('note', 'Processed')}")
+    for item in media_ocr:
+        filename = item.get('file', 'Unknown file')
+        ocr_text = item.get('ocr', '')
+        note = item.get('note', '')
+        
+        st.markdown(f'<div class="media-info"><strong>📁 {filename}</strong></div>', unsafe_allow_html=True)
+        
+        if ocr_text:
+            with st.expander(f"View extracted text from {filename}"):
+                st.text_area("Extracted Text", ocr_text, height=150, key=f"ocr_{filename}")
+        
+        if note:
+            st.info(f"ℹ️ {note}")
 
 # Main Streamlit App
 def main():
     load_css()
     
+    # Load ingestion module
+    ingestion_available = load_ingestion_module()
+    
     # Header
     st.markdown('<h1 class="main-header">💬 Chat Analyzer Pro</h1>', unsafe_allow_html=True)
-    st.markdown("### Analyze your WhatsApp, Telegram conversations, images, and documents with AI-powered insights")
+    st.markdown("### Analyze your WhatsApp, Telegram conversations and extract text from images, PDFs, and ZIP files")
+    
+    # Show capabilities
+    if ingestion_available:
+        st.success("✅ Advanced file processing enabled - supports all file types including ZIP, images, PDFs, and more!")
+    else:
+        st.warning("⚠️ Running in basic mode - only TXT and JSON files supported")
     
     # Sidebar
-    st.sidebar.title("📁 Upload Your Chat")
+    st.sidebar.title("📁 Upload Your Files")
     
-    # File upload with expanded format support
-    file_types = ['txt', 'json', 'zip', 'png', 'jpg', 'jpeg', 'pdf']
-    help_text = "Upload chat exports, ZIP files, screenshots, or PDF documents"
+    # Enhanced file upload
+    accepted_types = [
+        'txt', 'json', 'zip', 'png', 'jpg', 'jpeg', 'webp', 'bmp', 'pdf'
+    ] if ingestion_available else ['txt', 'json']
     
     uploaded_file = st.sidebar.file_uploader(
-        "Choose a file",
-        type=file_types,
-        help=help_text
+        "Choose files to analyze",
+        type=accepted_types,
+        help=f"Supported formats: {', '.join(accepted_types)}"
     )
     
+    # Display file type information
+    if ingestion_available:
+        st.sidebar.markdown("""
+        **Supported file types:**
+        - 📝 **Chat exports**: .txt (WhatsApp), .json (Telegram)
+        - 📦 **Archives**: .zip (can contain any supported files)
+        - 🖼️ **Images**: .png, .jpg, .jpeg, .webp, .bmp (OCR extraction)
+        - 📄 **Documents**: .pdf (text extraction + OCR)
+        """)
+    
     if uploaded_file is not None:
-        # Determine file type
-        file_type = uploaded_file.name.split('.')[-1].lower()
-        
+        # Process file
         try:
-            df = None
-            media_ocr = []
-            
-            # Use our robust processing function
-            with st.spinner('🔍 Processing file...'):
-                messages, media_ocr = process_uploaded_file_with_fallbacks(uploaded_file)
-            
-            if messages:
-                df = convert_messages_to_dataframe(messages)
-                
-                # Success message based on file type
-                if file_type == 'zip':
-                    st.sidebar.success(f"✅ ZIP processed: {len(messages)} messages found")
-                elif file_type in ['png', 'jpg', 'jpeg']:
-                    st.sidebar.success(f"✅ Image processed")
-                    if ADVANCED_FEATURES:
-                        st.sidebar.info("📝 OCR completed")
-                    else:
-                        st.sidebar.info("📝 Basic image detection (install Tesseract for OCR)")
-                elif file_type == 'pdf':
-                    st.sidebar.success(f"✅ PDF processed")
-                    if not ADVANCED_FEATURES:
-                        st.sidebar.info("📄 Install pdfplumber for better PDF processing")
+            with st.spinner('🔍 Processing your file...'):
+                if ingestion_available and 'process_uploaded_file' in globals():
+                    # Use advanced ingestion
+                    messages, media_ocr = process_uploaded_file(uploaded_file)
+                    
+                    st.sidebar.success(f"✅ File processed successfully!")
+                    st.sidebar.markdown(f"""
+                    <div class="file-info">
+                    <strong>📊 Processing Results:</strong><br>
+                    • {len(messages)} messages extracted<br>
+                    • {len(media_ocr)} media items processed<br>
+                    • File: {uploaded_file.name}
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Display media results
+                    if media_ocr:
+                        display_media_results(media_ocr)
+                    
                 else:
-                    st.sidebar.success(f"✅ File processed: {len(messages)} messages")
+                    # Use fallback processing
+                    messages, media_ocr = simple_process_file(uploaded_file)
+                    st.sidebar.success(f"✅ File processed (basic mode)")
+                
+                # Convert to DataFrame for analysis
+                df = messages_to_dataframe(messages)
             
-            if not messages:
-                st.error("❌ No readable content found in the uploaded file.")
+            if df.empty:
+                st.error("❌ No messages could be extracted from the uploaded file. Please check the format.")
                 return
             
-            st.sidebar.success(f"📊 Analyzed {len(df)} messages from {len(df['sender'].unique())} participants")
+            # Show file processing summary
+            sources = df['source'].value_counts() if 'source' in df.columns else pd.Series(['unknown'])
+            unique_senders = df['sender'].nunique()
+            
+            st.markdown(f"""
+            ### 📊 File Processing Summary
+            - **Messages extracted**: {len(df)}
+            - **Unique participants**: {unique_senders}
+            - **Sources detected**: {', '.join(sources.index.tolist())}
+            - **Date range**: {df['datetime'].min().strftime('%Y-%m-%d')} to {df['datetime'].max().strftime('%Y-%m-%d')}
+            """)
             
             # Analysis
-            with st.spinner('🔍 Analyzing your data...'):
+            with st.spinner('🔍 Analyzing your conversations...'):
                 health_results = calculate_health_score(df)
             
             if health_results:
@@ -728,14 +513,19 @@ def main():
                     fig_bar.update_layout(title='🎯 Health Score Breakdown', barmode='overlay')
                     st.plotly_chart(fig_bar, use_container_width=True)
                 
+                # Additional charts if we have source information
+                if 'source' in df.columns and len(df['source'].unique()) > 1:
+                    st.subheader("📋 Source Analysis")
+                    source_counts = df['source'].value_counts()
+                    fig_source = px.bar(x=source_counts.index, y=source_counts.values, 
+                                      title="Messages by Source Type")
+                    st.plotly_chart(fig_source, use_container_width=True)
+                
                 # Daily activity
                 daily_activity = df.groupby('date').size().reset_index(name='messages')
-                fig_line = px.line(daily_activity, x='date', y='messages', title='📅 Daily Message Activity', markers=True)
+                fig_line = px.line(daily_activity, x='date', y='messages', 
+                                 title='📅 Daily Message Activity', markers=True)
                 st.plotly_chart(fig_line, use_container_width=True)
-                
-                # OCR Results Display
-                if media_ocr:
-                    display_ocr_results(media_ocr)
                 
                 # Detailed insights
                 st.subheader("🔍 Detailed Insights")
@@ -768,21 +558,21 @@ def main():
             
         except Exception as e:
             st.error(f"❌ Error processing file: {e}")
-            st.exception(e)  # Show full traceback for debugging
+            st.exception(e)
     
     else:
         # Welcome message
         st.markdown("""
         <div style="border: 2px dashed #1f77b4; border-radius: 10px; padding: 2rem; text-align: center; margin: 1rem 0;">
             <h3>👋 Welcome to Chat Analyzer Pro!</h3>
-            <p>Upload your chat files to get comprehensive communication insights!</p>
+            <p>Upload your chat files to get started - now supports multiple formats!</p>
         </div>
         """, unsafe_allow_html=True)
         
         # Features
-        st.subheader("🚀 Features")
+        st.subheader("🚀 Enhanced Features")
         
-        feature_col1, feature_col2, feature_col3 = st.columns(3)
+        feature_col1, feature_col2, feature_col3, feature_col4 = st.columns(4)
         
         with feature_col1:
             st.write("""
@@ -794,32 +584,30 @@ def main():
         
         with feature_col2:
             st.write("""
-            **📁 File Support**
-            - WhatsApp (.txt)
-            - Telegram (.json)
-            - ZIP archives
-            - Screenshots (OCR)
-            - PDF documents
+            **🏥 Health Score**
+            - Relationship assessment
+            - Balance metrics
+            - Engagement quality
             """)
         
         with feature_col3:
             st.write("""
-            **🏥 Health Score**
-            - Relationship assessment
-            - Balance metrics  
-            - Engagement quality
+            **📈 Visualizations**
+            - Interactive charts
+            - Daily activity timeline
+            - Distribution analysis
             """)
         
-        # Installation instructions if advanced features not available
-        if not ADVANCED_FEATURES:
-            st.info("""
-            **📦 Enable Advanced Features:**
-            Install additional packages for ZIP, OCR, and PDF support:
-            ```bash
-            pip install pillow pytesseract pdfplumber pdf2image
-            ```
-            Also install system packages: `tesseract-ocr` and `poppler-utils`
+        with feature_col4:
+            st.write("""
+            **🔧 Multi-format**
+            - ZIP file support
+            - Image OCR extraction
+            - PDF text extraction
             """)
+        
+        if ingestion_available:
+            st.info("✨ **Pro Tip**: Try uploading a ZIP file containing multiple chat exports, images, or PDFs for comprehensive analysis!")
 
 if __name__ == "__main__":
     main()
