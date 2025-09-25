@@ -37,6 +37,7 @@ if 'modules_loaded' not in st.session_state:
     st.session_state.whatsapp_parser_available = False
     st.session_state.telegram_parser_available = False
     st.session_state.relationship_health_available = False
+    st.session_state.executed_modules = None
 
 @st.cache_data
 def load_github_modules():
@@ -68,26 +69,44 @@ def load_github_modules():
     
     return modules, success_count
 
-# Execute loaded modules
-@st.cache_data
-def execute_modules(modules):
-    """Execute the loaded module code"""
-    executed_modules = {}
-    
-    for name, code in modules.items():
-        if code:
-            try:
-                # Create a namespace for each module
-                namespace = {}
-                exec(code, namespace)
-                executed_modules[name] = namespace
-            except Exception as e:
-                st.error(f"Error executing {name}: {str(e)[:100]}...")
-                executed_modules[name] = None
-        else:
-            executed_modules[name] = None
-    
-    return executed_modules
+# Load modules and handle execution
+def load_and_execute_modules():
+    """Load and execute modules, handling caching properly"""
+    if 'executed_modules' not in st.session_state or st.session_state.executed_modules is None:
+        with st.spinner('🔄 Loading analysis modules...'):
+            modules, success_count = load_github_modules()
+        
+        # Execute modules
+        executed_modules = {}
+        for name, code in modules.items():
+            if code:
+                try:
+                    namespace = {}
+                    exec(code, namespace)
+                    # Store only serializable references
+                    executed_modules[name] = {
+                        'loaded': True,
+                        'functions': list(namespace.keys())
+                    }
+                    # Store the actual namespace in session state (not cached)
+                    st.session_state[f'module_{name}'] = namespace
+                except Exception as e:
+                    st.error(f"Error executing {name}: {str(e)[:100]}...")
+                    executed_modules[name] = {'loaded': False, 'error': str(e)}
+                    st.session_state[f'module_{name}'] = None
+            else:
+                executed_modules[name] = {'loaded': False, 'error': 'Failed to download'}
+                st.session_state[f'module_{name}'] = None
+        
+        st.session_state.executed_modules = executed_modules
+        st.session_state.modules_success_count = success_count
+        return executed_modules, success_count
+    else:
+        return st.session_state.executed_modules, st.session_state.get('modules_success_count', 0)
+
+def get_module_namespace(module_name):
+    """Get the actual module namespace from session state"""
+    return st.session_state.get(f'module_{module_name}', None)
 
 # Load custom CSS
 def load_css():
@@ -222,10 +241,10 @@ def process_uploaded_file(uploaded_file, executed_modules):
     file_type = filename.lower().split('.')[-1]
     
     # Try advanced ingestion first
-    if executed_modules.get("ingestion") and st.session_state.ingestion_available:
+    ingestion_module = get_module_namespace("ingestion")
+    if ingestion_module and st.session_state.ingestion_available:
         try:
             # Use the advanced ingestion module
-            ingestion_module = executed_modules["ingestion"]
             if "process_uploaded_file" in ingestion_module:
                 messages, media_ocr = ingestion_module["process_uploaded_file"](uploaded_file)
                 return convert_normalized_messages_to_df(messages), media_ocr, "advanced"
@@ -302,9 +321,9 @@ def calculate_relationship_health(df, executed_modules):
         return None
     
     # Try advanced relationship health analysis first
-    if executed_modules.get("relationship_health") and st.session_state.relationship_health_available:
+    rh_module = get_module_namespace("relationship_health")
+    if rh_module and st.session_state.relationship_health_available:
         try:
-            rh_module = executed_modules["relationship_health"]
             if "analyze_relationship_health" in rh_module:
                 # Prepare data for the advanced module
                 df_prepared = df.copy()
@@ -462,16 +481,18 @@ def display_media_results(media_ocr):
         if note:
             st.info(f"ℹ️ {note}")
 
-def show_module_status(modules, executed_modules, success_count):
+def show_module_status(executed_modules, success_count):
     """Show module loading status"""
     st.sidebar.markdown("### 🔧 Module Status")
     
-    total_modules = len(modules)
-    if success_count == total_modules:
+    total_modules = len(executed_modules)
+    successful_modules = sum(1 for m in executed_modules.values() if m.get('loaded', False))
+    
+    if successful_modules == total_modules:
         st.sidebar.markdown('<div class="module-status module-success">✅ All modules loaded successfully</div>', unsafe_allow_html=True)
-        st.sidebar.success(f"Advanced mode enabled - all {success_count}/{total_modules} modules active")
-    elif success_count > 0:
-        st.sidebar.markdown(f'<div class="module-status module-warning">⚠️ Partial functionality - {success_count}/{total_modules} modules loaded</div>', unsafe_allow_html=True)
+        st.sidebar.success(f"Advanced mode enabled - all {successful_modules}/{total_modules} modules active")
+    elif successful_modules > 0:
+        st.sidebar.markdown(f'<div class="module-status module-warning">⚠️ Partial functionality - {successful_modules}/{total_modules} modules loaded</div>', unsafe_allow_html=True)
     else:
         st.sidebar.markdown('<div class="module-status module-error">❌ Basic mode only - no advanced modules loaded</div>', unsafe_allow_html=True)
     
@@ -485,10 +506,15 @@ def show_module_status(modules, executed_modules, success_count):
         }
         
         for key, name in module_names.items():
-            if executed_modules.get(key):
+            module_info = executed_modules.get(key, {})
+            if module_info.get('loaded', False):
                 st.write(f"✅ {name}")
             else:
+                error_msg = module_info.get('error', 'Unknown error')
                 st.write(f"❌ {name}")
+                if error_msg != 'Failed to download':
+                    st.caption(f"Error: {error_msg[:50]}...")
+
 
 # Main Streamlit App
 def main():
@@ -499,16 +525,10 @@ def main():
     st.markdown("### Advanced chat analysis with multi-format support, OCR, and AI-powered insights")
     
     # Load modules
-    if not st.session_state.modules_loaded:
-        with st.spinner('🔄 Loading analysis modules...'):
-            modules, success_count = load_github_modules()
-            executed_modules = execute_modules(modules)
-    else:
-        modules, success_count = load_github_modules()
-        executed_modules = execute_modules(modules)
+    executed_modules, success_count = load_and_execute_modules()
     
     # Show module status
-    show_module_status(modules, executed_modules, success_count)
+    show_module_status(executed_modules, success_count)
     
     # Sidebar
     st.sidebar.title("📁 Upload Your Files")
