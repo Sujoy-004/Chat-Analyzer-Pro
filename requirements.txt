@@ -1,4 +1,4 @@
-# Chat Analyzer Pro - Enhanced Requirements
+# Chat Analyzer Pro - Streamlit Cloud Compatible Requirements
 # Core dependencies for the Chat Analyzer Pro application with full functionality
 
 # Web Framework
@@ -16,7 +16,7 @@ plotly>=5.15.0
 # PDF Generation & Processing
 reportlab>=4.0.0
 pdfplumber>=0.9.0
-pdf2image>=3.1.0
+pdf2image>=1.16.0,<=1.17.0
 
 # Date/Time Processing
 python-dateutil>=2.8.0
@@ -34,9 +34,8 @@ scipy>=1.10.0
 Pillow>=9.0.0
 pytesseract>=0.3.10
 
-# File Handling
-python-magic-bin>=0.4.14; sys_platform == "win32"
-python-magic>=0.4.27; sys_platform != "win32"
+# File Handling & Magic Number Detection
+python-magic>=0.4.27
 
 # Optional: Enhanced text analysis (uncomment if needed)
 # textblob>=0.17.1
@@ -47,12 +46,3 @@ python-magic>=0.4.27; sys_platform != "win32"
 # pytest>=7.0.0
 # jupyter>=1.0.0
 # notebook>=6.4.0
-
-# System dependencies note:
-# For OCR functionality, you also need to install system packages:
-# - tesseract-ocr (for OCR)
-# - poppler-utils (for PDF to image conversion)
-#
-# Ubuntu/Debian: sudo apt-get install tesseract-ocr poppler-utils
-# MacOS: brew install tesseract poppler
-# Windows: Download from respective official websites
