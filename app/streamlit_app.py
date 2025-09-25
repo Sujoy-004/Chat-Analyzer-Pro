@@ -271,6 +271,30 @@ def process_uploaded_file(uploaded_file, executed_modules):
         except Exception as e:
             st.error(f"Error processing JSON file: {e}")
     
+    elif file_type in ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif', 'tiff']:
+        media_ocr.append({
+            "file": filename,
+            "note": f"Image file detected. OCR text extraction requires advanced mode."
+        })
+    
+    elif file_type == 'pdf':
+        media_ocr.append({
+            "file": filename,
+            "note": f"PDF file detected. Text extraction requires advanced mode."
+        })
+    
+    elif file_type == 'zip':
+        media_ocr.append({
+            "file": filename,
+            "note": f"ZIP archive detected. Archive extraction requires advanced mode."
+        })
+    
+    elif file_type in ['opus', 'mp4', 'avi', 'mov', 'm4a', 'wav', 'mp3']:
+        media_ocr.append({
+            "file": filename,
+            "note": f"Media file detected. Metadata extraction requires advanced mode."
+        })
+    
     else:
         media_ocr.append({
             "file": filename,
@@ -535,8 +559,8 @@ def main():
     
     # Dynamic file upload based on available modules
     if st.session_state.ingestion_available:
-        accepted_types = ['txt', 'json', 'zip', 'png', 'jpg', 'jpeg', 'webp', 'bmp', 'pdf']
-        help_text = "All file types supported: Chat exports, images (OCR), PDFs, ZIP archives"
+        accepted_types = ['txt', 'json', 'zip', 'png', 'jpg', 'jpeg', 'webp', 'bmp', 'pdf', 'opus', 'mp4', 'avi', 'mov', 'gif', 'tiff']
+        help_text = "All file types supported: Chat exports, images (OCR), PDFs, ZIP archives, media files"
     else:
         accepted_types = ['txt', 'json']
         help_text = "Basic mode: TXT (WhatsApp) and JSON (Telegram) files only"
@@ -552,8 +576,9 @@ def main():
         st.sidebar.markdown("""
         **✨ Advanced Features Available:**
         - 📦 **ZIP archives**: Extract and process multiple files
-        - 🖼️ **Image OCR**: Extract text from images
-        - 📄 **PDF processing**: Text extraction + OCR
+        - 🖼️ **Images**: PNG, JPG, JPEG, WebP, BMP, GIF, TIFF (OCR)
+        - 📄 **PDFs**: Text extraction + OCR
+        - 🎵 **Media files**: OPUS, MP4, AVI, MOV (metadata extraction)
         - 🔄 **Multi-format**: Automatic format detection
         """)
     else:
@@ -828,12 +853,13 @@ def main():
                 st.write("""
                 **🔧 Multi-Format Support**
                 - ZIP archive processing
-                - Image OCR extraction
+                - Image OCR (PNG, JPG, WebP, etc.)
                 - PDF text analysis
+                - Media file metadata
                 - Automatic format detection
                 """)
             
-            st.success("✨ **Pro Tip**: Upload a ZIP file containing multiple chat exports, screenshots, or PDFs for comprehensive analysis!")
+            st.success("✨ **Pro Tip**: Upload a ZIP file containing multiple chat exports, screenshots, PDFs, or media files for comprehensive analysis!")
         
         else:
             feature_col1, feature_col2, feature_col3 = st.columns(3)
@@ -887,8 +913,9 @@ def main():
             with st.expander("🔧 Advanced Features"):
                 st.markdown("""
                 - **ZIP Archives**: Upload multiple files at once
-                - **Images**: Screenshots of chats will be processed with OCR
-                - **PDFs**: Text extraction from PDF documents
+                - **Images**: Screenshots, photos with OCR text extraction
+                - **PDFs**: Document text extraction and analysis
+                - **Media Files**: Audio/video metadata extraction
                 - **Mixed Content**: Process different file types together
                 """)
         
@@ -915,7 +942,9 @@ def main():
         
         with col2:
             st.markdown("**📊 Current Status:**")
-            st.markdown(f"- Modules loaded: {success_count}/{len(modules)}")
+            total_modules = len(executed_modules)
+            successful_modules = sum(1 for m in executed_modules.values() if m.get('loaded', False))
+            st.markdown(f"- Modules loaded: {successful_modules}/{total_modules}")
             if st.session_state.ingestion_available:
                 st.markdown("- ✅ Advanced file processing")
             else:
