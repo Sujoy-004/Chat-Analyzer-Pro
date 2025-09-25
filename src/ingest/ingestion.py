@@ -29,12 +29,30 @@ import os
 from datetime import datetime
 
 # Optional heavy deps; import only at top so import errors are visible early.
-from PIL import Image, ImageFile
-import pytesseract
-import pdfplumber
-from pdf2image import convert_from_bytes
+try:
+    from PIL import Image, ImageFile
+    PIL_AVAILABLE = True
+    ImageFile.LOAD_TRUNCATED_IMAGES = True
+except ImportError:
+    PIL_AVAILABLE = False
 
-ImageFile.LOAD_TRUNCATED_IMAGES = True
+try:
+    import pytesseract
+    TESSERACT_AVAILABLE = True
+except ImportError:
+    TESSERACT_AVAILABLE = False
+
+try:
+    import pdfplumber
+    PDFPLUMBER_AVAILABLE = True
+except ImportError:
+    PDFPLUMBER_AVAILABLE = False
+
+try:
+    from pdf2image import convert_from_bytes
+    PDF2IMAGE_AVAILABLE = True
+except ImportError:
+    PDF2IMAGE_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -202,6 +220,10 @@ def ocr_image_bytes(bts: bytes, lang: str = "eng") -> str:
     """
     Run pytesseract OCR on image bytes and return extracted text (str).
     """
+    if not PIL_AVAILABLE or not TESSERACT_AVAILABLE:
+        logger.warning("PIL or pytesseract not available, skipping OCR")
+        return ""
+    
     try:
         img = Image.open(BytesIO(bts)).convert("RGB")
         text = pytesseract.image_to_string(img, lang=lang)
@@ -218,6 +240,10 @@ def extract_text_from_pdf(bts: bytes, ocr_lang: str = "eng") -> str:
     If a page has empty text, convert that page to image and OCR it.
     Returns a string with page separators.
     """
+    if not PDFPLUMBER_AVAILABLE:
+        logger.warning("pdfplumber not available, skipping PDF text extraction")
+        return ""
+    
     pages_text: List[str] = []
     try:
         with pdfplumber.open(BytesIO(bts)) as pdf:
@@ -228,35 +254,86 @@ def extract_text_from_pdf(bts: bytes, ocr_lang: str = "eng") -> str:
                         pages_text.append(f"[page:{i}]\n" + txt)
                     else:
                         # fallback to OCR on the specific page
-                        images = convert_from_bytes(bts, first_page=i, last_page=i)
-                        if images:
-                            ocr_text = pytesseract.image_to_string(images[0], lang=ocr_lang)
-                            pages_text.append(f"[page:{i}][ocr]\n" + (ocr_text or ""))
+                        if PDF2IMAGE_AVAILABLE and PIL_AVAILABLE and TESSERACT_AVAILABLE:
+                            try:
+                                images = convert_from_bytes(bts, first_page=i, last_page=i)
+                                if images:
+                                    ocr_text = pytesseract.image_to_string(images[0], lang=ocr_lang)
+                                    pages_text.append(f"[page:{i}][ocr]\n" + (ocr_text or ""))
+                                else:
+                                    pages_text.append(f"[page:{i}]\n")
+                            except Exception:
+                                pages_text.append(f"[page:{i}]\n")
                         else:
                             pages_text.append(f"[page:{i}]\n")
                 except Exception:
                     logger.exception("Failed page extract; falling back to OCR for page %s", i)
-                    try:
-                        images = convert_from_bytes(bts, first_page=i, last_page=i)
-                        if images:
-                            ocr_text = pytesseract.image_to_string(images[0], lang=ocr_lang)
-                            pages_text.append(f"[page:{i}][ocr]\n" + (ocr_text or ""))
-                        else:
+                    if PDF2IMAGE_AVAILABLE and PIL_AVAILABLE and TESSERACT_AVAILABLE:
+                        try:
+                            images = convert_from_bytes(bts, first_page=i, last_page=i)
+                            if images:
+                                ocr_text = pytesseract.image_to_string(images[0], lang=ocr_lang)
+                                pages_text.append(f"[page:{i}][ocr]\n" + (ocr_text or ""))
+                            else:
+                                pages_text.append(f"[page:{i}]\n")
+                        except Exception:
                             pages_text.append(f"[page:{i}]\n")
-                    except Exception:
+                    else:
                         pages_text.append(f"[page:{i}]\n")
     except Exception:
         # total fallback: convert all pages to images and OCR
         logger.exception("pdfplumber failed; converting all pages to images for OCR")
-        try:
-            images = convert_from_bytes(bts)
-            for i, img in enumerate(images, start=1):
-                ocr_text = pytesseract.image_to_string(img, lang=ocr_lang)
-                pages_text.append(f"[page:{i}][ocr]\n" + (ocr_text or ""))
-        except Exception:
-            logger.exception("complete PDF -> image OCR fallback failed")
+        if PDF2IMAGE_AVAILABLE and PIL_AVAILABLE and TESSERACT_AVAILABLE:
+            try:
+                images = convert_from_bytes(bts)
+                for i, img in enumerate(images, start=1):
+                    ocr_text = pytesseract.image_to_string(img, lang=ocr_lang)
+                    pages_text.append(f"[page:{i}][ocr]\n" + (ocr_text or ""))
+            except Exception:
+                logger.exception("complete PDF -> image OCR fallback failed")
+                return ""
+        else:
+            logger.warning("PDF2IMAGE, PIL, or pytesseract not available for PDF OCR fallback")
             return ""
     return "\n\n".join(pages_text)
+
+
+def extract_media_metadata(bts: bytes, filename: str) -> Dict[str, Any]:
+    """
+    Extract basic metadata from media files.
+    """
+    file_size = len(bts)
+    file_ext = filename.lower().split('.')[-1]
+    
+    metadata = {
+        "filename": filename,
+        "file_type": file_ext,
+        "file_size_bytes": file_size,
+        "file_size_mb": round(file_size / (1024*1024), 2),
+        "file_size_human": _human_readable_size(file_size)
+    }
+    
+    # Basic file type classification
+    audio_formats = ['opus', 'mp3', 'wav', 'm4a', 'aac', 'ogg', 'flac']
+    video_formats = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'flv', '3gp']
+    
+    if file_ext in audio_formats:
+        metadata["media_type"] = "audio"
+    elif file_ext in video_formats:
+        metadata["media_type"] = "video"
+    else:
+        metadata["media_type"] = "unknown"
+    
+    return metadata
+
+
+def _human_readable_size(size_bytes: int) -> str:
+    """Convert bytes to human readable format"""
+    for unit in ['B', 'KB', 'MB', 'GB']:
+        if size_bytes < 1024.0:
+            return f"{size_bytes:.1f} {unit}"
+        size_bytes /= 1024.0
+    return f"{size_bytes:.1f} TB"
 
 
 # -------------------------
@@ -384,7 +461,7 @@ def process_uploaded_file(uploaded_file: Any) -> Tuple[List[Dict[str, Any]], Lis
                                     if isinstance(it, dict):
                                         it["source_hint"] = "json"
                                         messages_raw.append(it)
-                        elif mlow.endswith((".png", ".jpg", ".jpeg", ".webp", ".bmp")):
+                        elif mlow.endswith((".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tiff", ".tif")):
                             ocr_text = ocr_image_bytes(b)
                             media_ocr.append({"file": member, "ocr": ocr_text})
                             if ocr_text.strip():
@@ -408,12 +485,21 @@ def process_uploaded_file(uploaded_file: Any) -> Tuple[List[Dict[str, Any]], Lis
                                     "source_hint": "pdf_in_zip",
                                     "meta": {"filename": member}
                                 })
+                        elif mlow.endswith((".opus", ".mp4", ".avi", ".mov", ".m4a", ".wav", ".mp3", ".aac", ".ogg", ".flac", ".mkv", ".webm", ".flv", ".3gp")):
+                            # Media file - extract metadata only
+                            metadata = extract_media_metadata(b, member)
+                            media_ocr.append({
+                                "file": member,
+                                "note": f"Media file detected: {metadata['media_type']} ({metadata['file_size_human']})",
+                                "metadata": metadata
+                            })
                         else:
                             # unsupported binary inside zip; record filename
                             media_ocr.append({"file": member, "note": "unsupported file type in zip"})
             except zipfile.BadZipFile:
                 logger.exception("Uploaded zip file is corrupted or not a zip.")
                 # treat as generic file below
+        
         # Plain text files
         elif lower.endswith(".txt"):
             try:
@@ -424,6 +510,7 @@ def process_uploaded_file(uploaded_file: Any) -> Tuple[List[Dict[str, Any]], Lis
             for p in parsed:
                 p["source_hint"] = "whatsapp_txt"
                 messages_raw.append(p)
+        
         # JSON chat
         elif lower.endswith(".json"):
             parsed = parse_json_chat(content)
@@ -443,8 +530,9 @@ def process_uploaded_file(uploaded_file: Any) -> Tuple[List[Dict[str, Any]], Lis
                             messages_raw.append(p)
                 except Exception:
                     pass
-        # Images
-        elif lower.endswith((".png", ".jpg", ".jpeg", ".webp", ".bmp")):
+        
+        # Images (enhanced support)
+        elif lower.endswith((".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tiff", ".tif")):
             ocr_text = ocr_image_bytes(content)
             media_ocr.append({"file": filename, "ocr": ocr_text})
             if ocr_text.strip():
@@ -456,6 +544,7 @@ def process_uploaded_file(uploaded_file: Any) -> Tuple[List[Dict[str, Any]], Lis
                     "raw_line": "",
                     "source_hint": "ocr_image",
                 })
+        
         # PDF
         elif lower.endswith(".pdf"):
             pdf_text = extract_text_from_pdf(content)
@@ -469,6 +558,16 @@ def process_uploaded_file(uploaded_file: Any) -> Tuple[List[Dict[str, Any]], Lis
                     "source_hint": "pdf",
                     "meta": {"filename": filename}
                 })
+        
+        # Media files (enhanced support)
+        elif lower.endswith((".opus", ".mp4", ".avi", ".mov", ".m4a", ".wav", ".mp3", ".aac", ".ogg", ".flac", ".mkv", ".webm", ".flv", ".3gp")):
+            metadata = extract_media_metadata(content, filename)
+            media_ocr.append({
+                "file": filename,
+                "note": f"Media file detected: {metadata['media_type']} ({metadata['file_size_human']})",
+                "metadata": metadata
+            })
+        
         else:
             # Generic attempt: try decode as text and parse whatsapp-like
             try:
