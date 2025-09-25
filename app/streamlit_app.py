@@ -15,6 +15,10 @@ import warnings
 import sys
 import os
 from typing import List, Dict, Any, Tuple
+import zipfile
+import uuid
+import logging
+from PIL import Image, ImageFile
 
 warnings.filterwarnings('ignore')
 
@@ -26,91 +30,115 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Import your ingestion module
+# Initialize session state for modules
+if 'modules_loaded' not in st.session_state:
+    st.session_state.modules_loaded = False
+    st.session_state.ingestion_available = False
+    st.session_state.whatsapp_parser_available = False
+    st.session_state.telegram_parser_available = False
+    st.session_state.relationship_health_available = False
+
 @st.cache_data
-def load_ingestion_module():
-    """Load the ingestion module from GitHub"""
-    try:
-        ingestion_url = "https://raw.githubusercontent.com/Sujoy-004/Chat-Analyzer-Pro/refs/heads/main/src/ingest/ingestion.py"
-        response = requests.get(ingestion_url)
-        if response.status_code == 200:
-            # Execute the ingestion module code
-            exec(response.text, globals())
-            return True
-    except Exception as e:
-        st.error(f"Failed to load ingestion module: {e}")
-        return False
-    return False
+def load_github_modules():
+    """Load analysis modules from GitHub"""
+    modules = {}
+    module_urls = {
+        "ingestion": "https://raw.githubusercontent.com/Sujoy-004/Chat-Analyzer-Pro/refs/heads/main/src/ingest/ingestion.py",
+        "whatsapp_parser": "https://raw.githubusercontent.com/Sujoy-004/Chat-Analyzer-Pro/refs/heads/main/src/parser/whatsapp_parser.py",
+        "telegram_parser": "https://raw.githubusercontent.com/Sujoy-004/Chat-Analyzer-Pro/refs/heads/main/src/parser/telegram_parser.py",
+        "relationship_health": "https://raw.githubusercontent.com/Sujoy-004/Chat-Analyzer-Pro/refs/heads/main/src/analysis/relationship_health.py"
+    }
+    
+    success_count = 0
+    for name, url in module_urls.items():
+        try:
+            response = requests.get(url, timeout=10)
+            if response.status_code == 200:
+                modules[name] = response.text
+                success_count += 1
+        except Exception as e:
+            st.warning(f"Could not load {name} module: {str(e)[:100]}...")
+            modules[name] = None
+    
+    st.session_state.modules_loaded = True
+    st.session_state.ingestion_available = modules.get("ingestion") is not None
+    st.session_state.whatsapp_parser_available = modules.get("whatsapp_parser") is not None
+    st.session_state.telegram_parser_available = modules.get("telegram_parser") is not None
+    st.session_state.relationship_health_available = modules.get("relationship_health") is not None
+    
+    return modules, success_count
+
+# Execute loaded modules
+@st.cache_data
+def execute_modules(modules):
+    """Execute the loaded module code"""
+    executed_modules = {}
+    
+    for name, code in modules.items():
+        if code:
+            try:
+                # Create a namespace for each module
+                namespace = {}
+                exec(code, namespace)
+                executed_modules[name] = namespace
+            except Exception as e:
+                st.error(f"Error executing {name}: {str(e)[:100]}...")
+                executed_modules[name] = None
+        else:
+            executed_modules[name] = None
+    
+    return executed_modules
 
 # Load custom CSS
 def load_css():
-    """Load custom CSS from GitHub"""
-    try:
-        css_url = "https://raw.githubusercontent.com/Sujoy-004/Chat-Analyzer-Pro/refs/heads/main/app/assets/style.css"
-        response = requests.get(css_url)
-        if response.status_code == 200:
-            st.markdown(f"<style>{response.text}</style>", unsafe_allow_html=True)
-    except:
-        # Fallback basic styling
-        st.markdown("""
-        <style>
-        .main-header {
-            font-size: 3rem;
-            font-weight: bold;
-            text-align: center;
-            color: #1f77b4;
-            margin-bottom: 2rem;
-        }
-        .health-score {
-            font-size: 4rem;
-            font-weight: bold;
-            text-align: center;
-            margin: 1rem 0;
-        }
-        .excellent { color: #28a745; }
-        .good { color: #17a2b8; }
-        .fair { color: #ffc107; }
-        .poor { color: #dc3545; }
-        .file-info {
-            background-color: #f8f9fa;
-            border-left: 4px solid #007bff;
-            padding: 1rem;
-            margin: 1rem 0;
-        }
-        .media-info {
-            background-color: #e8f5e8;
-            border-left: 4px solid #28a745;
-            padding: 0.5rem;
-            margin: 0.5rem 0;
-            border-radius: 4px;
-        }
-        </style>
-        """, unsafe_allow_html=True)
+    """Load custom CSS"""
+    st.markdown("""
+    <style>
+    .main-header {
+        font-size: 3rem;
+        font-weight: bold;
+        text-align: center;
+        color: #1f77b4;
+        margin-bottom: 2rem;
+    }
+    .health-score {
+        font-size: 4rem;
+        font-weight: bold;
+        text-align: center;
+        margin: 1rem 0;
+    }
+    .excellent { color: #28a745; }
+    .good { color: #17a2b8; }
+    .fair { color: #ffc107; }
+    .poor { color: #dc3545; }
+    .file-info {
+        background-color: #f8f9fa;
+        border-left: 4px solid #007bff;
+        padding: 1rem;
+        margin: 1rem 0;
+        border-radius: 5px;
+    }
+    .media-info {
+        background-color: #e8f5e8;
+        border-left: 4px solid #28a745;
+        padding: 0.5rem;
+        margin: 0.5rem 0;
+        border-radius: 4px;
+    }
+    .module-status {
+        padding: 0.5rem;
+        border-radius: 5px;
+        margin: 0.2rem 0;
+    }
+    .module-success { background-color: #d4edda; border: 1px solid #c3e6cb; color: #155724; }
+    .module-warning { background-color: #fff3cd; border: 1px solid #ffeaa7; color: #856404; }
+    .module-error { background-color: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; }
+    </style>
+    """, unsafe_allow_html=True)
 
-# Simplified ingestion functions for when module loading fails
-def simple_process_file(uploaded_file):
-    """Fallback simple file processing"""
-    filename = uploaded_file.name.lower()
-    content = uploaded_file.read()
-    
-    if filename.endswith('.txt'):
-        try:
-            text = content.decode('utf-8')
-            return parse_whatsapp_simple(text), []
-        except:
-            return [], []
-    elif filename.endswith('.json'):
-        try:
-            text = content.decode('utf-8')
-            data = json.loads(text)
-            return parse_telegram_simple_from_data(data), []
-        except:
-            return [], []
-    else:
-        return [], [{"file": filename, "note": "File type not supported in fallback mode"}]
-
-def parse_whatsapp_simple(content):
-    """Simple WhatsApp parser"""
+# Fallback parsing functions
+def fallback_whatsapp_parser(content):
+    """Fallback WhatsApp parser when main module is unavailable"""
     messages = []
     lines = content.strip().split('\n')
     
@@ -138,25 +166,26 @@ def parse_whatsapp_simple(content):
                 full_datetime = datetime.combine(date_obj.date(), time_obj)
                 
                 messages.append({
-                    'uid': f"{full_datetime}_{sender}_{len(messages)}",
+                    'datetime': full_datetime,
+                    'sender': sender.strip(),
+                    'message': message.strip(),
                     'date': full_datetime.date().strftime('%Y-%m-%d'),
                     'time': full_datetime.time().strftime('%H:%M'),
-                    'author': sender.strip(),
-                    'text': message.strip(),
-                    'source': 'whatsapp_txt',
-                    'media': [],
-                    'meta': {}
+                    'hour': full_datetime.hour,
+                    'message_length': len(message.strip()),
+                    'source': 'whatsapp_fallback'
                 })
             except Exception:
                 continue
     
     return messages
 
-def parse_telegram_simple_from_data(data):
-    """Simple Telegram parser"""
+def fallback_telegram_parser(json_data):
+    """Fallback Telegram parser when main module is unavailable"""
     messages = []
     
     try:
+        data = json.loads(json_data) if isinstance(json_data, str) else json_data
         chat_messages = data.get('messages', [])
         
         for msg in chat_messages:
@@ -170,14 +199,14 @@ def parse_telegram_simple_from_data(data):
                         text_content = ''.join([item if isinstance(item, str) else '' for item in text_content])
                     
                     messages.append({
-                        'uid': msg.get('id', len(messages)),
+                        'datetime': datetime_obj,
+                        'sender': sender,
+                        'message': text_content,
                         'date': datetime_obj.date().strftime('%Y-%m-%d'),
                         'time': datetime_obj.time().strftime('%H:%M'),
-                        'author': sender,
-                        'text': text_content,
-                        'source': 'telegram_json',
-                        'media': [],
-                        'meta': {}
+                        'hour': datetime_obj.hour,
+                        'message_length': len(text_content),
+                        'source': 'telegram_fallback'
                     })
                 except Exception:
                     continue
@@ -186,48 +215,120 @@ def parse_telegram_simple_from_data(data):
     
     return messages
 
-# Convert normalized messages to DataFrame for analysis
-def messages_to_dataframe(messages: List[Dict[str, Any]]) -> pd.DataFrame:
-    """Convert normalized message list to DataFrame for analysis"""
+# File processing with both advanced and fallback methods
+def process_uploaded_file(uploaded_file, executed_modules):
+    """Process uploaded file using available modules or fallbacks"""
+    filename = uploaded_file.name
+    file_type = filename.lower().split('.')[-1]
+    
+    # Try advanced ingestion first
+    if executed_modules.get("ingestion") and st.session_state.ingestion_available:
+        try:
+            # Use the advanced ingestion module
+            ingestion_module = executed_modules["ingestion"]
+            if "process_uploaded_file" in ingestion_module:
+                messages, media_ocr = ingestion_module["process_uploaded_file"](uploaded_file)
+                return convert_normalized_messages_to_df(messages), media_ocr, "advanced"
+        except Exception as e:
+            st.warning(f"Advanced processing failed, falling back to basic mode: {str(e)[:100]}...")
+    
+    # Fallback processing
+    content = uploaded_file.read()
+    messages = []
+    media_ocr = []
+    
+    if file_type == 'txt':
+        try:
+            text = content.decode('utf-8')
+            messages = fallback_whatsapp_parser(text)
+        except Exception as e:
+            st.error(f"Error processing TXT file: {e}")
+    
+    elif file_type == 'json':
+        try:
+            text = content.decode('utf-8')
+            data = json.loads(text)
+            messages = fallback_telegram_parser(data)
+        except Exception as e:
+            st.error(f"Error processing JSON file: {e}")
+    
+    else:
+        media_ocr.append({
+            "file": filename,
+            "note": f"File type '{file_type}' not supported in fallback mode. Advanced mode required."
+        })
+    
+    df = pd.DataFrame(messages) if messages else pd.DataFrame()
+    return df, media_ocr, "fallback"
+
+def convert_normalized_messages_to_df(messages):
+    """Convert normalized messages from ingestion module to DataFrame"""
     if not messages:
         return pd.DataFrame()
     
     df_data = []
     for msg in messages:
         try:
-            # Parse date and time
-            if msg['date'] and msg['time']:
+            # Parse datetime
+            if msg.get('date') and msg.get('time'):
                 try:
                     datetime_str = f"{msg['date']} {msg['time']}"
                     full_datetime = datetime.strptime(datetime_str, '%Y-%m-%d %H:%M')
                 except:
-                    # Handle partial times or different formats
-                    try:
-                        full_datetime = datetime.strptime(msg['date'], '%Y-%m-%d')
-                    except:
-                        full_datetime = datetime.now()
+                    full_datetime = datetime.now()
             else:
                 full_datetime = datetime.now()
             
             df_data.append({
                 'datetime': full_datetime,
-                'sender': msg['author'],
-                'message': msg['text'],
-                'date': msg['date'] or full_datetime.strftime('%Y-%m-%d'),
-                'time': msg['time'] or full_datetime.strftime('%H:%M'),
+                'sender': msg.get('author', 'Unknown'),
+                'message': msg.get('text', ''),
+                'date': msg.get('date', full_datetime.strftime('%Y-%m-%d')),
+                'time': msg.get('time', full_datetime.strftime('%H:%M')),
                 'hour': full_datetime.hour,
-                'message_length': len(msg['text']),
-                'source': msg['source'],
-                'uid': msg['uid']
+                'message_length': len(msg.get('text', '')),
+                'source': msg.get('source', 'unknown'),
+                'uid': msg.get('uid', str(uuid.uuid4()))
             })
         except Exception:
             continue
     
     return pd.DataFrame(df_data)
 
-# Calculate relationship health (enhanced version)
-def calculate_health_score(df):
-    """Calculate relationship health score"""
+# Enhanced relationship health calculation
+def calculate_relationship_health(df, executed_modules):
+    """Calculate relationship health using available modules or fallback"""
+    if df.empty:
+        return None
+    
+    # Try advanced relationship health analysis first
+    if executed_modules.get("relationship_health") and st.session_state.relationship_health_available:
+        try:
+            rh_module = executed_modules["relationship_health"]
+            if "analyze_relationship_health" in rh_module:
+                # Prepare data for the advanced module
+                df_prepared = df.copy()
+                if 'datetime' not in df_prepared.columns:
+                    df_prepared['datetime'] = pd.to_datetime(df_prepared['date'] + ' ' + df_prepared['time'])
+                
+                results = rh_module["analyze_relationship_health"](df_prepared)
+                return {
+                    'method': 'advanced',
+                    'results': results,
+                    'total_score': results['health_score']['overall_health_score'] * 100,
+                    'grade': results['health_score']['grade'],
+                    'component_scores': results['health_score']['component_scores'],
+                    'strengths': results['health_score']['strengths'],
+                    'improvements': results['health_score']['areas_for_improvement']
+                }
+        except Exception as e:
+            st.warning(f"Advanced health analysis failed, using fallback: {str(e)[:100]}...")
+    
+    # Fallback health calculation
+    return calculate_basic_health_score(df)
+
+def calculate_basic_health_score(df):
+    """Basic health score calculation as fallback"""
     if len(df) < 2:
         return None
     
@@ -316,8 +417,20 @@ def calculate_health_score(df):
 
     total_score = balance_points + init_points + response_points + consistency_points + engagement_points
     
+    # Determine grade
+    if total_score >= 85:
+        grade = "EXCELLENT"
+    elif total_score >= 70:
+        grade = "GOOD"
+    elif total_score >= 55:
+        grade = "FAIR"
+    else:
+        grade = "NEEDS IMPROVEMENT"
+    
     return {
+        'method': 'basic',
         'total_score': total_score,
+        'grade': grade,
         'balance_points': balance_points,
         'init_points': init_points,
         'response_points': response_points,
@@ -328,7 +441,6 @@ def calculate_health_score(df):
         'initiators_df': initiators_df
     }
 
-# Display media OCR results
 def display_media_results(media_ocr):
     """Display media OCR results"""
     if not media_ocr:
@@ -350,264 +462,450 @@ def display_media_results(media_ocr):
         if note:
             st.info(f"ℹ️ {note}")
 
+def show_module_status(modules, executed_modules, success_count):
+    """Show module loading status"""
+    st.sidebar.markdown("### 🔧 Module Status")
+    
+    total_modules = len(modules)
+    if success_count == total_modules:
+        st.sidebar.markdown('<div class="module-status module-success">✅ All modules loaded successfully</div>', unsafe_allow_html=True)
+        st.sidebar.success(f"Advanced mode enabled - all {success_count}/{total_modules} modules active")
+    elif success_count > 0:
+        st.sidebar.markdown(f'<div class="module-status module-warning">⚠️ Partial functionality - {success_count}/{total_modules} modules loaded</div>', unsafe_allow_html=True)
+    else:
+        st.sidebar.markdown('<div class="module-status module-error">❌ Basic mode only - no advanced modules loaded</div>', unsafe_allow_html=True)
+    
+    # Show individual module status
+    with st.sidebar.expander("Module Details"):
+        module_names = {
+            "ingestion": "🔄 File Ingestion",
+            "whatsapp_parser": "💬 WhatsApp Parser", 
+            "telegram_parser": "📱 Telegram Parser",
+            "relationship_health": "❤️ Health Analysis"
+        }
+        
+        for key, name in module_names.items():
+            if executed_modules.get(key):
+                st.write(f"✅ {name}")
+            else:
+                st.write(f"❌ {name}")
+
 # Main Streamlit App
 def main():
     load_css()
     
-    # Load ingestion module
-    ingestion_available = load_ingestion_module()
-    
     # Header
     st.markdown('<h1 class="main-header">💬 Chat Analyzer Pro</h1>', unsafe_allow_html=True)
-    st.markdown("### Analyze your WhatsApp, Telegram conversations and extract text from images, PDFs, and ZIP files")
+    st.markdown("### Advanced chat analysis with multi-format support, OCR, and AI-powered insights")
     
-    # Show capabilities
-    if ingestion_available:
-        st.success("✅ Advanced file processing enabled - supports all file types including ZIP, images, PDFs, and more!")
+    # Load modules
+    if not st.session_state.modules_loaded:
+        with st.spinner('🔄 Loading analysis modules...'):
+            modules, success_count = load_github_modules()
+            executed_modules = execute_modules(modules)
     else:
-        st.warning("⚠️ Running in basic mode - only TXT and JSON files supported")
+        modules, success_count = load_github_modules()
+        executed_modules = execute_modules(modules)
+    
+    # Show module status
+    show_module_status(modules, executed_modules, success_count)
     
     # Sidebar
     st.sidebar.title("📁 Upload Your Files")
     
-    # Enhanced file upload
-    accepted_types = [
-        'txt', 'json', 'zip', 'png', 'jpg', 'jpeg', 'webp', 'bmp', 'pdf'
-    ] if ingestion_available else ['txt', 'json']
+    # Dynamic file upload based on available modules
+    if st.session_state.ingestion_available:
+        accepted_types = ['txt', 'json', 'zip', 'png', 'jpg', 'jpeg', 'webp', 'bmp', 'pdf']
+        help_text = "All file types supported: Chat exports, images (OCR), PDFs, ZIP archives"
+    else:
+        accepted_types = ['txt', 'json']
+        help_text = "Basic mode: TXT (WhatsApp) and JSON (Telegram) files only"
     
     uploaded_file = st.sidebar.file_uploader(
         "Choose files to analyze",
         type=accepted_types,
-        help=f"Supported formats: {', '.join(accepted_types)}"
+        help=help_text
     )
     
-    # Display file type information
-    if ingestion_available:
+    # Display capabilities
+    if st.session_state.ingestion_available:
         st.sidebar.markdown("""
-        **Supported file types:**
-        - 📝 **Chat exports**: .txt (WhatsApp), .json (Telegram)
-        - 📦 **Archives**: .zip (can contain any supported files)
-        - 🖼️ **Images**: .png, .jpg, .jpeg, .webp, .bmp (OCR extraction)
-        - 📄 **Documents**: .pdf (text extraction + OCR)
+        **✨ Advanced Features Available:**
+        - 📦 **ZIP archives**: Extract and process multiple files
+        - 🖼️ **Image OCR**: Extract text from images
+        - 📄 **PDF processing**: Text extraction + OCR
+        - 🔄 **Multi-format**: Automatic format detection
+        """)
+    else:
+        st.sidebar.markdown("""
+        **📝 Basic Mode:**
+        - WhatsApp TXT exports
+        - Telegram JSON exports
         """)
     
     if uploaded_file is not None:
-        # Process file
         try:
             with st.spinner('🔍 Processing your file...'):
-                if ingestion_available and 'process_uploaded_file' in globals():
-                    # Use advanced ingestion
-                    messages, media_ocr = process_uploaded_file(uploaded_file)
-                    
-                    st.sidebar.success(f"✅ File processed successfully!")
-                    st.sidebar.markdown(f"""
-                    <div class="file-info">
-                    <strong>📊 Processing Results:</strong><br>
-                    • {len(messages)} messages extracted<br>
-                    • {len(media_ocr)} media items processed<br>
-                    • File: {uploaded_file.name}
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    # Display media results
-                    if media_ocr:
-                        display_media_results(media_ocr)
-                    
-                else:
-                    # Use fallback processing
-                    messages, media_ocr = simple_process_file(uploaded_file)
-                    st.sidebar.success(f"✅ File processed (basic mode)")
-                
-                # Convert to DataFrame for analysis
-                df = messages_to_dataframe(messages)
+                df, media_ocr, processing_method = process_uploaded_file(uploaded_file, executed_modules)
             
-            if df.empty:
+            if df.empty and not media_ocr:
                 st.error("❌ No messages could be extracted from the uploaded file. Please check the format.")
                 return
             
-            # Show file processing summary
-            sources = df['source'].value_counts() if 'source' in df.columns else pd.Series(['unknown'])
-            unique_senders = df['sender'].nunique()
+            # Show processing summary
+            st.sidebar.success(f"✅ File processed ({processing_method} mode)")
             
-            st.markdown(f"""
-            ### 📊 File Processing Summary
-            - **Messages extracted**: {len(df)}
-            - **Unique participants**: {unique_senders}
-            - **Sources detected**: {', '.join(sources.index.tolist())}
-            - **Date range**: {df['datetime'].min().strftime('%Y-%m-%d')} to {df['datetime'].max().strftime('%Y-%m-%d')}
-            """)
-            
-            # Analysis
-            with st.spinner('🔍 Analyzing your conversations...'):
-                health_results = calculate_health_score(df)
-            
-            if health_results:
-                # Display results
-                col1, col2, col3 = st.columns([1, 2, 1])
+            if not df.empty:
+                sources = df['source'].value_counts() if 'source' in df.columns else pd.Series(['unknown'])
+                unique_senders = df['sender'].nunique()
+                date_range_days = (df['datetime'].max() - df['datetime'].min()).days + 1
                 
-                with col2:
-                    # Health Score
-                    score = health_results['total_score']
-                    if score >= 85:
-                        grade = "Excellent"
-                        color = "excellent"
-                    elif score >= 70:
-                        grade = "Good"
-                        color = "good"
-                    elif score >= 55:
-                        grade = "Fair"
-                        color = "fair"
-                    else:
-                        grade = "Needs Improvement"
-                        color = "poor"
+                st.sidebar.markdown(f"""
+                <div class="file-info">
+                <strong>📊 Processing Results:</strong><br>
+                • {len(df)} messages extracted<br>
+                • {unique_senders} participants<br>
+                • {date_range_days} days of chat<br>
+                • {len(media_ocr)} media items processed<br>
+                • Sources: {', '.join(sources.index.tolist())}
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # Display media results
+                if media_ocr:
+                    display_media_results(media_ocr)
+                
+                # Main analysis
+                st.markdown(f"""
+                ### 📊 Analysis Summary
+                **File**: {uploaded_file.name}  
+                **Messages**: {len(df)}  
+                **Participants**: {unique_senders}  
+                **Date Range**: {df['datetime'].min().strftime('%Y-%m-%d')} to {df['datetime'].max().strftime('%Y-%m-%d')}  
+                **Processing Method**: {processing_method.title()}
+                """)
+                
+                # Relationship Health Analysis
+                with st.spinner('🔍 Analyzing relationship health...'):
+                    health_results = calculate_relationship_health(df, executed_modules)
+                
+                if health_results:
+                    # Display health score
+                    col1, col2, col3 = st.columns([1, 2, 1])
                     
-                    st.markdown(f'<div class="health-score {color}">{score:.1f}/100</div>', unsafe_allow_html=True)
-                    st.markdown(f'<h3 style="text-align: center; color: gray;">Relationship Health: {grade}</h3>', unsafe_allow_html=True)
-                
-                # Metrics
-                col1, col2, col3, col4 = st.columns(4)
-                
-                with col1:
-                    st.metric("📊 Total Messages", len(df))
-                
-                with col2:
-                    st.metric("👥 Participants", len(df['sender'].unique()))
-                
-                with col3:
-                    date_range = (df['datetime'].max() - df['datetime'].min()).days + 1
-                    st.metric("📅 Days Analyzed", date_range)
-                
-                with col4:
-                    avg_response = health_results['response_df']['response_time_minutes'].mean() if len(health_results['response_df']) > 0 else 0
-                    st.metric("⏱️ Avg Response", f"{avg_response:.1f} min")
-                
-                # Charts
-                st.subheader("📈 Analysis Dashboard")
-                
-                chart_col1, chart_col2 = st.columns(2)
-                
-                with chart_col1:
-                    # Message distribution
-                    fig_pie = px.pie(
-                        values=health_results['message_counts'].values,
-                        names=health_results['message_counts'].index,
-                        title="💬 Message Distribution"
+                    with col2:
+                        score = health_results['total_score']
+                        grade = health_results['grade']
+                        
+                        if score >= 85:
+                            color = "excellent"
+                        elif score >= 70:
+                            color = "good"
+                        elif score >= 55:
+                            color = "fair"
+                        else:
+                            color = "poor"
+                        
+                        st.markdown(f'<div class="health-score {color}">{score:.1f}/100</div>', unsafe_allow_html=True)
+                        st.markdown(f'<h3 style="text-align: center; color: gray;">Relationship Health: {grade}</h3>', unsafe_allow_html=True)
+                    
+                    # Metrics
+                    col1, col2, col3, col4 = st.columns(4)
+                    
+                    with col1:
+                        st.metric("📊 Messages", len(df))
+                    
+                    with col2:
+                        st.metric("👥 Participants", unique_senders)
+                    
+                    with col3:
+                        st.metric("📅 Days", date_range_days)
+                    
+                    with col4:
+                        avg_response = health_results.get('response_df', pd.DataFrame())
+                        if not avg_response.empty and 'response_time_minutes' in avg_response.columns:
+                            avg_time = avg_response['response_time_minutes'].mean()
+                            st.metric("⏱️ Avg Response", f"{avg_time:.1f} min")
+                        else:
+                            st.metric("⏱️ Avg Response", "N/A")
+                    
+                    # Charts section
+                    st.subheader("📈 Analysis Dashboard")
+                    
+                    chart_col1, chart_col2 = st.columns(2)
+                    
+                    with chart_col1:
+                        # Message distribution
+                        message_counts = df['sender'].value_counts()
+                        fig_pie = px.pie(
+                            values=message_counts.values,
+                            names=message_counts.index,
+                            title="💬 Message Distribution"
+                        )
+                        st.plotly_chart(fig_pie, use_container_width=True)
+                    
+                    with chart_col2:
+                        # Health score breakdown
+                        if health_results['method'] == 'advanced' and 'component_scores' in health_results:
+                            comp_scores = health_results['component_scores']
+                            categories = list(comp_scores.keys())
+                            values = [comp_scores[cat] * 100 for cat in categories]
+                        else:
+                            categories = ['Balance', 'Initiation', 'Response', 'Consistency', 'Engagement']
+                            values = [
+                                health_results.get('balance_points', 0),
+                                health_results.get('init_points', 0),
+                                health_results.get('response_points', 0),
+                                health_results.get('consistency_points', 0),
+                                health_results.get('engagement_points', 0)
+                            ]
+                        
+                        fig_bar = px.bar(
+                            x=categories, 
+                            y=values,
+                            title='🎯 Health Score Breakdown',
+                            color=values,
+                            color_continuous_scale='RdYlGn'
+                        )
+                        st.plotly_chart(fig_bar, use_container_width=True)
+                    
+                    # Timeline analysis
+                    daily_activity = df.groupby('date').size().reset_index(name='messages')
+                    fig_line = px.line(
+                        daily_activity, 
+                        x='date', 
+                        y='messages', 
+                        title='📅 Daily Message Activity',
+                        markers=True
                     )
-                    st.plotly_chart(fig_pie, use_container_width=True)
-                
-                with chart_col2:
-                    # Score breakdown
-                    categories = ['Communication\nBalance', 'Initiation\nBalance', 'Response\nQuality', 'Consistency', 'Engagement']
-                    scores = [
-                        health_results['balance_points'],
-                        health_results['init_points'],
-                        health_results['response_points'],
-                        health_results['consistency_points'],
-                        health_results['engagement_points']
-                    ]
-                    max_scores = [25, 20, 25, 15, 15]
+                    st.plotly_chart(fig_line, use_container_width=True)
                     
-                    fig_bar = go.Figure()
-                    fig_bar.add_trace(go.Bar(x=categories, y=scores, name='Score', marker_color='#1f77b4'))
-                    fig_bar.add_trace(go.Bar(x=categories, y=max_scores, name='Max Score', marker_color='lightgray', opacity=0.5))
-                    fig_bar.update_layout(title='🎯 Health Score Breakdown', barmode='overlay')
-                    st.plotly_chart(fig_bar, use_container_width=True)
+                    # Advanced insights for advanced mode
+                    if health_results['method'] == 'advanced':
+                        st.subheader("🔍 Advanced Insights")
+                        
+                        insight_col1, insight_col2 = st.columns(2)
+                        
+                        with insight_col1:
+                            st.write("**💪 Strengths:**")
+                            for strength in health_results.get('strengths', []):
+                                st.write(strength)
+                        
+                        with insight_col2:
+                            st.write("**⚠️ Areas for Improvement:**")
+                            for improvement in health_results.get('improvements', []):
+                                st.write(improvement)
+                    
+                    else:
+                        # Basic insights
+                        st.subheader("🔍 Basic Insights")
+                        
+                        insight_col1, insight_col2 = st.columns(2)
+                        
+                        with insight_col1:
+                            st.write("**💪 Strengths:**")
+                            if health_results.get('balance_points', 0) >= 20:
+                                st.write("✅ Well-balanced message distribution")
+                            if health_results.get('init_points', 0) >= 16:
+                                st.write("✅ Good conversation initiation balance")
+                            if health_results.get('response_points', 0) >= 20:
+                                st.write("✅ Responsive communication")
+                            if health_results.get('consistency_points', 0) >= 12:
+                                st.write("✅ Consistent communication pattern")
+                        
+                        with insight_col2:
+                            st.write("**⚠️ Areas for Improvement:**")
+                            if health_results.get('response_points', 0) < 20:
+                                st.write("🔄 Could improve response times")
+                            if health_results.get('balance_points', 0) < 20:
+                                st.write("⚖️ Could balance message distribution")
+                            if health_results.get('init_points', 0) < 16:
+                                st.write("🚀 Could balance conversation initiation")
+                    
+                    # Source analysis if available
+                    if 'source' in df.columns and len(df['source'].unique()) > 1:
+                        st.subheader("📋 Source Analysis")
+                        source_counts = df['source'].value_counts()
+                        fig_source = px.bar(
+                            x=source_counts.index, 
+                            y=source_counts.values, 
+                            title="Messages by Source Type",
+                            color=source_counts.values,
+                            color_continuous_scale='viridis'
+                        )
+                        st.plotly_chart(fig_source, use_container_width=True)
+                    
+                    # Raw data preview
+                    if st.checkbox("📋 Show Raw Data"):
+                        st.subheader("Raw Message Data")
+                        display_df = df.copy()
+                        # Truncate long messages for display
+                        if 'message' in display_df.columns:
+                            display_df['message'] = display_df['message'].apply(
+                                lambda x: x[:100] + "..." if len(str(x)) > 100 else x
+                            )
+                        st.dataframe(display_df.head(50), use_container_width=True)
+                        
+                        if len(df) > 50:
+                            st.info(f"Showing first 50 rows of {len(df)} total messages")
                 
-                # Additional charts if we have source information
-                if 'source' in df.columns and len(df['source'].unique()) > 1:
-                    st.subheader("📋 Source Analysis")
-                    source_counts = df['source'].value_counts()
-                    fig_source = px.bar(x=source_counts.index, y=source_counts.values, 
-                                      title="Messages by Source Type")
-                    st.plotly_chart(fig_source, use_container_width=True)
-                
-                # Daily activity
-                daily_activity = df.groupby('date').size().reset_index(name='messages')
-                fig_line = px.line(daily_activity, x='date', y='messages', 
-                                 title='📅 Daily Message Activity', markers=True)
-                st.plotly_chart(fig_line, use_container_width=True)
-                
-                # Detailed insights
-                st.subheader("🔍 Detailed Insights")
-                
-                insight_col1, insight_col2 = st.columns(2)
-                
-                with insight_col1:
-                    st.write("**💪 Strengths:**")
-                    if health_results['balance_points'] >= 20:
-                        st.write("✅ Well-balanced message distribution")
-                    if health_results['init_points'] >= 16:
-                        st.write("✅ Good conversation initiation balance")
-                    if health_results['response_points'] >= 20:
-                        st.write("✅ Responsive communication")
-                    if health_results['consistency_points'] >= 12:
-                        st.write("✅ Consistent communication pattern")
-                
-                with insight_col2:
-                    st.write("**⚠️ Areas for Improvement:**")
-                    if health_results['response_points'] < 20:
-                        st.write("🔄 Could improve response times")
-                    if health_results['balance_points'] < 20:
-                        st.write("⚖️ Could balance message distribution")
-                    if health_results['init_points'] < 16:
-                        st.write("🚀 Could balance conversation initiation")
-                
-                # Raw data preview
-                if st.checkbox("📋 Show Raw Data"):
-                    st.dataframe(df.head(20))
+                else:
+                    st.error("❌ Could not calculate relationship health metrics")
             
+            else:
+                st.info("ℹ️ No chat messages found, but processed media files:")
+                display_media_results(media_ocr)
+                
         except Exception as e:
             st.error(f"❌ Error processing file: {e}")
             st.exception(e)
     
     else:
-        # Welcome message
+        # Welcome screen
         st.markdown("""
         <div style="border: 2px dashed #1f77b4; border-radius: 10px; padding: 2rem; text-align: center; margin: 1rem 0;">
             <h3>👋 Welcome to Chat Analyzer Pro!</h3>
-            <p>Upload your chat files to get started - now supports multiple formats!</p>
+            <p>Upload your chat files to start analyzing communication patterns and relationship health.</p>
+            <p>Supports multiple formats and provides AI-powered insights!</p>
         </div>
         """, unsafe_allow_html=True)
         
-        # Features
+        # Feature showcase
         st.subheader("🚀 Enhanced Features")
         
-        feature_col1, feature_col2, feature_col3, feature_col4 = st.columns(4)
+        # Dynamic feature display based on loaded modules
+        if st.session_state.ingestion_available:
+            feature_col1, feature_col2, feature_col3, feature_col4 = st.columns(4)
+            
+            with feature_col1:
+                st.write("""
+                **📊 Advanced Analytics**
+                - Message statistics & patterns
+                - Communication flow analysis  
+                - Response time tracking
+                - Engagement quality metrics
+                """)
+            
+            with feature_col2:
+                st.write("""
+                **❤️ Relationship Health**
+                - AI-powered health scoring
+                - Balance & dominance analysis
+                - Conversation quality assessment
+                - Personalized recommendations
+                """)
+            
+            with feature_col3:
+                st.write("""
+                **📈 Rich Visualizations**
+                - Interactive charts & graphs
+                - Timeline analysis
+                - Distribution breakdowns
+                - Health score dashboard
+                """)
+            
+            with feature_col4:
+                st.write("""
+                **🔧 Multi-Format Support**
+                - ZIP archive processing
+                - Image OCR extraction
+                - PDF text analysis
+                - Automatic format detection
+                """)
+            
+            st.success("✨ **Pro Tip**: Upload a ZIP file containing multiple chat exports, screenshots, or PDFs for comprehensive analysis!")
         
-        with feature_col1:
-            st.write("""
-            **📊 Analytics**
-            - Message statistics
-            - Communication patterns
-            - Response time analysis
+        else:
+            feature_col1, feature_col2, feature_col3 = st.columns(3)
+            
+            with feature_col1:
+                st.write("""
+                **📊 Basic Analytics**
+                - Message counting
+                - Sender distribution
+                - Timeline visualization
+                """)
+            
+            with feature_col2:
+                st.write("""
+                **❤️ Health Scoring**
+                - Communication balance
+                - Response time analysis
+                - Engagement metrics
+                """)
+            
+            with feature_col3:
+                st.write("""
+                **📈 Visualizations**
+                - Charts and graphs
+                - Activity timelines
+                - Distribution plots
+                """)
+        
+        # Instructions
+        st.subheader("📖 How to Use")
+        
+        with st.expander("💬 WhatsApp Chat Export"):
+            st.markdown("""
+            1. Open WhatsApp on your phone
+            2. Go to the chat you want to analyze
+            3. Tap the three dots menu → More → Export chat
+            4. Choose "Without Media" for faster processing
+            5. Upload the exported .txt file here
             """)
         
-        with feature_col2:
-            st.write("""
-            **🏥 Health Score**
-            - Relationship assessment
-            - Balance metrics
-            - Engagement quality
+        with st.expander("📱 Telegram Chat Export"):
+            st.markdown("""
+            1. Open Telegram Desktop
+            2. Go to Settings → Advanced → Export Telegram data
+            3. Select the chat(s) you want to export
+            4. Choose JSON format
+            5. Upload the exported .json file here
             """)
         
-        with feature_col3:
-            st.write("""
-            **📈 Visualizations**
-            - Interactive charts
-            - Daily activity timeline
-            - Distribution analysis
-            """)
+        if st.session_state.ingestion_available:
+            with st.expander("🔧 Advanced Features"):
+                st.markdown("""
+                - **ZIP Archives**: Upload multiple files at once
+                - **Images**: Screenshots of chats will be processed with OCR
+                - **PDFs**: Text extraction from PDF documents
+                - **Mixed Content**: Process different file types together
+                """)
         
-        with feature_col4:
-            st.write("""
-            **🔧 Multi-format**
-            - ZIP file support
-            - Image OCR extraction
-            - PDF text extraction
-            """)
+        # Sample data information
+        st.subheader("📝 Privacy & Security")
+        st.info("""
+        🔒 **Your data is safe**: All processing happens in your browser session. 
+        No chat data is stored or transmitted to external servers. 
+        Files are processed temporarily and discarded after analysis.
+        """)
+
+        # Footer with module status
+        st.markdown("---")
+        col1, col2 = st.columns(2)
         
-        if ingestion_available:
-            st.info("✨ **Pro Tip**: Try uploading a ZIP file containing multiple chat exports, images, or PDFs for comprehensive analysis!")
+        with col1:
+            st.markdown("**🏗️ Built with:**")
+            st.markdown("- Streamlit for the web interface")
+            st.markdown("- Pandas & NumPy for data processing")
+            st.markdown("- Plotly for interactive visualizations")
+            if st.session_state.ingestion_available:
+                st.markdown("- PIL, PyTesseract for OCR")
+                st.markdown("- PDFPlumber for PDF processing")
+        
+        with col2:
+            st.markdown("**📊 Current Status:**")
+            st.markdown(f"- Modules loaded: {success_count}/{len(modules)}")
+            if st.session_state.ingestion_available:
+                st.markdown("- ✅ Advanced file processing")
+            else:
+                st.markdown("- ⚠️ Basic file processing only")
+            
+            if st.session_state.relationship_health_available:
+                st.markdown("- ✅ Advanced health analysis")
+            else:
+                st.markdown("- ⚠️ Basic health analysis only")
+
 
 if __name__ == "__main__":
     main()
