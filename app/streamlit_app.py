@@ -602,8 +602,7 @@ def main():
             
             if not df.empty:
                 sources = df['source'].value_counts() if 'source' in df.columns else pd.Series(['unknown'])
-                actual_chat_df = df[~df['source'].str.contains('ocr', na=False)]
-                unique_senders = actual_chat_df['sender'].nunique()
+                unique_senders = df['sender'].nunique()
                 date_range_days = (df['datetime'].max() - df['datetime'].min()).days + 1
                 
                 st.sidebar.markdown(f"""
@@ -643,17 +642,38 @@ def main():
                         score = health_results['total_score']
                         grade = health_results['grade']
                         
+                        # Modern gradient colors for health score
                         if score >= 85:
                             color = "excellent"
+                            bg_color = "linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
                         elif score >= 70:
-                            color = "good"
+                            color = "good"  
+                            bg_color = "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)"
                         elif score >= 55:
                             color = "fair"
+                            bg_color = "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)"
                         else:
                             color = "poor"
+                            bg_color = "linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)"
                         
-                        st.markdown(f'<div class="health-score {color}">{score:.1f}/100</div>', unsafe_allow_html=True)
-                        st.markdown(f'<h3 style="text-align: center; color: gray;">Relationship Health: {grade}</h3>', unsafe_allow_html=True)
+                        st.markdown(f'''
+                        <div style="
+                            background: {bg_color};
+                            border-radius: 20px;
+                            padding: 2rem;
+                            text-align: center;
+                            color: white;
+                            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+                            margin: 1rem 0;
+                        ">
+                            <div style="font-size: 4rem; font-weight: bold; margin-bottom: 0.5rem;">
+                                {score:.1f}/100
+                            </div>
+                            <div style="font-size: 1.2rem; opacity: 0.9;">
+                                Relationship Health: {grade}
+                            </div>
+                        </div>
+                        ''', unsafe_allow_html=True)
                     
                     # Metrics
                     col1, col2, col3, col4 = st.columns(4)
@@ -681,17 +701,35 @@ def main():
                     chart_col1, chart_col2 = st.columns(2)
                     
                     with chart_col1:
-                        # Message distribution
-                        message_counts = df['sender'].value_counts()
+                        # Message distribution with beautiful colors
+                        chat_message_counts = chat_only_df['sender'].value_counts() if not chat_only_df.empty else df['sender'].value_counts()
+                        
+                        # Modern color palette
+                        colors = ['#667eea', '#764ba2', '#f093fb', '#f5576c', '#4facfe', '#43e97b']
+                        
                         fig_pie = px.pie(
-                            values=message_counts.values,
-                            names=message_counts.index,
-                            title="💬 Message Distribution"
+                            values=chat_message_counts.values,
+                            names=chat_message_counts.index,
+                            title="💬 Message Distribution",
+                            color_discrete_sequence=colors
+                        )
+                        fig_pie.update_layout(
+                            font=dict(size=14),
+                            title_font_size=16,
+                            showlegend=True,
+                            paper_bgcolor='rgba(0,0,0,0)',
+                            plot_bgcolor='rgba(0,0,0,0)'
+                        )
+                        fig_pie.update_traces(
+                            textposition='inside', 
+                            textinfo='percent+label',
+                            hovertemplate='<b>%{label}</b><br>Messages: %{value}<br>Percentage: %{percent}<extra></extra>',
+                            marker=dict(line=dict(color='#FFFFFF', width=2))
                         )
                         st.plotly_chart(fig_pie, use_container_width=True)
                     
                     with chart_col2:
-                        # Health score breakdown
+                        # Health score breakdown with gradient colors
                         if health_results['method'] == 'advanced' and 'component_scores' in health_results:
                             comp_scores = health_results['component_scores']
                             categories = list(comp_scores.keys())
@@ -711,19 +749,53 @@ def main():
                             y=values,
                             title='🎯 Health Score Breakdown',
                             color=values,
-                            color_continuous_scale='RdYlGn'
+                            color_continuous_scale=['#ff6b6b', '#feca57', '#48dbfb', '#0abde3', '#00d2d3']
                         )
+                        fig_bar.update_layout(
+                            font=dict(size=12),
+                            title_font_size=16,
+                            xaxis_title="",
+                            yaxis_title="Score",
+                            paper_bgcolor='rgba(0,0,0,0)',
+                            plot_bgcolor='rgba(0,0,0,0)',
+                            showlegend=False
+                        )
+                        fig_bar.update_traces(
+                            hovertemplate='<b>%{x}</b><br>Score: %{y:.1f}<extra></extra>',
+                            marker_line_color='rgba(255,255,255,0.6)',
+                            marker_line_width=1.5
+                        )
+                        fig_bar.update_xaxes(tickangle=45)
                         st.plotly_chart(fig_bar, use_container_width=True)
                     
-                    # Timeline analysis
+                    # Timeline analysis with modern styling
                     daily_activity = df.groupby('date').size().reset_index(name='messages')
                     fig_line = px.line(
                         daily_activity, 
                         x='date', 
                         y='messages', 
                         title='📅 Daily Message Activity',
-                        markers=True
+                        markers=True,
+                        line_shape='spline'
                     )
+                    fig_line.update_layout(
+                        font=dict(size=12),
+                        title_font_size=16,
+                        xaxis_title="Date",
+                        yaxis_title="Messages",
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        plot_bgcolor='rgba(0,0,0,0)',
+                        hovermode='x unified'
+                    )
+                    fig_line.update_traces(
+                        line_color='#667eea',
+                        line_width=3,
+                        marker_color='#764ba2',
+                        marker_size=8,
+                        hovertemplate='<b>%{x}</b><br>Messages: %{y}<extra></extra>'
+                    )
+                    fig_line.update_xaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
+                    fig_line.update_yaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
                     st.plotly_chart(fig_line, use_container_width=True)
                     
                     # Advanced insights for advanced mode
@@ -772,13 +844,42 @@ def main():
                     if 'source' in df.columns and len(df['source'].unique()) > 1:
                         st.subheader("📋 Source Analysis")
                         source_counts = df['source'].value_counts()
+                        
+                        # Custom colors for different source types
+                        source_colors = {
+                            'whatsapp_txt': '#25D366',  # WhatsApp green
+                            'telegram_json': '#0088cc',  # Telegram blue
+                            'json': '#ff6b6b',
+                            'ocr_from_zip': '#feca57',  # Yellow for OCR
+                            'ocr_image': '#ff9ff3',     # Pink for image OCR
+                            'pdf': '#54a0ff',           # Blue for PDF
+                            'unknown': '#95a5a6'        # Gray for unknown
+                        }
+                        
+                        colors_list = [source_colors.get(source, '#667eea') for source in source_counts.index]
+                        
                         fig_source = px.bar(
                             x=source_counts.index, 
                             y=source_counts.values, 
-                            title="Messages by Source Type",
-                            color=source_counts.values,
-                            color_continuous_scale='viridis'
+                            title="📊 Messages by Source Type",
+                            color=source_counts.index,
+                            color_discrete_map=source_colors
                         )
+                        fig_source.update_layout(
+                            font=dict(size=12),
+                            title_font_size=16,
+                            xaxis_title="Source Type",
+                            yaxis_title="Message Count",
+                            paper_bgcolor='rgba(0,0,0,0)',
+                            plot_bgcolor='rgba(0,0,0,0)',
+                            showlegend=False
+                        )
+                        fig_source.update_traces(
+                            hovertemplate='<b>%{x}</b><br>Messages: %{y}<extra></extra>',
+                            marker_line_color='rgba(255,255,255,0.6)',
+                            marker_line_width=1.5
+                        )
+                        fig_source.update_xaxes(tickangle=45)
                         st.plotly_chart(fig_source, use_container_width=True)
                     
                     # Raw data preview
