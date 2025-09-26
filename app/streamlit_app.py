@@ -98,6 +98,12 @@ def load_and_execute_modules():
                 executed_modules[name] = {'loaded': False, 'error': 'Failed to download'}
                 st.session_state[f'module_{name}'] = None
         
+        # Update session state flags based on successful module loading
+        st.session_state.ingestion_available = executed_modules.get('ingestion', {}).get('loaded', False)
+        st.session_state.whatsapp_parser_available = executed_modules.get('whatsapp_parser', {}).get('loaded', False)
+        st.session_state.telegram_parser_available = executed_modules.get('telegram_parser', {}).get('loaded', False)
+        st.session_state.relationship_health_available = executed_modules.get('relationship_health', {}).get('loaded', False)
+        
         st.session_state.executed_modules = executed_modules
         st.session_state.modules_success_count = success_count
         return executed_modules, success_count
@@ -551,8 +557,21 @@ def main():
     # Load modules
     executed_modules, success_count = load_and_execute_modules()
     
-    # Show module status
+    # Show module status with debug info
     show_module_status(executed_modules, success_count)
+    
+    # Debug info in sidebar
+    if st.sidebar.checkbox("Show Debug Info"):
+        st.sidebar.write("**Debug Information:**")
+        st.sidebar.write(f"ingestion_available: {st.session_state.ingestion_available}")
+        st.sidebar.write(f"Module namespaces available:")
+        for module in ['ingestion', 'whatsapp_parser', 'telegram_parser', 'relationship_health']:
+            namespace = get_module_namespace(module)
+            if namespace:
+                functions = [k for k in namespace.keys() if not k.startswith('_')][:5]  # Show first 5 functions
+                st.sidebar.write(f"- {module}: {functions}")
+            else:
+                st.sidebar.write(f"- {module}: None")
     
     # Sidebar
     st.sidebar.title("📁 Upload Your Files")
