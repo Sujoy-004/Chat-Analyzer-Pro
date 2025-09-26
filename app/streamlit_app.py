@@ -559,11 +559,11 @@ def main():
     
     # Dynamic file upload based on available modules
     if st.session_state.ingestion_available:
-        accepted_types = ['txt', 'json', 'zip', 'png', 'jpg', 'jpeg', 'webp', 'bmp', 'pdf', 'opus', 'mp4', 'avi', 'mov', 'gif', 'tiff']
+        accepted_types = ['txt', 'json', 'zip', 'png', 'jpg', 'jpeg', 'webp', 'bmp', 'pdf', 'opus', 'mp4', 'avi', 'mov', 'gif', 'tiff', 'tif', 'm4a', 'wav', 'mp3', 'aac', 'ogg', 'flac', 'mkv', 'webm', 'flv', '3gp']
         help_text = "All file types supported: Chat exports, images (OCR), PDFs, ZIP archives, media files"
     else:
-        accepted_types = ['txt', 'json']
-        help_text = "Basic mode: TXT (WhatsApp) and JSON (Telegram) files only"
+        accepted_types = ['txt', 'json', 'zip']
+        help_text = "Basic mode: TXT (WhatsApp), JSON (Telegram), and ZIP files"
     
     uploaded_file = st.sidebar.file_uploader(
         "Choose files to analyze",
