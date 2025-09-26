@@ -602,7 +602,8 @@ def main():
             
             if not df.empty:
                 sources = df['source'].value_counts() if 'source' in df.columns else pd.Series(['unknown'])
-                unique_senders = df['sender'].nunique()
+                actual_chat_df = df[~df['source'].str.contains('ocr', na=False)]
+                unique_senders = actual_chat_df['sender'].nunique()
                 date_range_days = (df['datetime'].max() - df['datetime'].min()).days + 1
                 
                 st.sidebar.markdown(f"""
