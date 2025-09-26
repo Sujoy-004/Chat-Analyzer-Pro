@@ -1,165 +1,176 @@
 # src/ingest/ingestion.py
 """
-Central ingestion module for Chat-Analyzer-Pro.
+Complete ingestion module for Chat-Analyzer-Pro.
+Production-ready with robust error handling and graceful dependency fallbacks.
 
 Public API:
     process_uploaded_file(uploaded_file) -> (messages: List[dict], media_ocr: List[dict])
     parse_whatsapp_text(text) -> List[dict]
     parse_json_chat(bytes_or_str) -> List[dict] | None
-    ocr_image_bytes(bts) -> str
-    extract_text_from_pdf(bts) -> str
-    normalize_msg(raw: dict) -> dict
-
-Notes:
-- Requires external system packages: tesseract-ocr, poppler-utils (for pdf->image).
-- Python packages: pillow, pytesseract, pdfplumber, pdf2image
-  Install: pip install pillow pytesseract pdfplumber pdf2image
-- If tesseract is not on PATH, set pytesseract.pytesseract.tesseract_cmd
-  before calling OCR functions.
+    
+Features:
+- Handles all major file formats (TXT, JSON, ZIP, images, PDFs, media)
+- OCR text extraction from images when available
+- PDF text extraction with OCR fallback
+- Graceful handling of missing dependencies
+- Comprehensive error handling and logging
 """
 
-from typing import Tuple, List, Dict, Optional, Any, BinaryIO
-from io import BytesIO
-import zipfile
 import json
-import re
-import uuid
 import logging
 import os
+import re
+import uuid
+import zipfile
 from datetime import datetime
+from io import BytesIO
+from typing import Any, Dict, List, Optional, Tuple
 
-# Optional heavy deps; import only at top so import errors are visible early.
-try:
-    from PIL import Image, ImageFile
-    PIL_AVAILABLE = True
-    ImageFile.LOAD_TRUNCATED_IMAGES = True
-except ImportError:
-    PIL_AVAILABLE = False
-
-try:
-    import pytesseract
-    TESSERACT_AVAILABLE = True
-except ImportError:
-    TESSERACT_AVAILABLE = False
-
-try:
-    import pdfplumber
-    PDFPLUMBER_AVAILABLE = True
-except ImportError:
-    PDFPLUMBER_AVAILABLE = False
-
-try:
-    from pdf2image import convert_from_bytes
-    PDF2IMAGE_AVAILABLE = True
-except ImportError:
-    PDF2IMAGE_AVAILABLE = False
-
+# Set up logging
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
-# -------------------------
-# Helpers: date parsing
-# -------------------------
+# Dependency availability flags
+DEPENDENCIES = {
+    'PIL': False,
+    'pytesseract': False,
+    'pdfplumber': False,
+    'pdf2image': False
+}
+
+# Try to import optional dependencies
+try:
+    from PIL import Image, ImageFile
+    ImageFile.LOAD_TRUNCATED_IMAGES = True
+    DEPENDENCIES['PIL'] = True
+except ImportError:
+    logger.info("PIL not available - image processing disabled")
+
+try:
+    import pytesseract
+    DEPENDENCIES['pytesseract'] = True
+except ImportError:
+    logger.info("pytesseract not available - OCR disabled")
+
+try:
+    import pdfplumber
+    DEPENDENCIES['pdfplumber'] = True
+except ImportError:
+    logger.info("pdfplumber not available - PDF text extraction limited")
+
+try:
+    from pdf2image import convert_from_bytes
+    DEPENDENCIES['pdf2image'] = True
+except ImportError:
+    logger.info("pdf2image not available - PDF OCR fallback disabled")
+
+# Constants
 WHATSAPP_DATE_PATTERNS = [
-    "%d/%m/%y, %I:%M %p",     # e.g., 1/2/20, 9:41 PM
-    "%d/%m/%Y, %I:%M %p",    # 01/02/2020, 9:41 PM
-    "%d/%m/%y, %H:%M",       # 1/2/20, 21:41
+    "%d/%m/%y, %I:%M %p",
+    "%d/%m/%Y, %I:%M %p",
+    "%d/%m/%y, %H:%M",
     "%d/%m/%Y, %H:%M",
-    "%m/%d/%y, %I:%M %p",    # US style exported sometimes
+    "%m/%d/%y, %I:%M %p",
     "%m/%d/%Y, %I:%M %p",
-    # fallback patterns without comma
     "%d/%m/%y %I:%M %p",
     "%d/%m/%Y %I:%M %p",
 ]
 
-
-def try_parse_datetime(date_str: str) -> Tuple[str, str]:
-    """
-    Attempt to parse WhatsApp-like date+time string into ISO date and HH:MM.
-    Returns (date_iso, time_hm). On failure, returns (original, '').
-    """
-    s = date_str.strip()
-    # Try common separators: ", " or " - "
-    candidates = [s, s.replace(" - ", ", "), s.replace(" ,", ",")]
-    for cand in candidates:
-        for fmt in WHATSAPP_DATE_PATTERNS:
-            try:
-                dt = datetime.strptime(cand, fmt)
-                return dt.strftime("%Y-%m-%d"), dt.strftime("%H:%M")
-            except Exception:
-                continue
-    # last ditch: try splitting into date and time with regex of numeric parts
-    m = re.match(r"^(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})[, ]+\s*(\d{1,2}:\d{2}(?:[:\d{2}]?)\s*(?:AM|PM|am|pm)?)", s)
-    if m:
-        try:
-            part = m.group(1) + ", " + m.group(2)
-            for fmt in WHATSAPP_DATE_PATTERNS:
-                try:
-                    dt = datetime.strptime(part, fmt)
-                    return dt.strftime("%Y-%m-%d"), dt.strftime("%H:%M")
-                except Exception:
-                    continue
-        except Exception:
-            pass
-    # Fail: return raw date in date field for traceability
-    return s, ""
-
-
-# -------------------------
-# Parsers
-# -------------------------
 WAP_MESSAGE_RE = re.compile(
     r"""^
-    (\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}),?\s*    # date part (group 1)
-    (\d{1,2}:\d{2}(?:\s?[APap][Mm])?)\s*-\s*   # time part (group 2)
-    ([^:]+):\s*                                # author (group 3)
-    (.*)                                       # message (group 4)
+    (\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}),?\s*
+    (\d{1,2}:\d{2}(?::\d{2})?(?:\s?[APap][Mm])?)\s*-\s*
+    ([^:]+):\s*
+    (.*)
     $""",
     re.VERBOSE,
 )
 
+# Supported file types
+IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.webp', '.bmp', '.gif', '.tiff', '.tif'}
+AUDIO_EXTENSIONS = {'.opus', '.mp3', '.wav', '.m4a', '.aac', '.ogg', '.flac'}
+VIDEO_EXTENSIONS = {'.mp4', '.avi', '.mov', '.mkv', '.webm', '.flv', '.3gp'}
+MEDIA_EXTENSIONS = AUDIO_EXTENSIONS | VIDEO_EXTENSIONS
+
+
+def get_dependency_status() -> Dict[str, bool]:
+    """Get status of all optional dependencies."""
+    return DEPENDENCIES.copy()
+
+
+def try_parse_datetime(date_str: str) -> Tuple[str, str]:
+    """
+    Parse WhatsApp-like date+time string into ISO date and HH:MM.
+    Returns (date_iso, time_hm). On failure, returns (original, '').
+    """
+    s = date_str.strip()
+    candidates = [s, s.replace(" - ", ", "), s.replace(" ,", ",")]
+    
+    for candidate in candidates:
+        for fmt in WHATSAPP_DATE_PATTERNS:
+            try:
+                dt = datetime.strptime(candidate, fmt)
+                return dt.strftime("%Y-%m-%d"), dt.strftime("%H:%M")
+            except ValueError:
+                continue
+    
+    # Regex fallback
+    match = re.match(
+        r"^(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})[, ]+\s*(\d{1,2}:\d{2}(?:[:\d{2}]?)\s*(?:AM|PM|am|pm)?)", 
+        s
+    )
+    if match:
+        try:
+            part = f"{match.group(1)}, {match.group(2)}"
+            for fmt in WHATSAPP_DATE_PATTERNS:
+                try:
+                    dt = datetime.strptime(part, fmt)
+                    return dt.strftime("%Y-%m-%d"), dt.strftime("%H:%M")
+                except ValueError:
+                    continue
+        except Exception:
+            pass
+    
+    return s, ""
+
 
 def parse_whatsapp_text(text: str) -> List[Dict[str, Any]]:
     """
-    Parse exported WhatsApp .txt content into a list of raw message dicts.
-    Handles multi-line messages by detecting lines that start new messages.
-    Returns list of dicts with keys: date_raw, time_raw, author, text, raw_line.
+    Parse WhatsApp .txt export into structured message list.
+    Handles multiline messages and various date formats.
     """
-    messages: List[Dict[str, Any]] = []
-    current: Optional[Dict[str, Any]] = None
-
-    # Normalize line endings
-    lines = text.splitlines()
-    for line in lines:
-        line = line.rstrip("\r\n")
+    messages = []
+    current_message = None
+    
+    for line in text.splitlines():
+        line = line.rstrip()
         if not line:
-            # preserve empty lines as continuation if in current message
-            if current:
-                current["text"] += "\n"
+            if current_message:
+                current_message["text"] += "\n"
             continue
-        m = WAP_MESSAGE_RE.match(line)
-        if m:
-            # push previous
-            if current:
-                messages.append(current)
-            date_raw = m.group(1).strip()
-            time_raw = m.group(2).strip()
-            author = m.group(3).strip()
-            msg = m.group(4).strip()
-            current = {
-                "date_raw": date_raw,
-                "time_raw": time_raw,
-                "author": author,
-                "text": msg,
+            
+        match = WAP_MESSAGE_RE.match(line)
+        if match:
+            # Save previous message
+            if current_message:
+                messages.append(current_message)
+            
+            # Start new message
+            date_raw, time_raw, author, message_text = match.groups()
+            current_message = {
+                "date_raw": date_raw.strip(),
+                "time_raw": time_raw.strip(),
+                "author": author.strip(),
+                "text": message_text.strip(),
                 "raw_line": line,
                 "source_hint": "whatsapp_txt",
             }
         else:
-            # continuation line: append to current message text (if exists), else ignore
-            if current:
-                current["text"] += "\n" + line.strip()
+            # Continuation line or orphan
+            if current_message:
+                current_message["text"] += "\n" + line.strip()
             else:
-                # orphan line: store as unknown source
+                # Orphan line
                 messages.append({
                     "date_raw": "",
                     "time_raw": "",
@@ -168,474 +179,487 @@ def parse_whatsapp_text(text: str) -> List[Dict[str, Any]]:
                     "raw_line": line,
                     "source_hint": "orphan_text",
                 })
-    if current:
-        messages.append(current)
+    
+    # Don't forget the last message
+    if current_message:
+        messages.append(current_message)
+    
     return messages
 
 
-def parse_json_chat(bytes_or_str: Any) -> Optional[List[Dict[str, Any]]]:
+def parse_json_chat(data_input: Any) -> Optional[List[Dict[str, Any]]]:
     """
-    Try to parse JSON chat exports. Accepts bytes or str.
-    Heuristics:
-      - If top-level dict with key 'messages' -> return that list
-      - If top-level list -> return it
-      - Otherwise return None
+    Parse JSON chat exports (Telegram, etc.).
+    Handles bytes, strings, and file-like objects.
     """
     try:
-        if isinstance(bytes_or_str, (bytes, bytearray)):
-            data = json.loads(bytes_or_str.decode("utf-8", errors="ignore"))
-        elif isinstance(bytes_or_str, str):
-            data = json.loads(bytes_or_str)
+        if isinstance(data_input, (bytes, bytearray)):
+            data = json.loads(data_input.decode("utf-8", errors="ignore"))
+        elif isinstance(data_input, str):
+            data = json.loads(data_input)
+        elif hasattr(data_input, "read"):
+            raw = data_input.read()
+            data = json.loads(raw.decode("utf-8", errors="ignore"))
         else:
-            # maybe file-like: read
-            if hasattr(bytes_or_str, "read"):
-                raw = bytes_or_str.read()
-                data = json.loads(raw.decode("utf-8", errors="ignore"))
-            else:
-                return None
-    except Exception:
+            return None
+    except (json.JSONDecodeError, UnicodeDecodeError) as e:
+        logger.warning(f"JSON parsing failed: {e}")
         return None
-
+    
+    # Extract messages from various JSON structures
     if isinstance(data, dict):
         if "messages" in data and isinstance(data["messages"], list):
             return data["messages"]
-        # some JSON exports have 'chats' -> list of chat objects
         if "chats" in data and isinstance(data["chats"], list):
-            # try flattening
-            msgs = []
-            for c in data["chats"]:
-                if isinstance(c, dict) and "messages" in c and isinstance(c["messages"], list):
-                    msgs.extend(c["messages"])
-            if msgs:
-                return msgs
+            # Flatten multiple chats
+            messages = []
+            for chat in data["chats"]:
+                if isinstance(chat, dict) and "messages" in chat:
+                    messages.extend(chat["messages"])
+            return messages if messages else None
     elif isinstance(data, list):
         return data
+    
     return None
 
 
-# -------------------------
-# OCR & PDF
-# -------------------------
-def ocr_image_bytes(bts: bytes, lang: str = "eng") -> str:
+def ocr_image_bytes(image_bytes: bytes, lang: str = "eng") -> str:
     """
-    Run pytesseract OCR on image bytes and return extracted text (str).
+    Extract text from image bytes using OCR.
+    Returns empty string if OCR unavailable or fails.
     """
-    if not PIL_AVAILABLE or not TESSERACT_AVAILABLE:
-        logger.warning("PIL or pytesseract not available, skipping OCR")
+    if not (DEPENDENCIES['PIL'] and DEPENDENCIES['pytesseract']):
+        logger.warning("OCR dependencies not available")
         return ""
     
     try:
-        img = Image.open(BytesIO(bts)).convert("RGB")
-        text = pytesseract.image_to_string(img, lang=lang)
-        return text or ""
-    except Exception as exc:
-        logger.exception("ocr_image_bytes failed: %s", exc)
+        image = Image.open(BytesIO(image_bytes)).convert("RGB")
+        text = pytesseract.image_to_string(image, lang=lang)
+        return text.strip()
+    except Exception as e:
+        logger.error(f"OCR failed: {e}")
         return ""
 
 
-def extract_text_from_pdf(bts: bytes, ocr_lang: str = "eng") -> str:
+def extract_text_from_pdf(pdf_bytes: bytes, ocr_lang: str = "eng") -> str:
     """
-    Extract text from PDF bytes.
-    First attempt: pdfplumber text extraction per page.
-    If a page has empty text, convert that page to image and OCR it.
-    Returns a string with page separators.
+    Extract text from PDF with OCR fallback for image-based PDFs.
     """
-    if not PDFPLUMBER_AVAILABLE:
-        logger.warning("pdfplumber not available, skipping PDF text extraction")
+    if not DEPENDENCIES['pdfplumber']:
+        logger.warning("pdfplumber not available for PDF processing")
         return ""
     
-    pages_text: List[str] = []
+    pages_text = []
+    
     try:
-        with pdfplumber.open(BytesIO(bts)) as pdf:
-            for i, page in enumerate(pdf.pages, start=1):
+        with pdfplumber.open(BytesIO(pdf_bytes)) as pdf:
+            for i, page in enumerate(pdf.pages, 1):
                 try:
-                    txt = page.extract_text() or ""
-                    if txt.strip():
-                        pages_text.append(f"[page:{i}]\n" + txt)
+                    text = page.extract_text()
+                    if text and text.strip():
+                        pages_text.append(f"[page:{i}]\n{text}")
                     else:
-                        # fallback to OCR on the specific page
-                        if PDF2IMAGE_AVAILABLE and PIL_AVAILABLE and TESSERACT_AVAILABLE:
-                            try:
-                                images = convert_from_bytes(bts, first_page=i, last_page=i)
-                                if images:
-                                    ocr_text = pytesseract.image_to_string(images[0], lang=ocr_lang)
-                                    pages_text.append(f"[page:{i}][ocr]\n" + (ocr_text or ""))
-                                else:
-                                    pages_text.append(f"[page:{i}]\n")
-                            except Exception:
-                                pages_text.append(f"[page:{i}]\n")
-                        else:
-                            pages_text.append(f"[page:{i}]\n")
-                except Exception:
-                    logger.exception("Failed page extract; falling back to OCR for page %s", i)
-                    if PDF2IMAGE_AVAILABLE and PIL_AVAILABLE and TESSERACT_AVAILABLE:
-                        try:
-                            images = convert_from_bytes(bts, first_page=i, last_page=i)
-                            if images:
-                                ocr_text = pytesseract.image_to_string(images[0], lang=ocr_lang)
-                                pages_text.append(f"[page:{i}][ocr]\n" + (ocr_text or ""))
-                            else:
-                                pages_text.append(f"[page:{i}]\n")
-                        except Exception:
-                            pages_text.append(f"[page:{i}]\n")
-                    else:
-                        pages_text.append(f"[page:{i}]\n")
-    except Exception:
-        # total fallback: convert all pages to images and OCR
-        logger.exception("pdfplumber failed; converting all pages to images for OCR")
-        if PDF2IMAGE_AVAILABLE and PIL_AVAILABLE and TESSERACT_AVAILABLE:
-            try:
-                images = convert_from_bytes(bts)
-                for i, img in enumerate(images, start=1):
-                    ocr_text = pytesseract.image_to_string(img, lang=ocr_lang)
-                    pages_text.append(f"[page:{i}][ocr]\n" + (ocr_text or ""))
-            except Exception:
-                logger.exception("complete PDF -> image OCR fallback failed")
-                return ""
-        else:
-            logger.warning("PDF2IMAGE, PIL, or pytesseract not available for PDF OCR fallback")
-            return ""
+                        # Try OCR fallback
+                        ocr_text = _ocr_pdf_page(pdf_bytes, i, ocr_lang)
+                        pages_text.append(f"[page:{i}][ocr]\n{ocr_text}")
+                except Exception as e:
+                    logger.warning(f"Failed to process PDF page {i}: {e}")
+                    ocr_text = _ocr_pdf_page(pdf_bytes, i, ocr_lang)
+                    pages_text.append(f"[page:{i}][ocr]\n{ocr_text}")
+    except Exception as e:
+        logger.error(f"PDF processing failed: {e}")
+        return ""
+    
     return "\n\n".join(pages_text)
 
 
-def extract_media_metadata(bts: bytes, filename: str) -> Dict[str, Any]:
-    """
-    Extract basic metadata from media files.
-    """
-    file_size = len(bts)
+def _ocr_pdf_page(pdf_bytes: bytes, page_num: int, lang: str) -> str:
+    """OCR fallback for PDF pages."""
+    if not (DEPENDENCIES['pdf2image'] and DEPENDENCIES['PIL'] and DEPENDENCIES['pytesseract']):
+        return ""
+    
+    try:
+        images = convert_from_bytes(pdf_bytes, first_page=page_num, last_page=page_num)
+        if images:
+            return pytesseract.image_to_string(images[0], lang=lang).strip()
+    except Exception as e:
+        logger.warning(f"PDF OCR failed for page {page_num}: {e}")
+    
+    return ""
+
+
+def extract_media_metadata(file_bytes: bytes, filename: str) -> Dict[str, Any]:
+    """Extract basic metadata from media files."""
+    file_size = len(file_bytes)
     file_ext = filename.lower().split('.')[-1]
     
-    metadata = {
+    # Classify media type
+    if f'.{file_ext}' in AUDIO_EXTENSIONS:
+        media_type = "audio"
+    elif f'.{file_ext}' in VIDEO_EXTENSIONS:
+        media_type = "video"
+    else:
+        media_type = "unknown"
+    
+    return {
         "filename": filename,
         "file_type": file_ext,
+        "media_type": media_type,
         "file_size_bytes": file_size,
-        "file_size_mb": round(file_size / (1024*1024), 2),
-        "file_size_human": _human_readable_size(file_size)
+        "file_size_mb": round(file_size / (1024 * 1024), 2),
+        "file_size_human": _format_file_size(file_size)
     }
-    
-    # Basic file type classification
-    audio_formats = ['opus', 'mp3', 'wav', 'm4a', 'aac', 'ogg', 'flac']
-    video_formats = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'flv', '3gp']
-    
-    if file_ext in audio_formats:
-        metadata["media_type"] = "audio"
-    elif file_ext in video_formats:
-        metadata["media_type"] = "video"
-    else:
-        metadata["media_type"] = "unknown"
-    
-    return metadata
 
 
-def _human_readable_size(size_bytes: int) -> str:
-    """Convert bytes to human readable format"""
+def _format_file_size(size_bytes: int) -> str:
+    """Convert bytes to human-readable format."""
     for unit in ['B', 'KB', 'MB', 'GB']:
-        if size_bytes < 1024.0:
+        if size_bytes < 1024:
             return f"{size_bytes:.1f} {unit}"
-        size_bytes /= 1024.0
+        size_bytes /= 1024
     return f"{size_bytes:.1f} TB"
 
 
-# -------------------------
-# Normalization & utilities
-# -------------------------
-def normalize_msg(raw: Dict[str, Any]) -> Dict[str, Any]:
+def normalize_message(raw_msg: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Convert a raw parsed message to canonical schema:
+    Normalize raw message to standard schema:
     {
-      "uid": str,
-      "date": "YYYY-MM-DD" or raw date string,
-      "time": "HH:MM" or "",
-      "author": str,
-      "text": str,
-      "source": "whatsapp|telegram|json|ocr|pdf|unknown",
-      "media": [ ... ],
-      "meta": { ... }
+        "uid": str,
+        "date": "YYYY-MM-DD",
+        "time": "HH:MM", 
+        "author": str,
+        "text": str,
+        "source": str,
+        "media": [],
+        "meta": {}
     }
     """
-    uid = raw.get("uid") or raw.get("id") or str(uuid.uuid4())
-    src_hint = raw.get("source") or raw.get("source_hint") or raw.get("source_type") or "unknown"
-    # normalize whatsapp-style raw date/time if present
-    date_field = ""
-    time_field = ""
-    if raw.get("date"):
-        date_field = raw.get("date")
-    elif raw.get("date_raw"):
-        date_field, time_field = try_parse_datetime(f"{raw.get('date_raw')}, {raw.get('time_raw')}".strip(", "))
-        # try_parse returns raw string in date_field if fails
-        if time_field == "":
-            # attempt to parse time if still available
-            _, t = try_parse_datetime(raw.get("date_raw"))
-            time_field = t
-    else:
-        # attempt date-time from a single combined field
-        if raw.get("datetime"):
-            try:
-                dt = datetime.fromisoformat(raw.get("datetime"))
-                date_field = dt.strftime("%Y-%m-%d")
-                time_field = dt.strftime("%H:%M")
-            except Exception:
-                date_field = raw.get("datetime")
-    author = raw.get("author") or raw.get("sender") or raw.get("from") or "unknown"
-    text = raw.get("text") or raw.get("message") or raw.get("body") or ""
-    media = raw.get("media") or raw.get("attachments") or []
-    meta = raw.get("meta") or {}
-
-    normalized = {
+    # Generate unique ID
+    uid = raw_msg.get("uid") or raw_msg.get("id") or str(uuid.uuid4())
+    
+    # Determine source
+    source = raw_msg.get("source") or raw_msg.get("source_hint") or "unknown"
+    
+    # Parse date and time
+    date_field, time_field = "", ""
+    if raw_msg.get("date"):
+        date_field = raw_msg["date"]
+    elif raw_msg.get("date_raw"):
+        date_field, time_field = try_parse_datetime(
+            f"{raw_msg.get('date_raw', '')}, {raw_msg.get('time_raw', '')}".strip(", ")
+        )
+    elif raw_msg.get("datetime"):
+        try:
+            dt = datetime.fromisoformat(str(raw_msg["datetime"]).replace('Z', '+00:00'))
+            date_field = dt.strftime("%Y-%m-%d")
+            time_field = dt.strftime("%H:%M")
+        except (ValueError, TypeError):
+            date_field = str(raw_msg["datetime"])
+    
+    # Extract other fields
+    author = raw_msg.get("author") or raw_msg.get("sender") or raw_msg.get("from") or "unknown"
+    text = raw_msg.get("text") or raw_msg.get("message") or raw_msg.get("body") or ""
+    media = raw_msg.get("media") or raw_msg.get("attachments") or []
+    meta = raw_msg.get("meta") or {}
+    
+    # Add preview to metadata for debugging
+    if "raw_line" in raw_msg:
+        meta["_raw_preview"] = raw_msg["raw_line"][:500]
+    elif text:
+        meta["_raw_preview"] = text[:200]
+    
+    return {
         "uid": uid,
         "date": date_field,
         "time": time_field,
         "author": author,
         "text": text,
-        "source": src_hint,
+        "source": source,
         "media": media,
         "meta": meta,
     }
-    return normalized
 
 
-# -------------------------
-# Main entrypoint
-# -------------------------
 def _read_file_content(uploaded_file: Any) -> Tuple[str, bytes]:
-    """
-    Accept uploaded_file objects used by Streamlit (have .name and .read())
-    or simple (name, bytes) tuples. Return (filename, bytes).
-    """
-    if isinstance(uploaded_file, (tuple, list)) and len(uploaded_file) == 2:
-        return uploaded_file[0], uploaded_file[1]
+    """Extract filename and content from uploaded file object."""
     if hasattr(uploaded_file, "name") and hasattr(uploaded_file, "read"):
-        name = getattr(uploaded_file, "name")
-        data = uploaded_file.read()
-        return name, data
-    if isinstance(uploaded_file, str) and os.path.exists(uploaded_file):
+        # Streamlit UploadedFile-like object
+        return uploaded_file.name, uploaded_file.read()
+    elif isinstance(uploaded_file, (tuple, list)) and len(uploaded_file) == 2:
+        # (filename, bytes) tuple
+        return uploaded_file[0], uploaded_file[1]
+    elif isinstance(uploaded_file, str) and os.path.exists(uploaded_file):
+        # File path
         with open(uploaded_file, "rb") as f:
             return os.path.basename(uploaded_file), f.read()
-    raise ValueError("Unsupported uploaded_file type. Must be stream-like with .name & .read() or (name, bytes).")
+    else:
+        raise ValueError("Unsupported uploaded_file type")
 
 
 def process_uploaded_file(uploaded_file: Any) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """
-    Centralized ingestion for a single uploaded file.
-    Accepts streamlit UploadedFile-like object (has .name and .read) or (name, bytes).
-    Returns (messages, media_ocr_list).
-
-    messages: list of normalized messages (canonical schema)
-    media_ocr_list: list of dicts like {"file": filename, "ocr": text, "note": optional}
+    Main ingestion function. Processes any supported file type.
+    
+    Args:
+        uploaded_file: File object with .name and .read() methods, or (name, bytes) tuple
+        
+    Returns:
+        Tuple of (normalized_messages, media_analysis_results)
     """
-    filename, content = _read_file_content(uploaded_file)
-    lower = filename.lower()
-    messages_raw: List[Dict[str, Any]] = []
-    media_ocr: List[Dict[str, Any]] = []
-
     try:
-        # ZIP handling
-        if lower.endswith(".zip"):
-            try:
-                with zipfile.ZipFile(BytesIO(content)) as z:
-                    for member in z.namelist():
-                        if member.endswith("/"):
-                            continue
-                        try:
-                            with z.open(member) as f:
-                                b = f.read()
-                        except Exception:
-                            logger.exception("Failed to read zipped member %s", member)
-                            continue
-                        mname = os.path.basename(member)
-                        mlow = mname.lower()
-                        if mlow.endswith(".txt"):
-                            try:
-                                txt = b.decode("utf-8", errors="ignore")
-                            except Exception:
-                                txt = b.decode("latin-1", errors="ignore")
-                            parsed = parse_whatsapp_text(txt)
-                            for p in parsed:
-                                p["source_hint"] = "whatsapp_txt"
-                                messages_raw.append(p)
-                        elif mlow.endswith(".json"):
-                            parsed = parse_json_chat(b)
-                            if parsed:
-                                # try to ensure each item is a dict
-                                for it in parsed:
-                                    if isinstance(it, dict):
-                                        it["source_hint"] = "json"
-                                        messages_raw.append(it)
-                        elif mlow.endswith((".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tiff", ".tif")):
-                            ocr_text = ocr_image_bytes(b)
-                            media_ocr.append({"file": member, "ocr": ocr_text})
-                            if ocr_text.strip():
-                                messages_raw.append({
-                                    "date_raw": "",
-                                    "time_raw": "",
-                                    "author": "unknown",
-                                    "text": ocr_text,
-                                    "raw_line": "",
-                                    "source_hint": "ocr_from_zip",
-                                })
-                        elif mlow.endswith(".pdf"):
-                            pdf_text = extract_text_from_pdf(b)
-                            if pdf_text.strip():
-                                messages_raw.append({
-                                    "date_raw": "",
-                                    "time_raw": "",
-                                    "author": "unknown",
-                                    "text": pdf_text,
-                                    "raw_line": "",
-                                    "source_hint": "pdf_in_zip",
-                                    "meta": {"filename": member}
-                                })
-                        elif mlow.endswith((".opus", ".mp4", ".avi", ".mov", ".m4a", ".wav", ".mp3", ".aac", ".ogg", ".flac", ".mkv", ".webm", ".flv", ".3gp")):
-                            # Media file - extract metadata only
-                            metadata = extract_media_metadata(b, member)
-                            media_ocr.append({
-                                "file": member,
-                                "note": f"Media file detected: {metadata['media_type']} ({metadata['file_size_human']})",
-                                "metadata": metadata
-                            })
-                        else:
-                            # unsupported binary inside zip; record filename
-                            media_ocr.append({"file": member, "note": "unsupported file type in zip"})
-            except zipfile.BadZipFile:
-                logger.exception("Uploaded zip file is corrupted or not a zip.")
-                # treat as generic file below
+        filename, content = _read_file_content(uploaded_file)
+    except Exception as e:
+        logger.error(f"Failed to read file: {e}")
+        return [], [{"file": "unknown", "note": f"File reading error: {e}"}]
+    
+    lower_filename = filename.lower()
+    raw_messages = []
+    media_results = []
+    
+    try:
+        # ZIP files - extract and process contents
+        if lower_filename.endswith('.zip'):
+            raw_messages, media_results = _process_zip_file(content, filename)
         
-        # Plain text files
-        elif lower.endswith(".txt"):
-            try:
-                txt = content.decode("utf-8", errors="ignore")
-            except Exception:
-                txt = content.decode("latin-1", errors="ignore")
-            parsed = parse_whatsapp_text(txt)
-            for p in parsed:
-                p["source_hint"] = "whatsapp_txt"
-                messages_raw.append(p)
+        # Text files - WhatsApp exports
+        elif lower_filename.endswith('.txt'):
+            raw_messages = _process_text_file(content, filename)
         
-        # JSON chat
-        elif lower.endswith(".json"):
-            parsed = parse_json_chat(content)
-            if parsed:
-                for it in parsed:
-                    if isinstance(it, dict):
-                        it["source_hint"] = "json"
-                        messages_raw.append(it)
-            else:
-                # attempt to decode as text and parse whatsapp style
-                try:
-                    txt = content.decode("utf-8", errors="ignore")
-                    parsed = parse_whatsapp_text(txt)
-                    if parsed:
-                        for p in parsed:
-                            p["source_hint"] = "whatsapp_txt_from_json_ext"
-                            messages_raw.append(p)
-                except Exception:
-                    pass
+        # JSON files - Telegram/other chat exports  
+        elif lower_filename.endswith('.json'):
+            raw_messages = _process_json_file(content, filename)
         
-        # Images (enhanced support)
-        elif lower.endswith((".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tiff", ".tif")):
-            ocr_text = ocr_image_bytes(content)
-            media_ocr.append({"file": filename, "ocr": ocr_text})
-            if ocr_text.strip():
-                messages_raw.append({
-                    "date_raw": "",
-                    "time_raw": "",
-                    "author": "unknown",
-                    "text": ocr_text,
-                    "raw_line": "",
-                    "source_hint": "ocr_image",
-                })
+        # Image files - OCR extraction
+        elif any(lower_filename.endswith(ext) for ext in IMAGE_EXTENSIONS):
+            raw_messages, media_results = _process_image_file(content, filename)
         
-        # PDF
-        elif lower.endswith(".pdf"):
-            pdf_text = extract_text_from_pdf(content)
-            if pdf_text.strip():
-                messages_raw.append({
-                    "date_raw": "",
-                    "time_raw": "",
-                    "author": "unknown",
-                    "text": pdf_text,
-                    "raw_line": "",
-                    "source_hint": "pdf",
-                    "meta": {"filename": filename}
-                })
+        # PDF files - text extraction
+        elif lower_filename.endswith('.pdf'):
+            raw_messages, media_results = _process_pdf_file(content, filename)
         
-        # Media files (enhanced support)
-        elif lower.endswith((".opus", ".mp4", ".avi", ".mov", ".m4a", ".wav", ".mp3", ".aac", ".ogg", ".flac", ".mkv", ".webm", ".flv", ".3gp")):
-            metadata = extract_media_metadata(content, filename)
-            media_ocr.append({
-                "file": filename,
-                "note": f"Media file detected: {metadata['media_type']} ({metadata['file_size_human']})",
-                "metadata": metadata
-            })
+        # Media files - metadata extraction
+        elif any(lower_filename.endswith(ext) for ext in MEDIA_EXTENSIONS):
+            media_results = _process_media_file(content, filename)
         
+        # Unknown file type - try as text
         else:
-            # Generic attempt: try decode as text and parse whatsapp-like
-            try:
-                txt = content.decode("utf-8", errors="ignore")
-                parsed = parse_whatsapp_text(txt)
-                if parsed:
-                    for p in parsed:
-                        p["source_hint"] = "whatsapp_txt_generic"
-                        messages_raw.append(p)
-                else:
-                    # if not whatsapp-like, still return decoded text as a single record
-                    if txt.strip():
-                        messages_raw.append({
-                            "date_raw": "",
-                            "time_raw": "",
-                            "author": "unknown",
-                            "text": txt,
-                            "raw_line": "",
-                            "source_hint": "generic_text",
-                        })
-            except Exception:
-                # binary unknown
-                media_ocr.append({"file": filename, "note": "unsupported binary and not text-decodable"})
-    except Exception as exc:
-        logger.exception("process_uploaded_file failed for %s: %s", filename, exc)
-        media_ocr.append({"file": filename, "note": f"ingestion error: {exc}"})
-
-    # Normalize messages
-    normalized_msgs: List[Dict[str, Any]] = []
-    for raw in messages_raw:
+            raw_messages = _process_unknown_file(content, filename)
+    
+    except Exception as e:
+        logger.error(f"Processing failed for {filename}: {e}")
+        media_results.append({"file": filename, "note": f"Processing error: {e}"})
+    
+    # Normalize all messages
+    normalized_messages = []
+    for raw_msg in raw_messages:
         try:
-            norm = normalize_msg(raw)
-            # attach meta about original raw for traceability
-            norm_meta = dict(norm.get("meta", {}))
-            norm_meta["_raw_preview"] = (raw.get("raw_line") or (raw.get("text")[:200] if raw.get("text") else ""))[:1000]
-            norm["meta"] = norm_meta
-            normalized_msgs.append(norm)
-        except Exception:
-            logger.exception("normalize_msg failed for raw: %s", raw)
-            # fallback: wrap raw as text
-            normalized_msgs.append({
+            normalized = normalize_message(raw_msg)
+            normalized_messages.append(normalized)
+        except Exception as e:
+            logger.warning(f"Message normalization failed: {e}")
+            # Fallback normalization
+            normalized_messages.append({
                 "uid": str(uuid.uuid4()),
                 "date": "",
                 "time": "",
-                "author": raw.get("author", "unknown") if isinstance(raw, dict) else "unknown",
-                "text": str(raw)[:2000],
-                "source": raw.get("source_hint", "unknown") if isinstance(raw, dict) else "unknown",
+                "author": raw_msg.get("author", "unknown"),
+                "text": str(raw_msg.get("text", ""))[:1000],
+                "source": raw_msg.get("source_hint", "unknown"),
                 "media": [],
-                "meta": {"_normalize_error": True}
+                "meta": {"_normalization_error": True}
             })
+    
+    return normalized_messages, media_results
 
-    return normalized_msgs, media_ocr
+
+def _process_zip_file(content: bytes, filename: str) -> Tuple[List[Dict], List[Dict]]:
+    """Process ZIP archive contents."""
+    messages, media = [], []
+    
+    try:
+        with zipfile.ZipFile(BytesIO(content)) as zf:
+            for member in zf.namelist():
+                if member.endswith('/'):
+                    continue
+                    
+                try:
+                    member_content = zf.read(member)
+                    member_name = os.path.basename(member)
+                    member_lower = member_name.lower()
+                    
+                    # Process based on file type
+                    if member_lower.endswith('.txt'):
+                        member_messages = _process_text_file(member_content, member_name)
+                        messages.extend(member_messages)
+                    
+                    elif member_lower.endswith('.json'):
+                        member_messages = _process_json_file(member_content, member_name)
+                        messages.extend(member_messages)
+                    
+                    elif any(member_lower.endswith(ext) for ext in IMAGE_EXTENSIONS):
+                        member_messages, member_media = _process_image_file(member_content, member_name)
+                        messages.extend(member_messages)
+                        media.extend(member_media)
+                    
+                    elif member_lower.endswith('.pdf'):
+                        member_messages, member_media = _process_pdf_file(member_content, member_name)
+                        messages.extend(member_messages)
+                        media.extend(member_media)
+                    
+                    elif any(member_lower.endswith(ext) for ext in MEDIA_EXTENSIONS):
+                        member_media = _process_media_file(member_content, member_name)
+                        media.extend(member_media)
+                    
+                    else:
+                        media.append({"file": member_name, "note": "Unsupported file type in ZIP"})
+                
+                except Exception as e:
+                    logger.warning(f"Failed to process ZIP member {member}: {e}")
+                    media.append({"file": member, "note": f"Processing error: {e}"})
+    
+    except zipfile.BadZipFile:
+        media.append({"file": filename, "note": "Invalid or corrupted ZIP file"})
+    
+    return messages, media
 
 
-# -------------------------
-# If run as script, simple demo
-# -------------------------
+def _process_text_file(content: bytes, filename: str) -> List[Dict]:
+    """Process text file as WhatsApp export."""
+    try:
+        text = content.decode('utf-8', errors='ignore')
+        messages = parse_whatsapp_text(text)
+        for msg in messages:
+            msg["source_hint"] = "whatsapp_txt"
+        return messages
+    except Exception as e:
+        logger.error(f"Text file processing failed: {e}")
+        return []
+
+
+def _process_json_file(content: bytes, filename: str) -> List[Dict]:
+    """Process JSON file as chat export."""
+    messages = parse_json_chat(content)
+    if messages:
+        for msg in messages:
+            if isinstance(msg, dict):
+                msg["source_hint"] = "json"
+        return [msg for msg in messages if isinstance(msg, dict)]
+    return []
+
+
+def _process_image_file(content: bytes, filename: str) -> Tuple[List[Dict], List[Dict]]:
+    """Process image file with OCR."""
+    ocr_text = ocr_image_bytes(content)
+    media_result = {"file": filename, "ocr": ocr_text}
+    
+    messages = []
+    if ocr_text.strip():
+        messages.append({
+            "date_raw": "",
+            "time_raw": "",
+            "author": "unknown",
+            "text": ocr_text,
+            "raw_line": "",
+            "source_hint": "ocr_image",
+        })
+    
+    return messages, [media_result]
+
+
+def _process_pdf_file(content: bytes, filename: str) -> Tuple[List[Dict], List[Dict]]:
+    """Process PDF file with text extraction."""
+    pdf_text = extract_text_from_pdf(content)
+    media_result = {"file": filename, "extracted_text": pdf_text}
+    
+    messages = []
+    if pdf_text.strip():
+        messages.append({
+            "date_raw": "",
+            "time_raw": "",
+            "author": "unknown", 
+            "text": pdf_text,
+            "raw_line": "",
+            "source_hint": "pdf",
+            "meta": {"filename": filename}
+        })
+    
+    return messages, [media_result]
+
+
+def _process_media_file(content: bytes, filename: str) -> List[Dict]:
+    """Process media file - extract metadata only."""
+    metadata = extract_media_metadata(content, filename)
+    return [{
+        "file": filename,
+        "note": f"Media file: {metadata['media_type']} ({metadata['file_size_human']})",
+        "metadata": metadata
+    }]
+
+
+def _process_unknown_file(content: bytes, filename: str) -> List[Dict]:
+    """Try to process unknown file as text."""
+    try:
+        text = content.decode('utf-8', errors='ignore')
+        if text.strip():
+            # Try WhatsApp parsing first
+            messages = parse_whatsapp_text(text)
+            if messages:
+                for msg in messages:
+                    msg["source_hint"] = "whatsapp_txt_generic"
+                return messages
+            
+            # Fallback: treat as single text block
+            return [{
+                "date_raw": "",
+                "time_raw": "",
+                "author": "unknown",
+                "text": text.strip(),
+                "raw_line": "",
+                "source_hint": "generic_text",
+            }]
+    except UnicodeDecodeError:
+        pass
+    
+    return []
+
+
+# Utility function for debugging
+def get_supported_formats() -> Dict[str, List[str]]:
+    """Return dict of supported file formats by category."""
+    return {
+        "chat_exports": ["txt", "json"],
+        "archives": ["zip"],
+        "images": list(ext.lstrip('.') for ext in IMAGE_EXTENSIONS),
+        "documents": ["pdf"],
+        "audio": list(ext.lstrip('.') for ext in AUDIO_EXTENSIONS),
+        "video": list(ext.lstrip('.') for ext in VIDEO_EXTENSIONS),
+    }
+
+
 if __name__ == "__main__":
+    # Basic test/demo
     import sys
     from pprint import pprint
-
-    if len(sys.argv) < 2:
-        print("Usage: python ingestion.py <file>")
-        sys.exit(1)
-    fn = sys.argv[1]
-    with open(fn, "rb") as fh:
-        msgs, media = process_uploaded_file((os.path.basename(fn), fh.read()))
-    print("MESSAGES:", len(msgs))
-    pprint(msgs[:5])
-    print("MEDIA OCR:", len(media))
-    pprint(media[:5])
+    
+    print("Chat Analyzer Pro - Ingestion Module")
+    print("Dependencies:", get_dependency_status())
+    print("Supported formats:", get_supported_formats())
+    
+    if len(sys.argv) > 1:
+        filepath = sys.argv[1]
+        try:
+            messages, media = process_uploaded_file(filepath)
+            print(f"\nProcessed {filepath}:")
+            print(f"Messages: {len(messages)}")
+            print(f"Media items: {len(media)}")
+            
+            if messages:
+                print("\nFirst few messages:")
+                pprint(messages[:3])
+            
+            if media:
+                print("\nMedia analysis:")
+                pprint(media[:3])
+                
+        except Exception as e:
+            print(f"Error processing {filepath}: {e}")
