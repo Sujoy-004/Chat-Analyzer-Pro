@@ -1041,6 +1041,32 @@ def main():
                         
                         if len(df) > 50:
                             st.info(f"Showing first 50 rows of {len(df)} total messages")
+                    
+                    # Optional: Show media file analysis (collapsed by default)
+                    if media_ocr and len(media_ocr) > 0:
+                        with st.expander("🔍 View Detailed File Processing Log (Advanced)"):
+                            st.caption("Technical details about processed files - primarily for debugging")
+                            for item in media_ocr:
+                                filename = item.get('file', 'Unknown file')
+                                ocr_text = item.get('ocr', '')
+                                note = item.get('note', '')
+                                metadata = item.get('metadata', {})
+                                
+                                st.markdown(f"**📁 {filename}**")
+                                
+                                if note:
+                                    st.caption(f"ℹ️ {note}")
+                                
+                                if metadata:
+                                    st.json(metadata)
+                                
+                                if ocr_text and len(ocr_text.strip()) > 0:
+                                    with st.expander(f"View extracted text"):
+                                        st.text_area("Extracted Text", ocr_text[:500], height=100, disabled=True, key=f"ocr_{filename}")
+                                        if len(ocr_text) > 500:
+                                            st.caption(f"Showing first 500 of {len(ocr_text)} characters")
+                                
+                                st.markdown("---")
                 
                 else:
                     st.error("❌ Could not calculate relationship health metrics")
