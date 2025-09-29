@@ -724,8 +724,8 @@ def main():
                     chart_col1, chart_col2 = st.columns(2)
                     
                     with chart_col1:
-                        # Message distribution with beautiful colors
-                        chat_message_counts = chat_only_df['sender'].value_counts() if not chat_only_df.empty else df['sender'].value_counts()
+                        # Message distribution with beautiful colors - exclude OCR/unknown
+                        chat_message_counts = chat_only_df[chat_only_df['sender'] != 'unknown']['sender'].value_counts() if not chat_only_df.empty else df['sender'].value_counts()
                         
                         # Modern color palette
                         colors = ['#667eea', '#764ba2', '#f093fb', '#f5576c', '#4facfe', '#43e97b']
@@ -820,6 +820,129 @@ def main():
                     fig_line.update_xaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
                     fig_line.update_yaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
                     st.plotly_chart(fig_line, use_container_width=True)
+                    
+                    # Additional visualizations
+                    st.subheader("📊 Advanced Analytics")
+                    
+                    viz_col1, viz_col2 = st.columns(2)
+                    
+                    with viz_col1:
+                        # Hourly activity heatmap
+                        if 'hour' in df.columns:
+                            hourly_activity = df.groupby('hour').size().reset_index(name='messages')
+                            fig_hourly = px.bar(
+                                hourly_activity,
+                                x='hour',
+                                y='messages',
+                                title='⏰ Messages by Hour of Day',
+                                color='messages',
+                                color_continuous_scale=['#667eea', '#764ba2', '#f093fb']
+                            )
+                            fig_hourly.update_layout(
+                                font=dict(size=12),
+                                title_font_size=16,
+                                xaxis_title="Hour",
+                                yaxis_title="Message Count",
+                                paper_bgcolor='rgba(0,0,0,0)',
+                                plot_bgcolor='rgba(0,0,0,0)',
+                                showlegend=False
+                            )
+                            fig_hourly.update_traces(
+                                hovertemplate='<b>%{x}:00</b><br>Messages: %{y}<extra></extra>'
+                            )
+                            st.plotly_chart(fig_hourly, use_container_width=True)
+                    
+                    with viz_col2:
+                        # Message length distribution
+                        if 'message_length' in df.columns:
+                            # Create bins for message lengths
+                            bins = [0, 20, 50, 100, 200, 500, float('inf')]
+                            labels = ['0-20', '21-50', '51-100', '101-200', '201-500', '500+']
+                            df['length_category'] = pd.cut(df['message_length'], bins=bins, labels=labels)
+                            
+                            length_dist = df['length_category'].value_counts().sort_index()
+                            fig_length = px.bar(
+                                x=length_dist.index,
+                                y=length_dist.values,
+                                title='📏 Message Length Distribution',
+                                color=length_dist.values,
+                                color_continuous_scale=['#43e97b', '#38f9d7', '#4facfe']
+                            )
+                            fig_length.update_layout(
+                                font=dict(size=12),
+                                title_font_size=16,
+                                xaxis_title="Characters",
+                                yaxis_title="Message Count",
+                                paper_bgcolor='rgba(0,0,0,0)',
+                                plot_bgcolor='rgba(0,0,0,0)',
+                                showlegend=False
+                            )
+                            fig_length.update_traces(
+                                hovertemplate='<b>%{x} chars</b><br>Messages: %{y}<extra></extra>'
+                            )
+                            st.plotly_chart(fig_length, use_container_width=True)
+                    
+                    # Week day analysis
+                    viz_col3, viz_col4 = st.columns(2)
+                    
+                    with viz_col3:
+                        # Day of week activity
+                        df['day_of_week'] = pd.to_datetime(df['datetime']).dt.day_name()
+                        day_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+                        day_counts = df['day_of_week'].value_counts().reindex(day_order, fill_value=0)
+                        
+                        fig_weekday = px.bar(
+                            x=day_counts.index,
+                            y=day_counts.values,
+                            title='📆 Activity by Day of Week',
+                            color=day_counts.values,
+                            color_continuous_scale=['#f093fb', '#f5576c', '#ff6b6b']
+                        )
+                        fig_weekday.update_layout(
+                            font=dict(size=12),
+                            title_font_size=16,
+                            xaxis_title="Day",
+                            yaxis_title="Messages",
+                            paper_bgcolor='rgba(0,0,0,0)',
+                            plot_bgcolor='rgba(0,0,0,0)',
+                            showlegend=False
+                        )
+                        fig_weekday.update_xaxes(tickangle=45)
+                        fig_weekday.update_traces(
+                            hovertemplate='<b>%{x}</b><br>Messages: %{y}<extra></extra>'
+                        )
+                        st.plotly_chart(fig_weekday, use_container_width=True)
+                    
+                    with viz_col4:
+                        # Message count per participant over time
+                        if not chat_only_df.empty:
+                            actual_senders = chat_only_df[chat_only_df['sender'] != 'unknown']['sender'].unique()
+                            if len(actual_senders) > 0:
+                                participant_timeline = chat_only_df[chat_only_df['sender'].isin(actual_senders)].groupby(['date', 'sender']).size().reset_index(name='messages')
+                                
+                                fig_timeline = px.line(
+                                    participant_timeline,
+                                    x='date',
+                                    y='messages',
+                                    color='sender',
+                                    title='👥 Participant Activity Over Time',
+                                    markers=True,
+                                    color_discrete_sequence=['#667eea', '#764ba2', '#f093fb', '#f5576c']
+                                )
+                                fig_timeline.update_layout(
+                                    font=dict(size=12),
+                                    title_font_size=16,
+                                    xaxis_title="Date",
+                                    yaxis_title="Messages",
+                                    paper_bgcolor='rgba(0,0,0,0)',
+                                    plot_bgcolor='rgba(0,0,0,0)',
+                                    legend=dict(title="Participant")
+                                )
+                                fig_timeline.update_traces(
+                                    line_width=2.5,
+                                    marker_size=6
+                                )
+                                st.plotly_chart(fig_timeline, use_container_width=True)
                     
                     # Advanced insights for advanced mode
                     if health_results['method'] == 'advanced':
