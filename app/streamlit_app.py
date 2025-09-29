@@ -697,11 +697,15 @@ def main():
                     # Metrics
                     col1, col2, col3, col4 = st.columns(4)
                     
+                    # Filter out OCR messages for accurate participant count
+                    chat_only_df = df[~df['source'].str.contains('ocr|pdf', case=False, na=False)]
+                    
                     with col1:
                         st.metric("📊 Messages", len(df))
                     
                     with col2:
-                        st.metric("👥 Participants", unique_senders)
+                        actual_participants = chat_only_df['sender'].nunique() if not chat_only_df.empty else df['sender'].nunique()
+                        st.metric("👥 Participants", actual_participants)
                     
                     with col3:
                         st.metric("📅 Days", date_range_days)
