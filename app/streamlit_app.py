@@ -1046,7 +1046,7 @@ def main():
                     if media_ocr and len(media_ocr) > 0:
                         with st.expander("🔍 View Detailed File Processing Log (Advanced)"):
                             st.caption("Technical details about processed files - primarily for debugging")
-                            for item in media_ocr:
+                            for idx, item in enumerate(media_ocr):
                                 filename = item.get('file', 'Unknown file')
                                 ocr_text = item.get('ocr', '')
                                 note = item.get('note', '')
@@ -1062,7 +1062,7 @@ def main():
                                 
                                 if ocr_text and len(ocr_text.strip()) > 0:
                                     with st.expander(f"View extracted text"):
-                                        st.text_area("Extracted Text", ocr_text[:500], height=100, disabled=True, key=f"ocr_{filename}")
+                                        st.text_area("Extracted Text", ocr_text[:500], height=100, disabled=True, key=f"ocr_text_{idx}_{hash(filename)}")
                                         if len(ocr_text) > 500:
                                             st.caption(f"Showing first 500 of {len(ocr_text)} characters")
                                 
