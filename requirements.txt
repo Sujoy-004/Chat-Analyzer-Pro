@@ -1,5 +1,6 @@
-# Chat Analyzer Pro - Streamlit Cloud Compatible Requirements
-# Core dependencies for the Chat Analyzer Pro application with full functionality
+# Chat Analyzer Pro - Requirements
+# Core dependencies for the Chat Analyzer Pro application
+# Updated for Day 8 - Emotion Classification
 
 # Web Framework
 streamlit>=1.28.0
@@ -13,10 +14,8 @@ matplotlib>=3.6.0
 seaborn>=0.12.0
 plotly>=5.15.0
 
-# PDF Generation & Processing
+# PDF Generation
 reportlab>=4.0.0
-pdfplumber>=0.9.0
-pdf2image>=1.16.0,<=1.17.0
 
 # Date/Time Processing
 python-dateutil>=2.8.0
@@ -24,25 +23,30 @@ python-dateutil>=2.8.0
 # HTTP Requests
 requests>=2.28.0
 
-# Text Processing & Regex
+# Text Processing
 regex>=2022.10.31
 
 # Scientific Computing (for analysis)
 scipy>=1.10.0
 
-# Image Processing & OCR
+# Image Processing (for PDF charts)
 Pillow>=9.0.0
-pytesseract>=0.3.10
 
-# File Handling & Magic Number Detection
-python-magic>=0.4.27
+# Sentiment Analysis (Day 4)
+vaderSentiment>=3.3.2
+textblob>=0.17.1
 
-# Optional: Enhanced text analysis (uncomment if needed)
-# textblob>=0.17.1
+# Emotion Classification (Day 8) - NEW
+transformers>=4.30.0
+torch>=2.0.0
+sentencepiece>=0.1.99  # Required for some transformer models
+
+# Optional: Additional NLP tools
 # nltk>=3.8
-# vaderSentiment>=3.3.2
 
-# Development/Testing (optional - uncomment for development)
+# Development/Testing (optional)
 # pytest>=7.0.0
 # jupyter>=1.0.0
-# notebook>=6.4.0
+
+# Note: For cloud deployment, you may want to use CPU-only PyTorch:
+# Install with: pip install torch --index-url https://download.pytorch.org/whl/cpu
