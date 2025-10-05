@@ -1,15 +1,16 @@
 """
-Conversation Summarizer Module
+Conversation Summarizer Module - Enhanced with Group Chat Support
 Day 11 - Chat Analyzer Pro
 
 This module provides conversation summarization capabilities using T5-small model.
-It can summarize individual conversations or generate periodic summaries.
+Enhanced version with group chat analysis features.
 """
 
 import pandas as pd
 import numpy as np
-from typing import List, Dict, Union, Optional
+from typing import List, Dict, Union, Optional, Tuple
 from transformers import pipeline, T5Tokenizer, T5ForConditionalGeneration
+from collections import Counter
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -17,15 +18,20 @@ warnings.filterwarnings('ignore')
 class ConversationSummarizer:
     """
     A class to summarize conversations using T5-small transformer model.
+    Enhanced with group chat analysis capabilities.
     
     Features:
-    - Summarize entire conversations
+    - Summarize entire conversations (1-on-1 or group)
     - Summarize conversations by date range
     - Summarize conversations by participant
     - Generate extractive and abstractive summaries
+    - Group chat interaction analysis
+    - Dominant speaker detection
+    - Group dynamics insights
     """
     
-    def __init__(self, model_name: str = "t5-small", max_length: int = 150, min_length: int = 40):
+    def __init__(self, model_name: str = "t5-small", max_length: int = 150, 
+                 min_length: int = 40, max_participants_in_report: int = None):
         """
         Initialize the ConversationSummarizer with T5 model.
         
@@ -33,11 +39,13 @@ class ConversationSummarizer:
             model_name (str): Hugging Face model name (default: t5-small)
             max_length (int): Maximum length of summary
             min_length (int): Minimum length of summary
+            max_participants_in_report (int): Max participants in full report (None = unlimited)
         """
         print(f"Loading {model_name} model...")
         self.model_name = model_name
         self.max_length = max_length
         self.min_length = min_length
+        self.max_participants_in_report = max_participants_in_report
         
         # Initialize T5 model and tokenizer
         try:
@@ -87,6 +95,108 @@ class ConversationSummarizer:
             conversation_text = conversation_text[:2000]
         
         return conversation_text
+    
+    
+    def detect_group_type(self, df: pd.DataFrame) -> Dict[str, Union[str, int]]:
+        """
+        Detect if conversation is 1-on-1, small group, or large group.
+        
+        Args:
+            df (pd.DataFrame): Conversation DataFrame
+            
+        Returns:
+            Dict: Group type information
+        """
+        num_participants = df['sender'].nunique()
+        
+        if num_participants <= 2:
+            group_type = "1-on-1"
+            description = "Private conversation between two people"
+        elif num_participants <= 5:
+            group_type = "Small Group"
+            description = "Small group conversation"
+        elif num_participants <= 15:
+            group_type = "Medium Group"
+            description = "Medium-sized group chat"
+        else:
+            group_type = "Large Group"
+            description = "Large group conversation"
+        
+        return {
+            'type': group_type,
+            'participants': num_participants,
+            'description': description,
+            'total_messages': len(df)
+        }
+    
+    
+    def analyze_interactions(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Analyze interaction patterns in group chats.
+        Creates an interaction matrix showing message flow between participants.
+        
+        Args:
+            df (pd.DataFrame): Conversation DataFrame with 'sender' column
+            
+        Returns:
+            pd.DataFrame: Interaction matrix
+        """
+        participants = df['sender'].unique()
+        
+        # Create interaction matrix
+        interaction_data = []
+        
+        for i, sender in enumerate(participants):
+            sender_messages = df[df['sender'] == sender]
+            
+            for receiver in participants:
+                if sender != receiver:
+                    # Count how many times sender's message is followed by receiver's
+                    count = 0
+                    for idx in sender_messages.index:
+                        if idx + 1 < len(df) and df.loc[idx + 1, 'sender'] == receiver:
+                            count += 1
+                    
+                    interaction_data.append({
+                        'from': sender,
+                        'to': receiver,
+                        'interactions': count
+                    })
+        
+        return pd.DataFrame(interaction_data)
+    
+    
+    def get_dominant_speakers(self, df: pd.DataFrame, top_n: int = None) -> pd.DataFrame:
+        """
+        Identify dominant speakers in the conversation.
+        
+        Args:
+            df (pd.DataFrame): Conversation DataFrame
+            top_n (int): Number of top speakers to return (None = all)
+            
+        Returns:
+            pd.DataFrame: Speaker statistics with rankings
+        """
+        total_messages = len(df)
+        
+        speaker_stats = df.groupby('sender').agg({
+            'message': 'count'
+        }).reset_index()
+        
+        speaker_stats.columns = ['participant', 'message_count']
+        speaker_stats['percentage'] = (speaker_stats['message_count'] / total_messages * 100).round(2)
+        speaker_stats = speaker_stats.sort_values('message_count', ascending=False)
+        speaker_stats['rank'] = range(1, len(speaker_stats) + 1)
+        
+        # Add activity level
+        speaker_stats['activity_level'] = speaker_stats['percentage'].apply(
+            lambda x: 'Very High' if x >= 30 else 'High' if x >= 20 else 'Medium' if x >= 10 else 'Low'
+        )
+        
+        if top_n:
+            speaker_stats = speaker_stats.head(top_n)
+        
+        return speaker_stats
     
     
     def summarize_conversation(
@@ -293,7 +403,6 @@ class ConversationSummarizer:
         Returns:
             List[str]: Top n words/topics
         """
-        from collections import Counter
         import re
         
         # Combine all messages
@@ -319,6 +428,7 @@ class ConversationSummarizer:
     def generate_full_report(self, df: pd.DataFrame) -> Dict:
         """
         Generate a comprehensive summary report.
+        Now with configurable participant limit for group chats.
         
         Args:
             df (pd.DataFrame): Conversation DataFrame
@@ -334,8 +444,17 @@ class ConversationSummarizer:
         # Key topics
         topics = self.get_key_topics(df, top_n=10)
         
-        # Participant summaries
-        participants = df['sender'].unique()[:5]  # Limit to top 5
+        # Participant summaries with configurable limit
+        all_participants = df['sender'].unique()
+        
+        if self.max_participants_in_report and len(all_participants) > self.max_participants_in_report:
+            # Get top N participants by message count
+            top_participants = df['sender'].value_counts().head(self.max_participants_in_report).index
+            participants = top_participants
+            print(f"ℹ️ Limiting to top {self.max_participants_in_report} participants by message count")
+        else:
+            participants = all_participants
+        
         participant_summaries = {}
         for participant in participants:
             p_summary = self.summarize_by_participant(df, participant)
@@ -346,6 +465,7 @@ class ConversationSummarizer:
             'key_topics': topics,
             'participant_summaries': participant_summaries,
             'total_participants': len(df['sender'].unique()),
+            'summarized_participants': len(participants),
             'date_range': {
                 'start': df['date'].min() if 'date' in df.columns else 'N/A',
                 'end': df['date'].max() if 'date' in df.columns else 'N/A'
@@ -354,6 +474,48 @@ class ConversationSummarizer:
         
         print("✅ Report generation complete!")
         return report
+    
+    
+    def analyze_group_dynamics(self, df: pd.DataFrame) -> Dict:
+        """
+        Comprehensive group dynamics analysis.
+        
+        Args:
+            df (pd.DataFrame): Conversation DataFrame
+            
+        Returns:
+            Dict: Group dynamics insights
+        """
+        print("🔄 Analyzing group dynamics...")
+        
+        # Group type detection
+        group_info = self.detect_group_type(df)
+        
+        # Dominant speakers
+        speaker_stats = self.get_dominant_speakers(df)
+        
+        # Interaction analysis
+        interactions = self.analyze_interactions(df)
+        
+        # Find most interactive pairs
+        if not interactions.empty:
+            top_interactions = interactions.nlargest(5, 'interactions')
+        else:
+            top_interactions = pd.DataFrame()
+        
+        dynamics = {
+            'group_type': group_info,
+            'speaker_statistics': speaker_stats,
+            'top_interactions': top_interactions,
+            'engagement_summary': {
+                'most_active': speaker_stats.iloc[0]['participant'] if not speaker_stats.empty else 'N/A',
+                'least_active': speaker_stats.iloc[-1]['participant'] if not speaker_stats.empty else 'N/A',
+                'avg_messages_per_person': len(df) / df['sender'].nunique() if df['sender'].nunique() > 0 else 0
+            }
+        }
+        
+        print("✅ Group dynamics analysis complete!")
+        return dynamics
 
 
 # Utility function for quick summarization
