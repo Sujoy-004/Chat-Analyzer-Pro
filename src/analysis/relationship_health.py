@@ -1,13 +1,14 @@
 """
-Relationship Health Metrics Module - Extended for Day 9
+Relationship Health Metrics Module - UPDATED with Day 14 Gamification
 
 This module analyzes relationship health through conversation patterns including:
 - Initiator ratio (who starts conversations)
 - Response lag analysis (response times and patterns)  
 - Dominance scores (message count, length, conversation control)
 - Overall relationship health scoring
-- **NEW DAY 9**: Rolling health score tracking over time windows
-- **NEW DAY 9**: Trend analysis and forecasting
+- Rolling health score tracking (Day 9)
+- Friendship Index & Gamification (Day 14)
+- Integration with visualization.py (Day 13)
 
 """
 
@@ -16,12 +17,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from datetime import datetime, timedelta
-from typing import Dict, List, Tuple, Any
+from typing import Dict, List, Tuple, Any, Optional
+import logging
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# ============================================================================
-# DAY 5 FUNCTIONS - Original Implementation
-# ============================================================================
 
 def identify_conversation_starters(df: pd.DataFrame, gap_threshold_minutes: int = 60) -> pd.DataFrame:
     """
@@ -48,332 +50,7 @@ def identify_conversation_starters(df: pd.DataFrame, gap_threshold_minutes: int 
     df.loc[0, 'is_conversation_starter'] = True
     
     # Mark conversation starters based on gaps or date changes
-    for i in range(periods):
-        forecast_x = len(rolling_health_df) + i
-        forecast_score = slope * forecast_x + intercept
-        
-        # Clamp score between 0 and 100
-        forecast_score = max(0, min(100, forecast_score))
-        
-        forecast_date = last_date + timedelta(days=i+1)
-        
-        forecast_data.append({
-            'date': forecast_date,
-            'health_score': forecast_score,
-            'is_forecast': True
-        })
-    
-    return pd.DataFrame(forecast_data)
-
-
-def generate_health_insights(rolling_health_df: pd.DataFrame, df_prepared: pd.DataFrame) -> Dict[str, Any]:
-    """
-    Generate actionable insights from rolling health analysis.
-    
-    **NEW DAY 9 FUNCTION**
-    
-    Args:
-        rolling_health_df: DataFrame from calculate_rolling_health_scores()
-        df_prepared: Original prepared data with conversation markers
-        
-    Returns:
-        Dictionary with insights, recommendations, and alerts
-    """
-    insights = {
-        'trend_analysis': {},
-        'component_analysis': {},
-        'recommendations': [],
-        'alerts': []
-    }
-    
-    # Trend Analysis
-    trend_metrics = analyze_health_trend(rolling_health_df)
-    insights['trend_analysis'] = trend_metrics
-    
-    # Component Analysis
-    avg_initiation = rolling_health_df['initiation_balance'].mean()
-    avg_responsiveness = rolling_health_df['responsiveness'].mean()
-    avg_participation = rolling_health_df['participation_balance'].mean()
-    
-    insights['component_analysis'] = {
-        'initiation_balance': avg_initiation,
-        'responsiveness': avg_responsiveness,
-        'participation_balance': avg_participation
-    }
-    
-    # Identify weakest and strongest
-    components = {
-        'Conversation Initiation': avg_initiation,
-        'Responsiveness': avg_responsiveness,
-        'Participation Balance': avg_participation
-    }
-    insights['weakest_component'] = min(components, key=components.get)
-    insights['strongest_component'] = max(components, key=components.get)
-    
-    # Generate Recommendations
-    if avg_initiation < 0.7:
-        insights['recommendations'].append({
-            'priority': 'HIGH',
-            'area': 'Conversation Initiation',
-            'issue': f'Initiation balance is low ({avg_initiation:.2%})',
-            'suggestion': 'Encourage both participants to start conversations more equally'
-        })
-    
-    if avg_responsiveness < 0.6:
-        insights['recommendations'].append({
-            'priority': 'HIGH',
-            'area': 'Responsiveness',
-            'issue': f'Response times are slow ({avg_responsiveness:.2%})',
-            'suggestion': 'Try to respond more promptly to messages'
-        })
-    
-    if avg_participation < 0.7:
-        insights['recommendations'].append({
-            'priority': 'MEDIUM',
-            'area': 'Participation',
-            'issue': f'Message participation is imbalanced ({avg_participation:.2%})',
-            'suggestion': 'Balance message volume between participants'
-        })
-    
-    # Generate Alerts
-    if trend_metrics.get('total_change', 0) < -5:
-        insights['alerts'].append({
-            'severity': 'WARNING',
-            'message': f"Health score declined by {abs(trend_metrics['total_change']):.1f} points",
-            'action': 'Review recent communication patterns'
-        })
-    
-    if trend_metrics.get('volatility', 0) > 10:
-        insights['alerts'].append({
-            'severity': 'ATTENTION',
-            'message': f"High score volatility detected ({trend_metrics['volatility']:.1f})",
-            'action': 'Work on consistent communication habits'
-        })
-    
-    return insights
-
-
-def plot_rolling_health_dashboard(
-    rolling_health_df: pd.DataFrame,
-    trend_metrics: Dict[str, Any] = None,
-    forecast_df: pd.DataFrame = None,
-    figsize: Tuple[int, int] = (20, 12)
-) -> None:
-    """
-    Create comprehensive rolling health score visualization.
-    
-    **NEW DAY 9 FUNCTION**
-    
-    Args:
-        rolling_health_df: DataFrame from calculate_rolling_health_scores()
-        trend_metrics: Optional trend analysis from analyze_health_trend()
-        forecast_df: Optional forecast from forecast_health_scores()
-        figsize: Figure size tuple
-    """
-    from scipy.stats import linregress
-    
-    if trend_metrics is None:
-        trend_metrics = analyze_health_trend(rolling_health_df)
-    
-    fig = plt.figure(figsize=figsize)
-    gs = fig.add_gridspec(3, 3, hspace=0.35, wspace=0.3)
-    
-    # 1. Main Health Score Trend
-    ax1 = fig.add_subplot(gs[0, :])
-    ax1.plot(rolling_health_df['date'], rolling_health_df['health_score'], 
-             marker='o', linewidth=3, markersize=12, color='#3498DB', label='Health Score')
-    
-    # Add trend line
-    x_numeric = np.arange(len(rolling_health_df))
-    trend_line = trend_metrics['slope'] * x_numeric + trend_metrics['intercept']
-    ax1.plot(rolling_health_df['date'], trend_line, '--', linewidth=2, 
-             color='#E74C3C', alpha=0.7, label=f'Trend (slope: {trend_metrics["slope"]:.2f}/day)')
-    
-    # Add forecast if provided
-    if forecast_df is not None and len(forecast_df) > 0:
-        ax1.plot(forecast_df['date'], forecast_df['health_score'], 
-                 'o--', linewidth=2, markersize=10, color='#E74C3C', 
-                 label='Forecast', alpha=0.7)
-        ax1.axvspan(rolling_health_df['date'].iloc[-1], forecast_df['date'].iloc[-1], 
-                    alpha=0.1, color='gray')
-    
-    # Threshold zones
-    ax1.axhspan(85, 100, alpha=0.1, color='green', label='Excellent (85-100)')
-    ax1.axhspan(70, 85, alpha=0.1, color='yellow', label='Good (70-85)')
-    ax1.axhspan(55, 70, alpha=0.1, color='orange', label='Fair (55-70)')
-    ax1.axhspan(0, 55, alpha=0.1, color='red', label='Needs Work (0-55)')
-    
-    ax1.set_title('Relationship Health Score Over Time', fontsize=16, fontweight='bold')
-    ax1.set_xlabel('Date', fontsize=12)
-    ax1.set_ylabel('Health Score', fontsize=12)
-    ax1.set_ylim(0, 100)
-    ax1.grid(True, alpha=0.3)
-    ax1.legend(loc='upper right', fontsize=10)
-    
-    # Annotate points
-    for idx, row in rolling_health_df.iterrows():
-        ax1.annotate(f"{row['health_score']:.1f}", 
-                    (row['date'], row['health_score']),
-                    textcoords="offset points", xytext=(0,10), 
-                    ha='center', fontsize=9, fontweight='bold')
-    
-    # 2. Component Scores Over Time
-    ax2 = fig.add_subplot(gs[1, 0])
-    ax2.plot(rolling_health_df['date'], rolling_health_df['initiation_balance'] * 100, 
-             marker='o', label='Initiation', linewidth=2, markersize=8)
-    ax2.plot(rolling_health_df['date'], rolling_health_df['responsiveness'] * 100, 
-             marker='s', label='Responsiveness', linewidth=2, markersize=8)
-    ax2.plot(rolling_health_df['date'], rolling_health_df['participation_balance'] * 100, 
-             marker='^', label='Participation', linewidth=2, markersize=8)
-    ax2.set_title('Component Trends', fontsize=12, fontweight='bold')
-    ax2.set_ylabel('Score (%)', fontsize=10)
-    ax2.set_ylim(0, 100)
-    ax2.legend(fontsize=9)
-    ax2.grid(True, alpha=0.3)
-    ax2.tick_params(axis='x', rotation=45)
-    
-    # 3. Message Activity Over Time
-    ax3 = fig.add_subplot(gs[1, 1])
-    ax3.bar(rolling_health_df['date'], rolling_health_df['message_count'], 
-            color='#9B59B6', alpha=0.7, edgecolor='black')
-    ax3.set_title('Message Volume per Window', fontsize=12, fontweight='bold')
-    ax3.set_ylabel('Message Count', fontsize=10)
-    ax3.grid(True, alpha=0.3, axis='y')
-    ax3.tick_params(axis='x', rotation=45)
-    
-    for idx, row in rolling_health_df.iterrows():
-        ax3.text(row['date'], row['message_count'] + 0.3, 
-                str(int(row['message_count'])), 
-                ha='center', va='bottom', fontweight='bold', fontsize=10)
-    
-    # 4. Conversation Frequency
-    ax4 = fig.add_subplot(gs[1, 2])
-    ax4.bar(rolling_health_df['date'], rolling_health_df['conversation_count'], 
-            color='#E67E22', alpha=0.7, edgecolor='black')
-    ax4.set_title('Conversations per Window', fontsize=12, fontweight='bold')
-    ax4.set_ylabel('Conversation Count', fontsize=10)
-    ax4.grid(True, alpha=0.3, axis='y')
-    ax4.tick_params(axis='x', rotation=45)
-    
-    for idx, row in rolling_health_df.iterrows():
-        ax4.text(row['date'], row['conversation_count'] + 0.1, 
-                str(int(row['conversation_count'])), 
-                ha='center', va='bottom', fontweight='bold', fontsize=10)
-    
-    # 5. Health Score Distribution
-    ax5 = fig.add_subplot(gs[2, 0])
-    ax5.hist(rolling_health_df['health_score'], bins=5, color='#2ECC71', 
-             alpha=0.7, edgecolor='black')
-    ax5.axvline(trend_metrics['average_score'], color='red', 
-               linestyle='--', linewidth=2, label=f"Mean: {trend_metrics['average_score']:.1f}")
-    ax5.set_title('Health Score Distribution', fontsize=12, fontweight='bold')
-    ax5.set_xlabel('Health Score', fontsize=10)
-    ax5.set_ylabel('Frequency', fontsize=10)
-    ax5.legend(fontsize=9)
-    ax5.grid(True, alpha=0.3)
-    
-    # 6. Score Change Analysis
-    ax6 = fig.add_subplot(gs[2, 1])
-    if len(rolling_health_df) > 1:
-        score_changes = rolling_health_df['health_score'].diff().dropna()
-        colors = ['#2ECC71' if x >= 0 else '#E74C3C' for x in score_changes]
-        ax6.bar(range(len(score_changes)), score_changes, color=colors, alpha=0.7, edgecolor='black')
-        ax6.axhline(0, color='black', linewidth=1)
-        ax6.set_title('Day-to-Day Score Changes', fontsize=12, fontweight='bold')
-        ax6.set_xlabel('Time Period', fontsize=10)
-        ax6.set_ylabel('Score Change', fontsize=10)
-        ax6.grid(True, alpha=0.3, axis='y')
-    
-    # 7. Summary Statistics Box
-    ax7 = fig.add_subplot(gs[2, 2])
-    ax7.axis('off')
-    
-    # Background color based on average score
-    if trend_metrics['average_score'] >= 85:
-        bg_color = '#D5F4E6'
-    elif trend_metrics['average_score'] >= 70:
-        bg_color = '#FFF9C4'
-    elif trend_metrics['average_score'] >= 55:
-        bg_color = '#FFE0B2'
-    else:
-        bg_color = '#FFCDD2'
-    
-    summary_text = f"""ROLLING HEALTH SUMMARY
-
-Average Score: {trend_metrics['average_score']:.1f}/100
-Score Range: {trend_metrics['max_score'] - trend_metrics['min_score']:.1f} points
-Volatility: {trend_metrics['volatility']:.1f}
-
-Trend: {trend_metrics['trend_emoji']} {trend_metrics['trend_direction'].replace('_', ' ')}
-Slope: {trend_metrics['slope']:.2f} points/day
-R² Value: {trend_metrics['r_squared']:.3f}
-
-Best Day: {rolling_health_df.loc[rolling_health_df['health_score'].idxmax(), 'date']}
-Score: {trend_metrics['max_score']:.1f}
-
-Lowest Day: {rolling_health_df.loc[rolling_health_df['health_score'].idxmin(), 'date']}
-Score: {trend_metrics['min_score']:.1f}
-
-Total Messages: {rolling_health_df['message_count'].sum():.0f}
-Total Conversations: {rolling_health_df['conversation_count'].sum():.0f}
-"""
-    
-    ax7.text(0.05, 0.95, summary_text, transform=ax7.transAxes, 
-             fontsize=11, verticalalignment='top', fontfamily='monospace',
-             bbox=dict(boxstyle='round', facecolor=bg_color, alpha=0.8, pad=1))
-    
-    plt.suptitle('Rolling Relationship Health Score Tracker (Day 9)', 
-                 fontsize=18, fontweight='bold', y=0.995)
-    plt.tight_layout()
-    plt.show()
-
-
-# Example usage function
-def example_usage():
-    """
-    Example of how to use the relationship health analysis functions.
-    """
-    # Sample data structure
-    sample_data = {
-        'datetime': pd.date_range('2023-12-25 09:30:00', periods=20, freq='30min'),
-        'sender': ['Alice', 'Bob'] * 10,
-        'message': ['Sample message'] * 20,
-        'message_length': np.random.randint(10, 100, 20)
-    }
-    
-    df = pd.DataFrame(sample_data)
-    
-    # Run complete analysis (Day 5)
-    results = analyze_relationship_health(df)
-    
-    # Display results
-    print("=== RELATIONSHIP HEALTH ANALYSIS ===")
-    print(f"Overall Score: {results['health_score']['overall_health_score']:.2f}")
-    print(f"Grade: {results['health_score']['grade']}")
-    print(f"Description: {results['health_score']['description']}")
-    
-    # Create visualization
-    plot_relationship_health_dashboard(results)
-    
-    # Run rolling analysis (Day 9)
-    rolling_scores = calculate_rolling_health_scores(df, window_days=1)
-    trend_analysis = analyze_health_trend(rolling_scores)
-    forecast = forecast_health_scores(rolling_scores, periods=2)
-    insights = generate_health_insights(rolling_scores, results['prepared_data'])
-    
-    print("\n=== ROLLING HEALTH ANALYSIS ===")
-    print(f"Trend: {trend_analysis['trend_direction']} ({trend_analysis['slope']:.2f}/day)")
-    print(f"Average Score: {trend_analysis['average_score']:.1f}/100")
-    
-    # Create rolling visualization
-    plot_rolling_health_dashboard(rolling_scores, trend_analysis, forecast)
-    
-    return results, rolling_scores, insights
-
-
-if __name__ == "__main__":
-    # Run example if script is executed directly
-    example_usage() i in range(1, len(df)):
+    for i in range(1, len(df)):
         current_time = df.loc[i, 'datetime']
         prev_time = df.loc[i-1, 'datetime']
         time_gap_minutes = (current_time - prev_time).total_seconds() / 60
@@ -660,24 +337,24 @@ def calculate_relationship_health_score(
     areas_for_improvement = []
     
     if initiation_score >= 0.8:
-        strengths.append("Balanced conversation initiation")
+        strengths.append("✅ Balanced conversation initiation")
     else:
-        areas_for_improvement.append("One person initiates more conversations")
+        areas_for_improvement.append("⚠️ One person initiates more conversations")
     
     if responsiveness_score >= 0.8:
-        strengths.append("Both are very responsive")
+        strengths.append("✅ Both are very responsive")
     else:
-        areas_for_improvement.append("Slower response times")
+        areas_for_improvement.append("⚠️ Slower response times")
     
     if response_balance_score >= 0.8:
-        strengths.append("Similar response time patterns")
+        strengths.append("✅ Similar response time patterns")
     else:
-        areas_for_improvement.append("Significant difference in response speeds")
+        areas_for_improvement.append("⚠️ Significant difference in response speeds")
     
     if dominance_score >= 0.8:
-        strengths.append("Excellent participation balance")
+        strengths.append("✅ Excellent participation balance")
     else:
-        areas_for_improvement.append("Some dominance in conversation patterns")
+        areas_for_improvement.append("⚠️ Some dominance in conversation patterns")
     
     return {
         'overall_health_score': overall_score,
@@ -695,61 +372,609 @@ def calculate_relationship_health_score(
     }
 
 
-def analyze_relationship_health(df: pd.DataFrame, gap_threshold_minutes: int = 60) -> Dict[str, Any]:
+# ============================================================================
+# DAY 9: ROLLING HEALTH SCORE TRACKER
+# ============================================================================
+
+def calculate_rolling_health_score(
+    df: pd.DataFrame,
+    window_days: int = 7,
+    min_messages: int = 10
+) -> pd.DataFrame:
     """
-    Complete relationship health analysis pipeline.
+    Calculate rolling relationship health score over time.
     
     Args:
-        df: DataFrame with columns: datetime, sender, message, (optional: message_length)
-        gap_threshold_minutes: Time gap to consider new conversation start
+        df: Prepared DataFrame with conversation metrics
+        window_days: Rolling window size in days
+        min_messages: Minimum messages required for calculation
         
     Returns:
-        Complete relationship health analysis results
+        DataFrame with date and rolling health scores
     """
-    # Prepare data
-    df_prepared = identify_conversation_starters(df, gap_threshold_minutes)
+    df = df.copy()
+    df['datetime'] = pd.to_datetime(df['datetime'])
+    df = df.sort_values('datetime')
     
-    # Calculate all metrics
-    initiator_metrics = calculate_initiator_ratio(df_prepared)
-    response_metrics = analyze_response_patterns(df_prepared)
-    dominance_metrics = calculate_dominance_scores(df_prepared)
+    # Group by date
+    df['date'] = df['datetime'].dt.date
+    dates = sorted(df['date'].unique())
     
-    # Calculate overall health score
-    health_score = calculate_relationship_health_score(
-        initiator_metrics, response_metrics, dominance_metrics
-    )
+    health_scores = []
     
-    # Compile complete results
+    for i, current_date in enumerate(dates):
+        window_start = current_date - timedelta(days=window_days)
+        window_df = df[(df['date'] >= window_start) & (df['date'] <= current_date)]
+        
+        if len(window_df) < min_messages:
+            continue
+        
+        try:
+            # Calculate metrics for this window
+            window_df = identify_conversation_starters(window_df.reset_index(drop=True))
+            initiator_metrics = calculate_initiator_ratio(window_df)
+            response_metrics = analyze_response_patterns(window_df)
+            dominance_metrics = calculate_dominance_scores(window_df)
+            health_score = calculate_relationship_health_score(
+                initiator_metrics, response_metrics, dominance_metrics
+            )
+            
+            health_scores.append({
+                'date': current_date,
+                'health_score': health_score['overall_health_score'],
+                'grade': health_score['grade'],
+                'message_count': len(window_df)
+            })
+        except Exception as e:
+            logger.warning(f"Failed to calculate health score for {current_date}: {str(e)}")
+            continue
+    
+    return pd.DataFrame(health_scores)
+
+
+# ============================================================================
+# DAY 14: GAMIFICATION FEATURES - FRIENDSHIP INDEX & EXTRAS
+# ============================================================================
+
+def calculate_friendship_index(df: pd.DataFrame) -> Dict[str, Any]:
+    """
+    Calculate comprehensive Friendship Index combining multiple metrics.
+    
+    Args:
+        df: Prepared DataFrame with all conversation data
+        
+    Returns:
+        Dictionary with Friendship Index and detailed breakdown
+    """
+    df = df.copy()
+    
+    # Ensure we have prepared data
+    if 'is_conversation_starter' not in df.columns:
+        df = identify_conversation_starters(df)
+    
+    # Component 1: Communication Frequency (0-25 points)
+    total_messages = len(df)
+    days_span = (df['datetime'].max() - df['datetime'].min()).days + 1
+    messages_per_day = total_messages / days_span if days_span > 0 else 0
+    
+    frequency_score = min(25, (messages_per_day / 50) * 25)  # Cap at 50 messages/day for max score
+    
+    # Component 2: Conversation Balance (0-25 points)
+    initiator_metrics = calculate_initiator_ratio(df)
+    balance_score = initiator_metrics.get('balance_score', 0) * 25
+    
+    # Component 3: Responsiveness (0-20 points)
+    response_metrics = analyze_response_patterns(df)
+    responsiveness_score = response_metrics.get('responsiveness_score', 0) * 20
+    
+    # Component 4: Engagement Quality (0-15 points)
+    if 'message_length' in df.columns:
+        avg_length = df['message_length'].mean()
+        engagement_score = min(15, (avg_length / 100) * 15)  # Cap at 100 chars
+    else:
+        engagement_score = 0
+    
+    # Component 5: Consistency (0-15 points) - Streak-based
+    streaks = detect_conversation_streaks(df)
+    consistency_score = min(15, (streaks['longest_streak'] / 30) * 15)  # Cap at 30 days
+    
+    # Total Friendship Index (0-100)
+    friendship_index = frequency_score + balance_score + responsiveness_score + engagement_score + consistency_score
+    
+    # Tier system
+    if friendship_index >= 90:
+        tier = "BEST FRIENDS 👑"
+        description = "Exceptional friendship with outstanding communication"
+    elif friendship_index >= 75:
+        tier = "CLOSE FRIENDS 💎"
+        description = "Strong friendship with great interaction patterns"
+    elif friendship_index >= 60:
+        tier = "GOOD FRIENDS ⭐"
+        description = "Solid friendship with regular communication"
+    elif friendship_index >= 45:
+        tier = "FRIENDS 🙂"
+        description = "Developing friendship with room to grow"
+    else:
+        tier = "ACQUAINTANCES 👋"
+        description = "Early stage or infrequent communication"
+    
     return {
-        'conversation_stats': {
-            'total_messages': len(df),
-            'unique_senders': df['sender'].nunique(),
-            'date_range': f"{df_prepared['datetime'].min()} to {df_prepared['datetime'].max()}",
-            'total_conversations': initiator_metrics.get('total_conversations', 0),
-            'avg_response_time': response_metrics.get('overall_avg_response_minutes', None)
+        'friendship_index': round(friendship_index, 2),
+        'tier': tier,
+        'description': description,
+        'breakdown': {
+            'frequency': round(frequency_score, 2),
+            'balance': round(balance_score, 2),
+            'responsiveness': round(responsiveness_score, 2),
+            'engagement': round(engagement_score, 2),
+            'consistency': round(consistency_score, 2)
         },
-        'initiator_analysis': initiator_metrics,
-        'response_analysis': response_metrics,
-        'dominance_analysis': dominance_metrics,
-        'health_score': health_score,
-        'prepared_data': df_prepared  # Include for further analysis/visualization
+        'metrics': {
+            'messages_per_day': round(messages_per_day, 2),
+            'total_days': days_span,
+            'total_messages': total_messages
+        }
     }
 
 
-def plot_relationship_health_dashboard(analysis_results: Dict[str, Any], figsize: Tuple[int, int] = (18, 12)) -> None:
+def detect_conversation_streaks(df: pd.DataFrame) -> Dict[str, Any]:
     """
-    Create comprehensive relationship health visualization dashboard.
+    Detect conversation streaks (consecutive days with messages).
+    
+    Args:
+        df: DataFrame with datetime column
+        
+    Returns:
+        Dictionary with streak statistics
+    """
+    df = df.copy()
+    df['datetime'] = pd.to_datetime(df['datetime'])
+    df['date'] = df['datetime'].dt.date
+    
+    # Get unique conversation days
+    conversation_days = sorted(df['date'].unique())
+    
+    if not conversation_days:
+        return {
+            'current_streak': 0,
+            'longest_streak': 0,
+            'total_active_days': 0,
+            'streak_history': []
+        }
+    
+    # Calculate streaks
+    streaks = []
+    current_streak = 1
+    longest_streak = 1
+    
+    for i in range(1, len(conversation_days)):
+        days_diff = (conversation_days[i] - conversation_days[i-1]).days
+        
+        if days_diff == 1:
+            current_streak += 1
+            longest_streak = max(longest_streak, current_streak)
+        else:
+            if current_streak > 1:
+                streaks.append(current_streak)
+            current_streak = 1
+    
+    # Add final streak
+    if current_streak > 1:
+        streaks.append(current_streak)
+    
+    # Check if current streak is active (last message within 24 hours)
+    last_message_date = conversation_days[-1]
+    today = datetime.now().date()
+    days_since_last = (today - last_message_date).days
+    
+    active_streak = current_streak if days_since_last <= 1 else 0
+    
+    return {
+        'current_streak': active_streak,
+        'longest_streak': longest_streak,
+        'total_active_days': len(conversation_days),
+        'streak_history': streaks,
+        'days_since_last_message': days_since_last
+    }
+
+
+def analyze_emoji_personality(df: pd.DataFrame, message_col: str = 'message') -> Dict[str, Any]:
+    """
+    Analyze emoji usage patterns to determine communication personality.
+    
+    Args:
+        df: DataFrame with message column
+        message_col: Name of message column
+        
+    Returns:
+        Dictionary with emoji personality analysis per sender
+    """
+    import re
+    
+    emoji_pattern = re.compile("["
+        u"\U0001F600-\U0001F64F"  # emoticons
+        u"\U0001F300-\U0001F5FF"  # symbols & pictographs
+        u"\U0001F680-\U0001F6FF"  # transport & map symbols
+        u"\U0001F1E0-\U0001F1FF"  # flags
+        u"\U00002702-\U000027B0"
+        u"\U000024C2-\U0001F251"
+        "]+", flags=re.UNICODE)
+    
+    emoji_categories = {
+        'positive': ['😊', '😄', '😃', '😁', '🙂', '😍', '🥰', '😘', '❤️', '💕', '👍', '✨', '🎉'],
+        'negative': ['😢', '😭', '😔', '😞', '😟', '😕', '☹️', '😠', '😡', '💔', '👎'],
+        'neutral': ['😐', '😑', '😶', '🤔', '🙄', '😬'],
+        'excited': ['🤩', '😆', '🎊', '🎈', '🔥', '💪', '🚀', '⚡'],
+        'laughing': ['😂', '🤣', '😹', 'LOL']
+    }
+    
+    personality_analysis = {}
+    
+    for sender in df['sender'].unique():
+        sender_df = df[df['sender'] == sender]
+        
+        all_emojis = []
+        for msg in sender_df[message_col].dropna():
+            emojis = emoji_pattern.findall(str(msg))
+            all_emojis.extend(emojis)
+        
+        if not all_emojis:
+            personality_analysis[sender] = {
+                'personality_type': 'Text-focused',
+                'emoji_usage': 'Low',
+                'top_emojis': [],
+                'traits': ['Prefers words over emojis']
+            }
+            continue
+        
+        # Count emojis
+        emoji_counts = pd.Series(all_emojis).value_counts()
+        total_emojis = len(all_emojis)
+        total_messages = len(sender_df)
+        emoji_rate = total_emojis / total_messages
+        
+        # Categorize emojis
+        category_scores = {cat: 0 for cat in emoji_categories}
+        for emoji in all_emojis:
+            for category, emoji_list in emoji_categories.items():
+                if emoji in emoji_list:
+                    category_scores[category] += 1
+        
+        # Determine personality
+        dominant_category = max(category_scores, key=category_scores.get)
+        
+        personality_types = {
+            'positive': ('Optimist 🌟', ['Cheerful', 'Upbeat', 'Encouraging']),
+            'excited': ('Enthusiast 🚀', ['Energetic', 'Passionate', 'Dynamic']),
+            'laughing': ('Comedian 😂', ['Humorous', 'Fun-loving', 'Light-hearted']),
+            'negative': ('Emotional 💭', ['Expressive', 'Sensitive', 'Genuine']),
+            'neutral': ('Balanced ⚖️', ['Moderate', 'Thoughtful', 'Reserved'])
+        }
+        
+        personality_type, traits = personality_types.get(dominant_category, ('Expressive', ['Unique', 'Creative']))
+        
+        # Usage level
+        if emoji_rate >= 1.5:
+            usage_level = 'Very High'
+        elif emoji_rate >= 0.8:
+            usage_level = 'High'
+        elif emoji_rate >= 0.3:
+            usage_level = 'Moderate'
+        else:
+            usage_level = 'Low'
+        
+        personality_analysis[sender] = {
+            'personality_type': personality_type,
+            'emoji_usage': usage_level,
+            'emoji_per_message': round(emoji_rate, 2),
+            'total_emojis': total_emojis,
+            'top_emojis': emoji_counts.head(5).to_dict(),
+            'category_breakdown': category_scores,
+            'traits': traits
+        }
+    
+    return personality_analysis
+
+
+def detect_milestones(df: pd.DataFrame) -> Dict[str, Any]:
+    """
+    Detect conversation milestones and achievements.
+    
+    Args:
+        df: DataFrame with conversation data
+        
+    Returns:
+        Dictionary with milestone achievements
+    """
+    df = df.copy()
+    df['datetime'] = pd.to_datetime(df['datetime'])
+    
+    total_messages = len(df)
+    days_span = (df['datetime'].max() - df['datetime'].min()).days + 1
+    
+    # Define milestones
+    message_milestones = [100, 500, 1000, 5000, 10000, 25000, 50000]
+    day_milestones = [7, 30, 100, 365, 730]
+    
+    achievements = []
+    
+    # Message count milestones
+    for milestone in message_milestones:
+        if total_messages >= milestone:
+            achievements.append({
+                'type': 'messages',
+                'milestone': f'{milestone:,} Messages',
+                'icon': '💬',
+                'achieved': True,
+                'date': df.iloc[milestone-1]['datetime'] if milestone <= total_messages else None
+            })
+    
+    # Days active milestones
+    for milestone in day_milestones:
+        if days_span >= milestone:
+            achievements.append({
+                'type': 'duration',
+                'milestone': f'{milestone} Days',
+                'icon': '📅',
+                'achieved': True,
+                'date': df['datetime'].min() + timedelta(days=milestone)
+            })
+    
+    # Special achievements
+    streak_data = detect_conversation_streaks(df)
+    if streak_data['longest_streak'] >= 7:
+        achievements.append({
+            'type': 'streak',
+            'milestone': f'{streak_data["longest_streak"]}-Day Streak',
+            'icon': '🔥',
+            'achieved': True,
+            'date': None
+        })
+    
+    # Late night chatter (messages after 11 PM)
+    late_night_msgs = df[df['datetime'].dt.hour >= 23]
+    if len(late_night_msgs) > 50:
+        achievements.append({
+            'type': 'special',
+            'milestone': 'Night Owl',
+            'icon': '🦉',
+            'achieved': True,
+            'date': None
+        })
+    
+    # Early bird (messages before 6 AM)
+    early_msgs = df[df['datetime'].dt.hour < 6]
+    if len(early_msgs) > 50:
+        achievements.append({
+            'type': 'special',
+            'milestone': 'Early Bird',
+            'icon': '🐦',
+            'achieved': True,
+            'date': None
+        })
+    
+    # Weekend warriors
+    df['day_of_week'] = df['datetime'].dt.dayofweek
+    weekend_msgs = df[df['day_of_week'].isin([5, 6])]
+    if len(weekend_msgs) / total_messages > 0.3:
+        achievements.append({
+            'type': 'special',
+            'milestone': 'Weekend Warrior',
+            'icon': '🎮',
+            'achieved': True,
+            'date': None
+        })
+    
+    return {
+        'total_achievements': len(achievements),
+        'achievements': achievements,
+        'progress': {
+            'total_messages': total_messages,
+            'days_active': days_span,
+            'next_message_milestone': next((m for m in message_milestones if m > total_messages), None),
+            'next_day_milestone': next((m for m in day_milestones if m > days_span), None)
+        }
+    }
+
+
+# ============================================================================
+# VISUALIZATION INTEGRATION (Day 13)
+# ============================================================================
+
+def plot_relationship_health_dashboard_enhanced(
+    analysis_results: Dict[str, Any],
+    figsize: Tuple[int, int] = (20, 14),
+    use_viz_module: bool = True
+) -> None:
+    """
+    Create enhanced relationship health visualization dashboard.
+    Uses the new visualization.py module if available.
     
     Args:
         analysis_results: Results from analyze_relationship_health()
         figsize: Figure size tuple
+        use_viz_module: Whether to use visualization.py ChatVisualizer
     """
+    if use_viz_module:
+        try:
+            from src.utils.visualization import ChatVisualizer
+            viz = ChatVisualizer(figsize=(12, 6))
+            
+            # Use prepared data from analysis
+            df = analysis_results.get('prepared_data')
+            if df is not None:
+                # Create multi-panel dashboard
+                fig = plt.figure(figsize=figsize)
+                gs = fig.add_gridspec(3, 3, hspace=0.3, wspace=0.3)
+                
+                # Add timestamp column for visualization module
+                if 'datetime' in df.columns:
+                    df['timestamp'] = df['datetime']
+                
+                # 1. Health Score Timeline (if rolling data available)
+                ax1 = fig.add_subplot(gs[0, :])
+                rolling_health = calculate_rolling_health_score(df, window_days=7)
+                if not rolling_health.empty:
+                    rolling_health['date'] = pd.to_datetime(rolling_health['date'])
+                    ax1.plot(rolling_health['date'], rolling_health['health_score'],
+                            linewidth=3, marker='o', color='#667eea')
+                    ax1.fill_between(rolling_health['date'], rolling_health['health_score'],
+                                    alpha=0.3, color='#667eea')
+                    ax1.set_title('Relationship Health Trend', fontsize=14, fontweight='bold')
+                    ax1.set_ylabel('Health Score')
+                    ax1.set_ylim(0, 1)
+                    ax1.grid(True, alpha=0.3)
+                    plt.setp(ax1.xaxis.get_majorticklabels(), rotation=45)
+                
+                # 2. Friendship Index Gauge
+                ax2 = fig.add_subplot(gs[1, 0])
+                friendship_data = calculate_friendship_index(df)
+                _plot_friendship_gauge(ax2, friendship_data)
+                
+                # 3. Streak Visualization
+                ax3 = fig.add_subplot(gs[1, 1])
+                streak_data = detect_conversation_streaks(df)
+                _plot_streak_display(ax3, streak_data)
+                
+                # 4. Emoji Personality
+                ax4 = fig.add_subplot(gs[1, 2])
+                if 'message' in df.columns:
+                    emoji_data = analyze_emoji_personality(df)
+                    _plot_emoji_personality(ax4, emoji_data)
+                
+                # 5-6. Component Scores
+                ax5 = fig.add_subplot(gs[2, :2])
+                _plot_health_components(ax5, analysis_results['health_score'])
+                
+                # 7. Achievements
+                ax6 = fig.add_subplot(gs[2, 2])
+                milestones = detect_milestones(df)
+                _plot_achievements(ax6, milestones)
+                
+                fig.suptitle('Comprehensive Relationship Analysis Dashboard',
+                           fontsize=16, fontweight='bold', y=0.995)
+                
+                plt.tight_layout()
+                plt.show()
+                return
+        except ImportError:
+            logger.warning("visualization.py not found, using fallback visualization")
+    
+    # Fallback to original dashboard
+    _plot_original_dashboard(analysis_results, figsize)
+
+
+def _plot_friendship_gauge(ax, friendship_data: Dict[str, Any]) -> None:
+    """Plot friendship index as a gauge."""
+    score = friendship_data['friendship_index']
+    
+    # Create gauge
+    theta = np.linspace(0, np.pi, 100)
+    colors = ['#E74C3C', '#F39C12', '#F1C40F', '#2ECC71', '#27AE60']
+    ranges = [0, 45, 60, 75, 90, 100]
+    
+    for i in range(len(colors)):
+        start = ranges[i] / 100 * np.pi
+        end = ranges[i+1] / 100 * np.pi
+        angles = np.linspace(start, end, 20)
+        x = np.cos(angles)
+        y = np.sin(angles)
+        ax.fill_between(x, 0, y, color=colors[i], alpha=0.8)
+    
+    # Needle
+    needle_angle = score / 100 * np.pi
+    ax.plot([0, 0.8*np.cos(needle_angle)], [0, 0.8*np.sin(needle_angle)],
+           'k-', linewidth=4)
+    ax.plot(0.8*np.cos(needle_angle), 0.8*np.sin(needle_angle), 'ko', markersize=8)
+    
+    ax.set_xlim(-1.1, 1.1)
+    ax.set_ylim(0, 1.1)
+    ax.set_aspect('equal')
+    ax.axis('off')
+    ax.set_title(f'Friendship Index\n{friendship_data["tier"]}',
+                fontweight='bold', fontsize=11)
+    ax.text(0, -0.15, f'{score:.0f}/100', ha='center', fontsize=16, fontweight='bold')
+
+
+def _plot_streak_display(ax, streak_data: Dict[str, Any]) -> None:
+    """Plot streak information."""
+    ax.axis('off')
+    
+    current = streak_data['current_streak']
+    longest = streak_data['longest_streak']
+    
+    info_text = f"🔥 Current Streak\n{current} days\n\n"
+    info_text += f"🏆 Longest Streak\n{longest} days\n\n"
+    info_text += f"📅 Active Days\n{streak_data['total_active_days']}"
+    
+    ax.text(0.5, 0.5, info_text, transform=ax.transAxes,
+           fontsize=12, ha='center', va='center',
+           bbox=dict(boxstyle='round', facecolor='#fff3cd', alpha=0.8))
+    ax.set_title('Conversation Streaks', fontweight='bold', fontsize=11)
+
+
+def _plot_emoji_personality(ax, emoji_data: Dict[str, Any]) -> None:
+    """Plot emoji personality analysis."""
+    ax.axis('off')
+    
+    text_parts = []
+    for sender, data in emoji_data.items():
+        text_parts.append(f"{sender}:")
+        text_parts.append(f"{data['personality_type']}")
+        text_parts.append(f"Usage: {data['emoji_usage']}")
+        text_parts.append("")
+    
+    text = '\n'.join(text_parts)
+    ax.text(0.5, 0.5, text, transform=ax.transAxes,
+           fontsize=10, ha='center', va='center',
+           bbox=dict(boxstyle='round', facecolor='#e7f3ff', alpha=0.8))
+    ax.set_title('Emoji Personalities', fontweight='bold', fontsize=11)
+
+
+def _plot_health_components(ax, health_score: Dict[str, Any]) -> None:
+    """Plot health score components as bar chart."""
+    components = health_score['component_scores']
+    names = ['Initiation', 'Responsiveness', 'Balance', 'Dominance']
+    values = list(components.values())
+    
+    colors = ['#667eea' if v >= 0.7 else '#ffc107' if v >= 0.5 else '#f44336' for v in values]
+    bars = ax.barh(names, values, color=colors, alpha=0.8)
+    
+    for bar, value in zip(bars, values):
+        ax.text(value + 0.02, bar.get_y() + bar.get_height()/2,
+               f'{value:.2f}', va='center', fontweight='bold')
+    
+    ax.set_xlim(0, 1)
+    ax.set_xlabel('Score')
+    ax.set_title('Health Components', fontweight='bold', fontsize=11)
+    ax.grid(True, alpha=0.3, axis='x')
+
+
+def _plot_achievements(ax, milestones: Dict[str, Any]) -> None:
+    """Plot achievement badges."""
+    ax.axis('off')
+    
+    achievements = milestones['achievements']
+    recent = achievements[-5:] if len(achievements) > 5 else achievements
+    
+    text = f"🏆 Achievements ({milestones['total_achievements']})\n\n"
+    for ach in recent:
+        text += f"{ach['icon']} {ach['milestone']}\n"
+    
+    ax.text(0.5, 0.5, text, transform=ax.transAxes,
+           fontsize=10, ha='center', va='center',
+           bbox=dict(boxstyle='round', facecolor='#d4edda', alpha=0.8))
+    ax.set_title('Latest Achievements', fontweight='bold', fontsize=11)
+
+
+def _plot_original_dashboard(analysis_results: Dict[str, Any], figsize: Tuple[int, int]) -> None:
+    """Original dashboard implementation (fallback)."""
     health_score = analysis_results['health_score']
     
     fig, axes = plt.subplots(2, 3, figsize=figsize)
     fig.suptitle('Relationship Health Dashboard', fontsize=16, fontweight='bold')
     
-    # 1. Health Score Gauge
+    # Health Score Gauge
     ax1 = axes[0, 0]
     overall_score = health_score['overall_health_score']
     
@@ -765,24 +990,22 @@ def plot_relationship_health_dashboard(analysis_results: Dict[str, Any], figsize
         y = np.sin(angles)
         ax1.fill_between(x, 0, y, color=colors[i], alpha=0.8)
     
-    # Add needle
     needle_angle = overall_score * np.pi
-    needle_x = [0, 0.8 * np.cos(needle_angle)]
-    needle_y = [0, 0.8 * np.sin(needle_angle)]
-    ax1.plot(needle_x, needle_y, 'k-', linewidth=4)
-    ax1.plot(needle_x[1], needle_y[1], 'ko', markersize=8)
+    ax1.plot([0, 0.8*np.cos(needle_angle)], [0, 0.8*np.sin(needle_angle)], 'k-', linewidth=4)
+    ax1.plot(0.8*np.cos(needle_angle), 0.8*np.sin(needle_angle), 'ko', markersize=8)
     
     ax1.set_xlim(-1.1, 1.1)
     ax1.set_ylim(0, 1.1)
     ax1.set_aspect('equal')
     ax1.set_title(f'Health Score: {overall_score:.2f}\n({health_score["grade"]})', fontweight='bold')
-    ax1.text(0, -0.2, f'{overall_score:.2f}', ha='center', va='center', fontsize=20, fontweight='bold')
+    ax1.text(0, -0.2, f'{overall_score:.2f}', ha='center', fontsize=20, fontweight='bold')
     ax1.axis('off')
     
-    # 2. Component Scores Radar Chart
+    # Component Scores
     ax2 = axes[0, 1]
-    categories = ['Initiation\nBalance', 'Responsiveness', 'Response\nBalance', 'Participation\nBalance']
-    values = list(health_score['component_scores'].values())
+    components = health_score['component_scores']
+    categories = ['Initiation', 'Responsiveness', 'Balance', 'Dominance']
+    values = list(components.values())
     
     angles = np.linspace(0, 2*np.pi, len(categories), endpoint=False).tolist()
     values += values[:1]
@@ -791,67 +1014,50 @@ def plot_relationship_health_dashboard(analysis_results: Dict[str, Any], figsize
     ax2.plot(angles, values, 'o-', linewidth=2, color='#3498DB')
     ax2.fill(angles, values, alpha=0.25, color='#3498DB')
     ax2.set_xticks(angles[:-1])
-    ax2.set_xticklabels(categories)
+    ax2.set_xticklabels(categories, fontsize=8)
     ax2.set_ylim(0, 1)
     ax2.set_title('Component Breakdown', fontweight='bold')
     ax2.grid(True)
     
-    # 3. Message Distribution
+    # Message Distribution
     ax3 = axes[0, 2]
     if 'message_distribution' in analysis_results['dominance_analysis']:
         msg_dist = analysis_results['dominance_analysis']['message_distribution']
-        colors = ['#FF6B6B', '#4ECDC4', '#95E1D3', '#F38BA8', '#A8E6CF'][:len(msg_dist)]
-        ax3.pie(msg_dist.values(), labels=msg_dist.keys(), autopct='%1.1f%%', colors=colors, startangle=90)
+        ax3.pie(msg_dist.values(), labels=msg_dist.keys(), autopct='%1.1f%%',
+               colors=['#FF6B6B', '#4ECDC4'], startangle=90)
         ax3.set_title('Message Distribution', fontweight='bold')
     
-    # 4. Response Time Comparison
+    # Response Times
     ax4 = axes[1, 0]
     if 'response_stats' in analysis_results['response_analysis']:
         response_stats = analysis_results['response_analysis']['response_stats']
         if 'mean' in response_stats:
             names = list(response_stats['mean'].keys())
             values = list(response_stats['mean'].values())
-            colors = ['#FF6B6B', '#4ECDC4'][:len(names)]
-            
-            bars = ax4.bar(names, values, color=colors, alpha=0.8)
-            ax4.set_ylabel('Average Response Time (minutes)')
-            ax4.set_title('Response Speed Comparison', fontweight='bold')
+            bars = ax4.bar(names, values, color=['#FF6B6B', '#4ECDC4'], alpha=0.8)
+            ax4.set_ylabel('Avg Response Time (min)')
+            ax4.set_title('Response Speed', fontweight='bold')
             ax4.grid(True, alpha=0.3, axis='y')
-            
-            for bar, value in zip(bars, values):
-                ax4.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.5, 
-                         f'{value:.1f}', ha='center', va='bottom', fontweight='bold')
     
-    # 5. Conversation Initiation
+    # Initiation
     ax5 = axes[1, 1]
     if 'initiator_counts' in analysis_results['initiator_analysis']:
         init_counts = analysis_results['initiator_analysis']['initiator_counts']
-        colors = ['#E74C3C', '#3498DB'][:len(init_counts)]
-        bars = ax5.bar(init_counts.keys(), init_counts.values(), color=colors, alpha=0.8)
+        bars = ax5.bar(init_counts.keys(), init_counts.values(),
+                      color=['#E74C3C', '#3498DB'], alpha=0.8)
         ax5.set_ylabel('Conversations Started')
-        ax5.set_title('Conversation Initiation', fontweight='bold')
+        ax5.set_title('Initiation', fontweight='bold')
         ax5.grid(True, alpha=0.3, axis='y')
-        
-        for bar, value in zip(bars, init_counts.values()):
-            ax5.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.1, 
-                     f'{value}', ha='center', va='bottom', fontweight='bold')
     
-    # 6. Health Summary Text
+    # Summary
     ax6 = axes[1, 2]
     ax6.axis('off')
-    
-    summary_text = f"Grade: {health_score['grade']}\n\n"
-    summary_text += "Strengths:\n"
-    for strength in health_score['strengths'][:3]:  # Limit to 3 for space
-        summary_text += f"{strength}\n"
-    
-    if health_score['areas_for_improvement']:
-        summary_text += f"\nAreas to improve:\n"
-        for improvement in health_score['areas_for_improvement'][:2]:
-            summary_text += f"{improvement}\n"
-    
-    ax6.text(0.05, 0.95, summary_text, transform=ax6.transAxes, fontsize=10,
-             verticalalignment='top', bbox=dict(boxstyle='round', facecolor='lightgray', alpha=0.8))
+    summary = f"Grade: {health_score['grade']}\n\n"
+    summary += "Strengths:\n"
+    for s in health_score['strengths'][:2]:
+        summary += f"{s}\n"
+    ax6.text(0.05, 0.95, summary, transform=ax6.transAxes, fontsize=9,
+            verticalalignment='top', bbox=dict(boxstyle='round', facecolor='lightgray', alpha=0.8))
     ax6.set_title('Summary', fontweight='bold')
     
     plt.tight_layout()
@@ -859,197 +1065,111 @@ def plot_relationship_health_dashboard(analysis_results: Dict[str, Any], figsize
 
 
 # ============================================================================
-# DAY 9 FUNCTIONS - Rolling Health Score Tracker (NEW)
+# MAIN ANALYSIS FUNCTION
 # ============================================================================
 
-def calculate_rolling_health_scores(
-    df: pd.DataFrame, 
-    window_days: int = 1,
-    gap_threshold_minutes: int = 60
-) -> pd.DataFrame:
+def analyze_relationship_health(
+    df: pd.DataFrame,
+    gap_threshold_minutes: int = 60,
+    include_gamification: bool = True
+) -> Dict[str, Any]:
     """
-    Calculate relationship health scores in rolling time windows.
-    
-    **NEW DAY 9 FUNCTION**
+    Complete relationship health analysis pipeline with gamification features.
     
     Args:
-        df: DataFrame with datetime, sender, message columns
-        window_days: Size of rolling window in days
-        gap_threshold_minutes: Time gap to identify conversation starters
+        df: DataFrame with columns: datetime, sender, message, (optional: message_length)
+        gap_threshold_minutes: Time gap to consider new conversation start
+        include_gamification: Whether to include Day 14 gamification features
         
     Returns:
-        DataFrame with rolling health scores and component metrics
+        Complete relationship health analysis results with gamification
     """
-    # Prepare data with conversation markers
+    # Prepare data
     df_prepared = identify_conversation_starters(df, gap_threshold_minutes)
     
-    # Get date range
-    start_date = df_prepared['datetime'].min().date()
-    end_date = df_prepared['datetime'].max().date()
+    # Calculate core metrics
+    initiator_metrics = calculate_initiator_ratio(df_prepared)
+    response_metrics = analyze_response_patterns(df_prepared)
+    dominance_metrics = calculate_dominance_scores(df_prepared)
     
-    # Create rolling windows
-    current_date = start_date
-    rolling_scores = []
+    # Calculate overall health score
+    health_score = calculate_relationship_health_score(
+        initiator_metrics, response_metrics, dominance_metrics
+    )
     
-    while current_date <= end_date:
-        window_end = current_date + timedelta(days=window_days)
-        
-        # Get data for this window
-        window_data = df_prepared[
-            (df_prepared['datetime'].dt.date >= current_date) &
-            (df_prepared['datetime'].dt.date < window_end)
-        ]
-        
-        if len(window_data) > 0:
-            # Calculate metrics for this window
-            # 1. Initiation balance
-            starters = window_data[window_data['is_conversation_starter']==True]
-            if len(starters) > 0:
-                init_counts = starters['sender'].value_counts()
-                if len(init_counts) >= 2:
-                    init_balance = 1 - abs(init_counts.values[0] - init_counts.values[1]) / len(starters)
-                else:
-                    init_balance = 0.0
-            else:
-                init_balance = 0.5  # Neutral if no conversations started
-            
-            # 2. Response metrics
-            responses = window_data[window_data['is_conversation_starter'] == False].copy()
-            valid_responses = []
-            for i, row in responses.iterrows():
-                if row['prev_sender'] != row['sender'] and pd.notna(row['time_diff_minutes']):
-                    valid_responses.append(row['time_diff_minutes'])
-            
-            if len(valid_responses) > 0:
-                avg_response = np.mean(valid_responses)
-                responsiveness = max(0, 1 - (avg_response / 120))
-            else:
-                responsiveness = 0.5
-            
-            # 3. Participation balance
-            msg_counts = window_data['sender'].value_counts()
-            if len(msg_counts) >= 2:
-                participation_balance = 1 - abs(msg_counts.values[0] - msg_counts.values[1]) / len(window_data)
-            else:
-                participation_balance = 0.0
-            
-            # Calculate weighted score
-            window_score = (
-                0.25 * init_balance +
-                0.40 * responsiveness +
-                0.35 * participation_balance
-            )
-            
-            rolling_scores.append({
-                'date': current_date,
-                'window_end': window_end,
-                'health_score': window_score * 100,
-                'initiation_balance': init_balance,
-                'responsiveness': responsiveness,
-                'participation_balance': participation_balance,
-                'message_count': len(window_data),
-                'conversation_count': len(starters) if len(starters) > 0 else 0
-            })
-        
-        # Move to next window
-        current_date = window_end
-    
-    return pd.DataFrame(rolling_scores)
-
-
-def analyze_health_trend(rolling_health_df: pd.DataFrame) -> Dict[str, Any]:
-    """
-    Analyze trends in rolling health scores.
-    
-    **NEW DAY 9 FUNCTION**
-    
-    Args:
-        rolling_health_df: DataFrame from calculate_rolling_health_scores()
-        
-    Returns:
-        Dictionary with trend analysis metrics
-    """
-    from scipy.stats import linregress
-    
-    if len(rolling_health_df) < 2:
-        return {'error': 'Insufficient data for trend analysis'}
-    
-    # Linear regression on scores
-    x = np.arange(len(rolling_health_df))
-    y = rolling_health_df['health_score'].values
-    
-    slope, intercept, r_value, p_value, std_err = linregress(x, y)
-    
-    # Trend classification
-    if slope > 2:
-        trend_direction = "STRONG_IMPROVEMENT"
-        trend_emoji = "📈"
-    elif slope > 0:
-        trend_direction = "SLIGHT_IMPROVEMENT"
-        trend_emoji = "↗️"
-    elif slope > -2:
-        trend_direction = "STABLE"
-        trend_emoji = "➡️"
-    elif slope > -5:
-        trend_direction = "SLIGHT_DECLINE"
-        trend_emoji = "↘️"
-    else:
-        trend_direction = "NOTABLE_DECLINE"
-        trend_emoji = "📉"
-    
-    # Calculate statistics
-    avg_score = rolling_health_df['health_score'].mean()
-    max_score = rolling_health_df['health_score'].max()
-    min_score = rolling_health_df['health_score'].min()
-    volatility = rolling_health_df['health_score'].std()
-    
-    first_score = rolling_health_df.iloc[0]['health_score']
-    last_score = rolling_health_df.iloc[-1]['health_score']
-    total_change = last_score - first_score
-    
-    return {
-        'slope': slope,
-        'intercept': intercept,
-        'r_squared': r_value ** 2,
-        'p_value': p_value,
-        'trend_direction': trend_direction,
-        'trend_emoji': trend_emoji,
-        'average_score': avg_score,
-        'max_score': max_score,
-        'min_score': min_score,
-        'volatility': volatility,
-        'first_score': first_score,
-        'last_score': last_score,
-        'total_change': total_change,
-        'change_percentage': (total_change / first_score * 100) if first_score > 0 else 0
+    # Base results
+    results = {
+        'conversation_stats': {
+            'total_messages': len(df),
+            'unique_senders': df['sender'].nunique(),
+            'date_range': f"{df_prepared['datetime'].min()} to {df_prepared['datetime'].max()}",
+            'total_conversations': initiator_metrics.get('total_conversations', 0),
+            'avg_response_time': response_metrics.get('overall_avg_response_minutes', None)
+        },
+        'initiator_analysis': initiator_metrics,
+        'response_analysis': response_metrics,
+        'dominance_analysis': dominance_metrics,
+        'health_score': health_score,
+        'prepared_data': df_prepared
     }
-
-
-def forecast_health_scores(rolling_health_df: pd.DataFrame, periods: int = 2) -> pd.DataFrame:
-    """
-    Forecast future health scores based on trend.
     
-    **NEW DAY 9 FUNCTION**
-    
-    Args:
-        rolling_health_df: DataFrame from calculate_rolling_health_scores()
-        periods: Number of future periods to forecast
+    # Add gamification features if requested
+    if include_gamification:
+        results['friendship_index'] = calculate_friendship_index(df_prepared)
+        results['streaks'] = detect_conversation_streaks(df_prepared)
+        results['milestones'] = detect_milestones(df_prepared)
         
-    Returns:
-        DataFrame with forecasted dates and scores
+        if 'message' in df_prepared.columns:
+            results['emoji_personality'] = analyze_emoji_personality(df_prepared)
+        
+        # Add rolling health score
+        results['rolling_health'] = calculate_rolling_health_score(df_prepared)
+    
+    return results
+
+
+# ============================================================================
+# EXAMPLE USAGE
+# ============================================================================
+
+def example_usage():
     """
-    from scipy.stats import linregress
+    Example of how to use the enhanced relationship health analysis.
+    """
+    # Sample data
+    sample_data = {
+        'datetime': pd.date_range('2024-01-01 09:00:00', periods=100, freq='3h'),
+        'sender': ['Alice', 'Bob'] * 50,
+        'message': ['Hey!', 'Hi there!'] * 50,
+        'message_length': np.random.randint(10, 150, 100)
+    }
     
-    if len(rolling_health_df) < 2:
-        return pd.DataFrame()
+    df = pd.DataFrame(sample_data)
     
-    # Fit trend line
-    x = np.arange(len(rolling_health_df))
-    y = rolling_health_df['health_score'].values
-    slope, intercept, _, _, _ = linregress(x, y)
+    # Run complete analysis with gamification
+    results = analyze_relationship_health(df, include_gamification=True)
     
-    # Generate forecasts
-    last_date = rolling_health_df.iloc[-1]['date']
-    forecast_data = []
+    # Display results
+    print("=== RELATIONSHIP HEALTH ANALYSIS ===")
+    print(f"\nOverall Score: {results['health_score']['overall_health_score']:.2f}")
+    print(f"Grade: {results['health_score']['grade']}")
     
-    for
+    print(f"\n=== FRIENDSHIP INDEX ===")
+    print(f"Score: {results['friendship_index']['friendship_index']:.2f}/100")
+    print(f"Tier: {results['friendship_index']['tier']}")
+    
+    print(f"\n=== STREAKS ===")
+    print(f"Current: {results['streaks']['current_streak']} days")
+    print(f"Longest: {results['streaks']['longest_streak']} days")
+    
+    print(f"\n=== ACHIEVEMENTS ===")
+    print(f"Total: {results['milestones']['total_achievements']}")
+    
+    # Create enhanced visualization
+    plot_relationship_health_dashboard_enhanced(results)
+    
+    return results
+
+
+if __name__ == "__main__":
+    example_usage()
