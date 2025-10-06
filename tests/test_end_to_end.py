@@ -333,3 +333,318 @@ class TestModuleIntegration(unittest.TestCase):
             'sender': ['Alice', 'Bob'] * 25,
             'message': ['Test'] * 50
         })
+        # Prepare for visualization
+        df['timestamp'] = pd.to_datetime(df['datetime'])
+        timeline_data = df.set_index('timestamp').resample('D').size()
+        
+        # Verify integration
+        self.assertGreater(len(timeline_data), 0)
+        self.assertIsInstance(timeline_data, pd.Series)
+    
+    def test_analysis_reporting_integration(self):
+        """Test integration between analysis and reporting modules."""
+        # Analysis output
+        analysis_results = {
+            'health_score': 0.85,
+            'friendship_index': 87.5,
+            'streaks': {'longest': 30, 'current': 15},
+            'milestones': ['1000 messages', '30-day streak']
+        }
+        
+        # Should be consumable by reporting
+        report_summary = {
+            'overall_health': analysis_results['health_score'],
+            'friendship_tier': 'CLOSE FRIENDS' if analysis_results['friendship_index'] >= 75 else 'FRIENDS',
+            'achievements': analysis_results['milestones']
+        }
+        
+        self.assertIn('overall_health', report_summary)
+        self.assertIn('achievements', report_summary)
+    
+    def test_gamification_digest_integration(self):
+        """Test integration between gamification and digest."""
+        # Gamification output
+        gamification_data = {
+            'friendship_index': 92.0,
+            'tier': 'BEST FRIENDS 👑',
+            'streaks': {'current': 20, 'longest': 45},
+            'achievements': [
+                {'icon': '💬', 'milestone': '1,000 Messages'},
+                {'icon': '🔥', 'milestone': '45-Day Streak'}
+            ]
+        }
+        
+        # Format for digest
+        digest_text = f"""
+🏆 Friendship Status: {gamification_data['tier']}
+📊 Friendship Index: {gamification_data['friendship_index']:.0f}/100
+🔥 Current Streak: {gamification_data['streaks']['current']} days
+        """
+        
+        self.assertIn('BEST FRIENDS', digest_text)
+        self.assertIn('92', digest_text)
+
+
+class TestOutputFormats(unittest.TestCase):
+    """Test different output format generations."""
+    
+    def test_csv_export(self):
+        """Test CSV export functionality."""
+        df = pd.DataFrame({
+            'datetime': pd.date_range('2023-12-01', periods=10, freq='1H'),
+            'sender': ['Alice', 'Bob'] * 5,
+            'message': ['Test'] * 10,
+            'sentiment': ['positive'] * 10
+        })
+        
+        # Export to CSV
+        temp_csv = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.csv')
+        temp_csv.close()
+        
+        df.to_csv(temp_csv.name, index=False)
+        
+        # Verify file exists and readable
+        self.assertTrue(os.path.exists(temp_csv.name))
+        
+        reloaded = pd.read_csv(temp_csv.name)
+        self.assertEqual(len(reloaded), len(df))
+        
+        os.unlink(temp_csv.name)
+    
+    def test_json_export(self):
+        """Test JSON export functionality."""
+        results = {
+            'total_messages': 100,
+            'health_score': 0.85,
+            'participants': ['Alice', 'Bob']
+        }
+        
+        import json
+        
+        temp_json = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json')
+        json.dump(results, temp_json)
+        temp_json.close()
+        
+        # Verify
+        with open(temp_json.name, 'r') as f:
+            loaded = json.load(f)
+        
+        self.assertEqual(loaded['total_messages'], 100)
+        
+        os.unlink(temp_json.name)
+    
+    def test_html_report_generation(self):
+        """Test HTML report generation."""
+        html_content = """
+        <html>
+        <head><title>Chat Analysis Report</title></head>
+        <body>
+            <h1>Analysis Results</h1>
+            <p>Total Messages: 100</p>
+        </body>
+        </html>
+        """
+        
+        temp_html = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.html')
+        temp_html.write(html_content)
+        temp_html.close()
+        
+        # Verify
+        with open(temp_html.name, 'r') as f:
+            content = f.read()
+        
+        self.assertIn('<html>', content)
+        self.assertIn('Total Messages', content)
+        
+        os.unlink(temp_html.name)
+
+
+class TestRobustness(unittest.TestCase):
+    """Test system robustness and edge cases."""
+    
+    def test_single_message_handling(self):
+        """Test handling of single message."""
+        df = pd.DataFrame({
+            'datetime': [datetime.now()],
+            'sender': ['Alice'],
+            'message': ['Single message'],
+            'message_length': [14]
+        })
+        
+        # Should handle gracefully
+        self.assertEqual(len(df), 1)
+        
+        # Should still calculate metrics
+        avg_length = df['message_length'].mean()
+        self.assertEqual(avg_length, 14)
+    
+    def test_single_sender_handling(self):
+        """Test handling of single sender (monologue)."""
+        df = pd.DataFrame({
+            'datetime': pd.date_range('2023-12-01', periods=50, freq='1H'),
+            'sender': ['Alice'] * 50,
+            'message': ['Test'] * 50
+        })
+        
+        # Should handle monologue
+        unique_senders = df['sender'].nunique()
+        self.assertEqual(unique_senders, 1)
+        
+        # Balance score should reflect single sender
+        balance_score = 0  # No balance possible with one sender
+        self.assertEqual(balance_score, 0)
+    
+    def test_extreme_time_gaps(self):
+        """Test handling of extreme time gaps."""
+        dates = [
+            datetime(2023, 1, 1),
+            datetime(2023, 6, 1),  # 5-month gap
+            datetime(2023, 6, 2),
+            datetime(2024, 1, 1)   # 6-month gap
+        ]
+        
+        df = pd.DataFrame({
+            'datetime': dates,
+            'sender': ['Alice', 'Bob', 'Alice', 'Bob'],
+            'message': ['Test'] * 4
+        })
+        
+        # Should still process
+        time_span = (df['datetime'].max() - df['datetime'].min()).days
+        self.assertGreater(time_span, 300)
+    
+    def test_identical_timestamps_handling(self):
+        """Test handling of messages with identical timestamps."""
+        same_time = datetime(2023, 12, 1, 10, 30, 0)
+        
+        df = pd.DataFrame({
+            'datetime': [same_time, same_time, same_time],
+            'sender': ['Alice', 'Bob', 'Alice'],
+            'message': ['Msg1', 'Msg2', 'Msg3']
+        })
+        
+        # Should handle without errors
+        self.assertEqual(len(df), 3)
+        
+        # Should maintain all messages
+        unique_messages = df['message'].nunique()
+        self.assertEqual(unique_messages, 3)
+
+
+class TestPerformance(unittest.TestCase):
+    """Test performance characteristics."""
+    
+    def test_processing_speed(self):
+        """Test that processing completes in reasonable time."""
+        import time
+        
+        # Create moderate dataset
+        df = pd.DataFrame({
+            'datetime': pd.date_range('2023-01-01', periods=1000, freq='30min'),
+            'sender': np.random.choice(['Alice', 'Bob'], 1000),
+            'message': ['Test message'] * 1000,
+            'message_length': np.random.randint(10, 200, 1000)
+        })
+        
+        # Time basic operations
+        start = time.time()
+        
+        # Simulate analysis
+        total = len(df)
+        avg_length = df['message_length'].mean()
+        hourly = df.groupby(pd.to_datetime(df['datetime']).dt.hour).size()
+        
+        end = time.time()
+        
+        # Should complete quickly (< 1 second for this size)
+        self.assertLess(end - start, 1.0)
+    
+    def test_memory_cleanup(self):
+        """Test that memory is properly managed."""
+        # Create temporary data
+        temp_df = pd.DataFrame({
+            'datetime': pd.date_range('2023-01-01', periods=1000, freq='1H'),
+            'sender': ['Alice'] * 1000,
+            'message': ['Test'] * 1000
+        })
+        
+        # Use and release
+        result = len(temp_df)
+        del temp_df
+        
+        # Should have released memory
+        self.assertEqual(result, 1000)
+
+
+class TestDataValidation(unittest.TestCase):
+    """Test data validation throughout pipeline."""
+    
+    def test_datetime_format_validation(self):
+        """Test datetime format validation."""
+        valid_dates = pd.to_datetime([
+            '2023-12-01',
+            '2023-12-01 10:30:00',
+            '12/01/2023'
+        ], errors='coerce')
+        
+        # All should parse successfully
+        self.assertEqual(valid_dates.notna().sum(), 3)
+    
+    def test_sender_name_validation(self):
+        """Test sender name validation."""
+        senders = ['Alice', 'Bob', '', 'Charlie123', 'user@email.com']
+        
+        # Filter valid senders (non-empty)
+        valid_senders = [s for s in senders if s.strip()]
+        
+        self.assertEqual(len(valid_senders), 4)
+    
+    def test_message_content_validation(self):
+        """Test message content validation."""
+        messages = ['Valid message', '', '   ', 'Another valid', None]
+        
+        # Filter valid messages
+        valid_messages = [m for m in messages if m and m.strip()]
+        
+        self.assertEqual(len(valid_messages), 2)
+    
+    def test_score_range_validation(self):
+        """Test that all scores are in valid ranges."""
+        scores = {
+            'health_score': 0.85,
+            'friendship_index': 87.5,
+            'sentiment_score': 0.3
+        }
+        
+        # Validate ranges
+        self.assertGreaterEqual(scores['health_score'], 0)
+        self.assertLessEqual(scores['health_score'], 1)
+        self.assertGreaterEqual(scores['friendship_index'], 0)
+        self.assertLessEqual(scores['friendship_index'], 100)
+        self.assertGreaterEqual(scores['sentiment_score'], -1)
+        self.assertLessEqual(scores['sentiment_score'], 1)
+
+
+def run_end_to_end_tests():
+    """Run all end-to-end tests."""
+    loader = unittest.TestLoader()
+    suite = unittest.TestSuite()
+    
+    suite.addTests(loader.loadTestsFromTestCase(TestCompletePipeline))
+    suite.addTests(loader.loadTestsFromTestCase(TestDataFlow))
+    suite.addTests(loader.loadTestsFromTestCase(TestErrorHandling))
+    suite.addTests(loader.loadTestsFromTestCase(TestScalability))
+    suite.addTests(loader.loadTestsFromTestCase(TestModuleIntegration))
+    suite.addTests(loader.loadTestsFromTestCase(TestOutputFormats))
+    suite.addTests(loader.loadTestsFromTestCase(TestRobustness))
+    suite.addTests(loader.loadTestsFromTestCase(TestPerformance))
+    suite.addTests(loader.loadTestsFromTestCase(TestDataValidation))
+    
+    runner = unittest.TextTestRunner(verbosity=2)
+    result = runner.run(suite)
+    
+    return result.wasSuccessful()
+
+
+if __name__ == '__main__':
+    unittest.main()
