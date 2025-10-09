@@ -1,20 +1,46 @@
+# Chat Analyzer Pro - Streamlit Configuration (Updated for Days 1-15)
+
 [server]
+# Increase upload size for large chat files
 maxUploadSize = 400
 maxMessageSize = 400
 enableCORS = false
-enableXsrfProtection = false
+enableXsrfProtection = true
+headless = true
+port = 8501
+address = "0.0.0.0"
+
+# File watcher for development
+fileWatcherType = "auto"
 
 [browser]
 gatherUsageStats = false
+serverAddress = "localhost"
+serverPort = 8501
 
 [theme]
-primaryColor = "#1f77b4"
+# Updated to match gradient theme (purple)
+primaryColor = "#667eea"
 backgroundColor = "#ffffff"
 secondaryBackgroundColor = "#f0f2f6"
 textColor = "#262730"
+font = "sans serif"
 
 [client]
 showErrorDetails = true
+toolbarMode = "auto"
+
+[runner]
+magicEnabled = true
+fastReruns = true
+
+[logger]
+level = "info"
+messageFormat = "%(asctime)s - %(levelname)s - %(message)s"
+
+[deprecation]
+showPyplotGlobalUse = false
 
 [global]
 suppressDeprecationWarnings = true
+dataFrameSerialization = "arrow"
