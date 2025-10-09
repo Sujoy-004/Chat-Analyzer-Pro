@@ -1,1 +1,73 @@
+# Chat Analyzer Pro - Complete Dependencies
+# Python 3.8+
 
+# Core Data Processing
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Visualization
+matplotlib>=3.7.0
+seaborn>=0.12.0
+plotly>=5.14.0
+wordcloud>=1.9.0
+
+# Natural Language Processing
+nltk>=3.8.0
+transformers>=4.30.0
+torch>=2.0.0
+vaderSentiment>=3.3.2
+
+# PDF Generation
+reportlab>=4.0.0
+matplotlib>=3.7.0
+
+# Web Framework (Streamlit)
+streamlit>=1.28.0
+streamlit-option-menu>=0.3.6
+
+# Network Analysis
+networkx>=3.1
+plotly>=5.14.0
+
+# Email & Notifications
+requests>=2.31.0
+python-dotenv>=1.0.0
+
+# Data Validation
+pydantic>=2.0.0
+
+# Testing
+pytest>=7.4.0
+pytest-cov>=4.1.0
+unittest-xml-reporting>=3.2.0
+
+# Code Quality
+black>=23.7.0
+flake8>=6.1.0
+pylint>=2.17.0
+
+# Type Checking
+mypy>=1.5.0
+
+# Documentation
+sphinx>=7.1.0
+sphinx-rtd-theme>=1.3.0
+
+# Deployment
+gunicorn>=21.2.0
+python-multipart>=0.0.6
+
+# Utilities
+python-dateutil>=2.8.2
+pytz>=2023.3
+tqdm>=4.66.0
+
+# Optional: Advanced Features
+scikit-learn>=1.3.0  # For advanced clustering/analysis
+emoji>=2.8.0  # Enhanced emoji handling
+Pillow>=10.0.0  # Image processing
+
+# Development Only (optional)
+jupyter>=1.0.0
+ipython>=8.14.0
+notebook>=7.0.0
