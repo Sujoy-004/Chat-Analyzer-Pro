@@ -1,1 +1,272 @@
 
+# Chat Analyzer Pro - .gitignore
+
+# ============================================================================
+# PYTHON
+# ============================================================================
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb_checkpoints/
+
+# pyenv
+.python-version
+
+# celery beat schedule file
+celerybeat-schedule
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# ============================================================================
+# IDEs
+# ============================================================================
+
+# VSCode
+.vscode/
+.vs/
+*.code-workspace
+
+# PyCharm
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Atom
+.atom/
+
+# ============================================================================
+# DATA & OUTPUTS
+# ============================================================================
+
+# Data files
+data/raw/*.txt
+data/raw/*.json
+data/processed/*.csv
+data/processed/*.xlsx
+
+# Exclude sample data (keep these)
+!data/raw/sample*.txt
+!data/raw/sample*.json
+
+# Output files
+outputs/
+reports/
+*.pdf
+*.png
+*.jpg
+*.jpeg
+
+# Logs
+logs/
+*.log
+
+# Temporary files
+temp/
+tmp/
+*.tmp
+
+# ============================================================================
+# SYSTEM
+# ============================================================================
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# Windows
+$RECYCLE.BIN/
+
+# ============================================================================
+# STREAMLIT
+# ============================================================================
+
+# Streamlit cache
+.streamlit/secrets.toml
+.streamlit/cache/
+
+# ============================================================================
+# PROJECT SPECIFIC
+# ============================================================================
+
+# API keys and credentials
+*.key
+*.pem
+credentials.json
+secrets.json
+config_local.py
+
+# User uploaded files (keep structure)
+uploads/
+user_data/
+
+# Generated reports
+generated_reports/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Backup files
+*.bak
+*.backup
+
+# Archive files
+*.zip
+*.tar.gz
+*.rar
+
+# ============================================================================
+# DEPLOYMENT
+# ============================================================================
+
+# Docker
+docker-compose.override.yml
+.dockerignore
+
+# Heroku
+.heroku/
+
+# AWS
+.aws/
+*.pem
+
+# ============================================================================
+# MISC
+# ============================================================================
+
+# Editor backups
+*~
+*.swp
+*.swo
+
+# Package locks (optional - comment out if you want to track)
+# poetry.lock
+# Pipfile.lock
+
+# Node modules (if using any JS tools)
+node_modules/
+package-lock.json
+
+# Sass
+.sass-cache/
+
+# Coverage directory used by tools like istanbul
+coverage/
+
+# nyc test coverage
+.nyc_output/
+
+# Grunt intermediate storage
+.grunt
+
+# Bower dependency directory
+bower_components/
+
+# Lock files
+*.lock
