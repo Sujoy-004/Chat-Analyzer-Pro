@@ -1,5 +1,16 @@
-tesseract-ocr
-tesseract-ocr-eng
-poppler-utils
+# System packages required for Streamlit Cloud deployment
+# These are installed via apt-get
+
+# For matplotlib backend
 libgl1-mesa-glx
 libglib2.0-0
+
+# For image processing
+libjpeg-dev
+libpng-dev
+
+# For PDF generation
+libfreetype6-dev
+
+# General utilities
+build-essential
