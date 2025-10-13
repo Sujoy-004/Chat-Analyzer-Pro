@@ -14,3 +14,6 @@ libfreetype6-dev
 
 # General utilities
 build-essential
+
+tesseract-ocr
+poppler-utils
