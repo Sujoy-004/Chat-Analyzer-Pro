@@ -167,6 +167,40 @@ def categorize_sentiment(score, positive_threshold=None, negative_threshold=None
     else:
         return 'Neutral'
 
+def analyze_sentiment(df, message_col='message'):
+    """
+    Simple sentiment analysis function for Streamlit integration.
+    Returns a DataFrame with basic sentiment columns added.
+    
+    Args:
+        df (pd.DataFrame): DataFrame with messages
+        message_col (str): Column name containing messages
+        
+    Returns:
+        pd.DataFrame: DataFrame with sentiment columns added
+    """
+    # Initialize VADER if not already done
+    global _vader_analyzer
+    if VADER_AVAILABLE and _vader_analyzer is None:
+        _vader_analyzer = SentimentIntensityAnalyzer()
+    
+    df = df.copy()
+    
+    # VADER Analysis (most reliable without external downloads)
+    if VADER_AVAILABLE:
+        vader_results = df[message_col].apply(analyze_vader)
+        df['sentiment_score'] = [r['compound'] for r in vader_results]
+        df['sentiment_positive'] = [r['pos'] for r in vader_results]
+        df['sentiment_neutral'] = [r['neu'] for r in vader_results]
+        df['sentiment_negative'] = [r['neg'] for r in vader_results]
+        df['sentiment_label'] = df['sentiment_score'].apply(categorize_sentiment)
+    else:
+        # Fallback if VADER not available
+        df['sentiment_score'] = 0.0
+        df['sentiment_label'] = 'Neutral'
+    
+    return df
+
 def add_sentiment_analysis(df, message_col='message', initialize_first=True):
     """
     Add comprehensive sentiment analysis to DataFrame
@@ -252,9 +286,11 @@ def get_sentiment_summary(df):
     # Overall sentiment distribution
     if 'consensus_sentiment' in df.columns:
         summary['sentiment_distribution'] = df['consensus_sentiment'].value_counts().to_dict()
+    elif 'sentiment_label' in df.columns:
+        summary['sentiment_distribution'] = df['sentiment_label'].value_counts().to_dict()
     
     # Average scores
-    score_columns = ['vader_compound', 'textblob_polarity']
+    score_columns = ['vader_compound', 'textblob_polarity', 'sentiment_score']
     for col in score_columns:
         if col in df.columns:
             summary['average_scores'][col] = {
@@ -265,12 +301,13 @@ def get_sentiment_summary(df):
             }
     
     # By sender analysis
-    if 'sender' in df.columns and 'consensus_sentiment' in df.columns:
+    sentiment_col = 'consensus_sentiment' if 'consensus_sentiment' in df.columns else 'sentiment_label'
+    if 'sender' in df.columns and sentiment_col in df.columns:
         for sender in df['sender'].unique():
             sender_data = df[df['sender'] == sender]
             summary['by_sender'][sender] = {
                 'message_count': len(sender_data),
-                'sentiment_distribution': sender_data['consensus_sentiment'].value_counts().to_dict(),
+                'sentiment_distribution': sender_data[sentiment_col].value_counts().to_dict(),
                 'avg_scores': {}
             }
             
@@ -285,13 +322,14 @@ def get_sentiment_summary(df):
         df_temp['hour'] = pd.to_datetime(df_temp['datetime']).dt.hour
         
         # Daily averages
-        if 'vader_compound' in df.columns:
-            daily_sentiment = df_temp.groupby('date')['vader_compound'].mean()
+        score_col = 'vader_compound' if 'vader_compound' in df.columns else 'sentiment_score'
+        if score_col in df.columns:
+            daily_sentiment = df_temp.groupby('date')[score_col].mean()
             summary['temporal_analysis']['daily_avg_sentiment'] = daily_sentiment.to_dict()
         
         # Hourly patterns
-        if 'vader_compound' in df.columns:
-            hourly_sentiment = df_temp.groupby('hour')['vader_compound'].mean()
+        if score_col in df.columns:
+            hourly_sentiment = df_temp.groupby('hour')[score_col].mean()
             summary['temporal_analysis']['hourly_avg_sentiment'] = hourly_sentiment.to_dict()
     
     return summary
@@ -307,10 +345,14 @@ def plot_sentiment_analysis(df, figsize=(15, 10)):
     fig, axes = plt.subplots(2, 2, figsize=figsize)
     fig.suptitle('Chat Sentiment Analysis Dashboard', fontsize=16, fontweight='bold')
     
+    # Determine which sentiment column to use
+    sentiment_col = 'consensus_sentiment' if 'consensus_sentiment' in df.columns else 'sentiment_label'
+    score_col = 'vader_compound' if 'vader_compound' in df.columns else 'sentiment_score'
+    
     # 1. Sentiment Distribution
-    if 'consensus_sentiment' in df.columns:
+    if sentiment_col in df.columns:
         ax1 = axes[0, 0]
-        sentiment_counts = df['consensus_sentiment'].value_counts()
+        sentiment_counts = df[sentiment_col].value_counts()
         colors = ['#2ecc71', '#f39c12', '#e74c3c']
         wedges, texts, autotexts = ax1.pie(sentiment_counts.values,
                                           labels=sentiment_counts.index,
@@ -320,23 +362,16 @@ def plot_sentiment_analysis(df, figsize=(15, 10)):
         ax1.set_title('Overall Sentiment Distribution', fontweight='bold')
     
     # 2. Sentiment Timeline
-    if 'datetime' in df.columns and 'vader_compound' in df.columns:
+    if 'datetime' in df.columns and score_col in df.columns:
         ax2 = axes[0, 1]
         df_temp = df.copy()
         df_temp['datetime'] = pd.to_datetime(df_temp['datetime'])
         df_temp['date'] = df_temp['datetime'].dt.date
         
-        daily_sentiment = df_temp.groupby('date').agg({
-            'vader_compound': 'mean',
-            'textblob_polarity': 'mean' if 'textblob_polarity' in df.columns else lambda x: 0
-        }).reset_index()
+        daily_sentiment = df_temp.groupby('date')[score_col].mean().reset_index()
         
-        ax2.plot(daily_sentiment['date'], daily_sentiment['vader_compound'],
-                marker='o', linewidth=2, label='VADER', color='#3498db')
-        
-        if 'textblob_polarity' in df.columns:
-            ax2.plot(daily_sentiment['date'], daily_sentiment['textblob_polarity'],
-                    marker='s', linewidth=2, label='TextBlob', color='#e67e22')
+        ax2.plot(daily_sentiment['date'], daily_sentiment[score_col],
+                marker='o', linewidth=2, label='Sentiment', color='#3498db')
         
         ax2.axhline(y=0, color='gray', linestyle='--', alpha=0.7)
         ax2.set_title('Sentiment Timeline', fontweight='bold')
@@ -345,9 +380,9 @@ def plot_sentiment_analysis(df, figsize=(15, 10)):
         ax2.tick_params(axis='x', rotation=45)
     
     # 3. Sentiment by Sender
-    if 'sender' in df.columns and 'consensus_sentiment' in df.columns:
+    if 'sender' in df.columns and sentiment_col in df.columns:
         ax3 = axes[1, 0]
-        sender_sentiment = df.groupby('sender')['consensus_sentiment'].value_counts().unstack(fill_value=0)
+        sender_sentiment = df.groupby('sender')[sentiment_col].value_counts().unstack(fill_value=0)
         sender_sentiment.plot(kind='bar', ax=ax3, color=colors[:len(sender_sentiment.columns)])
         ax3.set_title('Sentiment Distribution by Sender', fontweight='bold')
         ax3.set_ylabel('Number of Messages')
@@ -355,18 +390,18 @@ def plot_sentiment_analysis(df, figsize=(15, 10)):
         ax3.legend(title='Sentiment')
     
     # 4. Hourly Sentiment Pattern
-    if 'datetime' in df.columns and 'vader_compound' in df.columns:
+    if 'datetime' in df.columns and score_col in df.columns:
         ax4 = axes[1, 1]
         df_temp = df.copy()
         df_temp['hour'] = pd.to_datetime(df_temp['datetime']).dt.hour
-        hourly_sentiment = df_temp.groupby('hour')['vader_compound'].mean()
+        hourly_sentiment = df_temp.groupby('hour')[score_col].mean()
         
         colors_hourly = ['red' if x < -0.05 else 'orange' if x < 0.05 else 'green' 
                         for x in hourly_sentiment.values]
         ax4.bar(hourly_sentiment.index, hourly_sentiment.values, color=colors_hourly)
         ax4.set_title('Average Sentiment by Hour', fontweight='bold')
         ax4.set_xlabel('Hour of Day')
-        ax4.set_ylabel('Average VADER Score')
+        ax4.set_ylabel('Average Score')
         ax4.axhline(y=0, color='gray', linestyle='--', alpha=0.7)
     
     plt.tight_layout()
@@ -385,25 +420,28 @@ def find_extreme_messages(df, n=3):
     """
     results = {'most_positive': [], 'most_negative': []}
     
-    if 'vader_compound' in df.columns:
+    score_col = 'vader_compound' if 'vader_compound' in df.columns else 'sentiment_score'
+    sentiment_col = 'consensus_sentiment' if 'consensus_sentiment' in df.columns else 'sentiment_label'
+    
+    if score_col in df.columns:
         # Most positive
-        most_pos = df.nlargest(n, 'vader_compound')
+        most_pos = df.nlargest(n, score_col)
         for _, row in most_pos.iterrows():
             results['most_positive'].append({
                 'message': row.get('message', ''),
                 'sender': row.get('sender', ''),
-                'vader_score': row.get('vader_compound', 0),
-                'sentiment': row.get('consensus_sentiment', 'Unknown')
+                'score': row.get(score_col, 0),
+                'sentiment': row.get(sentiment_col, 'Unknown')
             })
         
         # Most negative
-        most_neg = df.nsmallest(n, 'vader_compound')
+        most_neg = df.nsmallest(n, score_col)
         for _, row in most_neg.iterrows():
             results['most_negative'].append({
                 'message': row.get('message', ''),
                 'sender': row.get('sender', ''),
-                'vader_score': row.get('vader_compound', 0),
-                'sentiment': row.get('consensus_sentiment', 'Unknown')
+                'score': row.get(score_col, 0),
+                'sentiment': row.get(sentiment_col, 'Unknown')
             })
     
     return results
@@ -436,4 +474,4 @@ def quick_sentiment_analysis(df, message_col='message', plot=True):
 if __name__ == "__main__":
     print("📊 Sentiment Analysis Module - Chat Analyzer Pro")
     print("This module provides comprehensive sentiment analysis for chat data")
-    print("Usage: import sentiment; sentiment.quick_sentiment_analysis(df)")
+    print("Usage: import sentiment; sentiment.analyze_sentiment(df)")
