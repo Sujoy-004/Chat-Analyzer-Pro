@@ -4,12 +4,14 @@ from pathlib import Path
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import matplotlib.pyplot as plt
 import seaborn as sns
 from datetime import datetime, timedelta
 import warnings
 import io
 import base64
+import numpy as np
 warnings.filterwarnings('ignore')
 
 # Add src to path for imports
@@ -23,6 +25,27 @@ from src.analysis.eda import ChatEDA
 from src.analysis.sentiment import analyze_sentiment
 from src.reporting.pdf_report import generate_chat_analysis_pdf
 
+# Modern dark theme color palette
+COLORS = {
+    'primary': '#00D9FF',      # Cyan
+    'secondary': '#FF6B9D',    # Pink
+    'accent': '#C75EFF',       # Purple
+    'success': '#00F5A0',      # Mint green
+    'warning': '#FFD166',      # Golden yellow
+    'danger': '#FF6B6B',       # Coral red
+    'info': '#4ECDC4',         # Teal
+    'chart1': '#00D9FF',       # Cyan
+    'chart2': '#FF6B9D',       # Pink
+    'chart3': '#C75EFF',       # Purple
+    'chart4': '#00F5A0',       # Mint
+    'chart5': '#FFD166',       # Gold
+    'chart6': '#4ECDC4',       # Teal
+    'bg_dark': '#0E1117',      # Dark background
+    'bg_card': '#1E222A',      # Card background
+    'text': '#FAFAFA',         # Light text
+    'text_muted': '#8B92A6'    # Muted text
+}
+
 # Configure page
 st.set_page_config(
     page_title="Chat Analyzer Pro",
@@ -31,45 +54,195 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Load custom CSS
+# Load custom CSS with modern dark theme
 def load_css():
-    """Load custom CSS styling"""
-    st.markdown("""
+    """Load custom CSS styling optimized for dark background"""
+    st.markdown(f"""
     <style>
-    .main-header {
-        font-size: 3rem;
-        font-weight: bold;
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    
+    * {{
+        font-family: 'Inter', sans-serif;
+    }}
+    
+    .main-header {{
+        font-size: 3.5rem;
+        font-weight: 700;
         text-align: center;
-        color: #1f77b4;
-        margin-bottom: 2rem;
-    }
-    .health-score {
-        font-size: 4rem;
-        font-weight: bold;
+        background: linear-gradient(135deg, {COLORS['primary']} 0%, {COLORS['secondary']} 50%, {COLORS['accent']} 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        margin-bottom: 1rem;
+        text-shadow: 0 0 30px rgba(0, 217, 255, 0.3);
+    }}
+    
+    .subtitle {{
         text-align: center;
-        margin: 1rem 0;
-    }
-    .excellent { color: #28a745; }
-    .good { color: #17a2b8; }
-    .fair { color: #ffc107; }
-    .poor { color: #dc3545; }
-    .metric-card {
-        background: #f8f9fa;
-        padding: 1rem;
-        border-radius: 10px;
-        border-left: 4px solid #1f77b4;
-    }
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 24px;
-    }
-    .stTabs [data-baseweb="tab"] {
+        color: {COLORS['text_muted']};
+        font-size: 1.2rem;
+        margin-bottom: 3rem;
+    }}
+    
+    .health-score {{
+        font-size: 5rem;
+        font-weight: 800;
+        text-align: center;
+        margin: 2rem 0;
+        text-shadow: 0 0 40px currentColor;
+        animation: pulse 2s ease-in-out infinite;
+    }}
+    
+    @keyframes pulse {{
+        0%, 100% {{ opacity: 1; }}
+        50% {{ opacity: 0.8; }}
+    }}
+    
+    .excellent {{ 
+        background: linear-gradient(135deg, {COLORS['success']} 0%, {COLORS['info']} 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }}
+    .good {{ 
+        background: linear-gradient(135deg, {COLORS['primary']} 0%, {COLORS['info']} 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }}
+    .fair {{ 
+        background: linear-gradient(135deg, {COLORS['warning']} 0%, {COLORS['secondary']} 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }}
+    .poor {{ 
+        background: linear-gradient(135deg, {COLORS['danger']} 0%, {COLORS['secondary']} 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }}
+    
+    .metric-card {{
+        background: linear-gradient(135deg, {COLORS['bg_card']} 0%, rgba(30, 34, 42, 0.8) 100%);
+        padding: 1.5rem;
+        border-radius: 16px;
+        border: 1px solid rgba(0, 217, 255, 0.1);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        backdrop-filter: blur(10px);
+        transition: all 0.3s ease;
+    }}
+    
+    .metric-card:hover {{
+        border-color: {COLORS['primary']};
+        box-shadow: 0 8px 32px rgba(0, 217, 255, 0.2);
+        transform: translateY(-2px);
+    }}
+    
+    .stTabs [data-baseweb="tab-list"] {{
+        gap: 8px;
+        background: {COLORS['bg_card']};
+        padding: 8px;
+        border-radius: 12px;
+    }}
+    
+    .stTabs [data-baseweb="tab"] {{
         height: 50px;
-        padding: 10px 24px;
-        background-color: #f0f2f6;
-        border-radius: 5px 5px 0px 0px;
-    }
+        padding: 12px 24px;
+        background: transparent;
+        border-radius: 8px;
+        color: {COLORS['text_muted']};
+        font-weight: 500;
+        transition: all 0.3s ease;
+    }}
+    
+    .stTabs [data-baseweb="tab"]:hover {{
+        background: rgba(0, 217, 255, 0.1);
+        color: {COLORS['primary']};
+    }}
+    
+    .stTabs [aria-selected="true"] {{
+        background: linear-gradient(135deg, {COLORS['primary']} 0%, {COLORS['accent']} 100%) !important;
+        color: white !important;
+        box-shadow: 0 4px 16px rgba(0, 217, 255, 0.3);
+    }}
+    
+    .welcome-card {{
+        border: 2px dashed {COLORS['primary']};
+        border-radius: 16px;
+        padding: 3rem;
+        text-align: center;
+        background: linear-gradient(135deg, rgba(0, 217, 255, 0.05) 0%, rgba(199, 94, 255, 0.05) 100%);
+        margin: 2rem 0;
+        backdrop-filter: blur(10px);
+    }}
+    
+    .feature-card {{
+        background: {COLORS['bg_card']};
+        padding: 2rem;
+        border-radius: 16px;
+        border-left: 4px solid {COLORS['primary']};
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+        transition: all 0.3s ease;
+        height: 100%;
+    }}
+    
+    .feature-card:hover {{
+        border-left-color: {COLORS['secondary']};
+        transform: translateX(5px);
+        box-shadow: 0 8px 24px rgba(255, 107, 157, 0.2);
+    }}
+    
+    div[data-testid="stMetricValue"] {{
+        font-size: 2rem;
+        font-weight: 700;
+        color: {COLORS['primary']};
+    }}
+    
+    div[data-testid="stMetricLabel"] {{
+        color: {COLORS['text_muted']};
+        font-weight: 500;
+    }}
+    
+    .insight-box {{
+        background: linear-gradient(135deg, rgba(0, 217, 255, 0.1) 0%, rgba(199, 94, 255, 0.1) 100%);
+        border-left: 4px solid {COLORS['accent']};
+        padding: 1rem 1.5rem;
+        border-radius: 8px;
+        margin: 0.5rem 0;
+        backdrop-filter: blur(10px);
+    }}
+    
+    .stButton>button {{
+        background: linear-gradient(135deg, {COLORS['primary']} 0%, {COLORS['accent']} 100%);
+        color: white;
+        border: none;
+        padding: 0.75rem 2rem;
+        border-radius: 12px;
+        font-weight: 600;
+        font-size: 1rem;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 16px rgba(0, 217, 255, 0.3);
+    }}
+    
+    .stButton>button:hover {{
+        transform: translateY(-2px);
+        box-shadow: 0 6px 24px rgba(0, 217, 255, 0.4);
+    }}
     </style>
     """, unsafe_allow_html=True)
+
+def create_plotly_theme():
+    """Create consistent Plotly theme for all charts"""
+    return dict(
+        template="plotly_dark",
+        paper_bgcolor=COLORS['bg_dark'],
+        plot_bgcolor=COLORS['bg_card'],
+        font=dict(family="Inter, sans-serif", color=COLORS['text']),
+        colorway=[COLORS['chart1'], COLORS['chart2'], COLORS['chart3'], 
+                  COLORS['chart4'], COLORS['chart5'], COLORS['chart6']],
+        hoverlabel=dict(bgcolor=COLORS['bg_card'], font_size=13),
+    )
 
 def calculate_health_score(df):
     """Calculate relationship health score"""
@@ -89,7 +262,6 @@ def calculate_health_score(df):
 
     initiators_df = pd.DataFrame({'initiator': conversation_starters})
     
-    # Calculate response times
     response_data = []
     for idx in range(1, len(df_sorted)):
         current_msg = df_sorted.iloc[idx]
@@ -105,7 +277,6 @@ def calculate_health_score(df):
     response_df = pd.DataFrame(response_data)
     message_counts = df['sender'].value_counts()
     
-    # Calculate health score components
     participants = list(message_counts.index)
     if len(participants) >= 2:
         main_participant_pct = (message_counts.iloc[0] / len(df)) * 100
@@ -170,188 +341,344 @@ def calculate_health_score(df):
         'date_range': date_range
     }
 
-def create_word_frequency_chart(df):
-    """Create word frequency visualization"""
-    from collections import Counter
-    import re
+def create_animated_gauge(score):
+    """Create animated gauge chart for health score"""
+    fig = go.Figure(go.Indicator(
+        mode="gauge+number+delta",
+        value=score,
+        domain={'x': [0, 1], 'y': [0, 1]},
+        title={'text': "Health Score", 'font': {'size': 24, 'color': COLORS['text']}},
+        delta={'reference': 75, 'increasing': {'color': COLORS['success']}},
+        gauge={
+            'axis': {'range': [None, 100], 'tickwidth': 1, 'tickcolor': COLORS['text_muted']},
+            'bar': {'color': COLORS['primary'], 'thickness': 0.75},
+            'bgcolor': COLORS['bg_card'],
+            'borderwidth': 2,
+            'bordercolor': COLORS['text_muted'],
+            'steps': [
+                {'range': [0, 55], 'color': 'rgba(255, 107, 107, 0.3)'},
+                {'range': [55, 70], 'color': 'rgba(255, 209, 102, 0.3)'},
+                {'range': [70, 85], 'color': 'rgba(0, 217, 255, 0.3)'},
+                {'range': [85, 100], 'color': 'rgba(0, 245, 160, 0.3)'}
+            ],
+            'threshold': {
+                'line': {'color': COLORS['danger'], 'width': 4},
+                'thickness': 0.75,
+                'value': 90
+            }
+        }
+    ))
     
-    all_text = ' '.join(df['message'].astype(str))
-    words = re.findall(r'\b\w+\b', all_text.lower())
-    # Filter out common stop words
-    stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'is', 'was', 'it', 'this', 'that'}
-    words = [w for w in words if len(w) > 3 and w not in stop_words]
-    
-    word_counts = Counter(words).most_common(15)
-    
-    if word_counts:
-        words, counts = zip(*word_counts)
-        fig = px.bar(x=list(words), y=list(counts), title="📝 Top 15 Most Used Words",
-                     labels={'x': 'Words', 'y': 'Frequency'})
-        fig.update_traces(marker_color='#3498db')
-        return fig
-    return None
-
-def create_hourly_heatmap(df):
-    """Create hourly activity heatmap"""
-    df['date'] = df['datetime'].dt.date
-    df['hour'] = df['datetime'].dt.hour
-    
-    hourly_activity = df.groupby(['date', 'hour']).size().reset_index(name='messages')
-    pivot_table = hourly_activity.pivot(index='hour', columns='date', values='messages').fillna(0)
-    
-    fig = px.imshow(pivot_table, 
-                    labels=dict(x="Date", y="Hour of Day", color="Messages"),
-                    title="🕐 Hourly Activity Heatmap",
-                    color_continuous_scale='Blues')
-    fig.update_xaxes(side="bottom")
+    fig.update_layout(**create_plotly_theme(), height=400)
     return fig
 
-def create_response_time_distribution(response_df):
-    """Create response time distribution chart"""
-    if len(response_df) == 0:
-        return None
+def create_3d_scatter(df):
+    """Create 3D scatter plot of messages by time, length, and sender"""
+    df_sample = df.sample(n=min(500, len(df)))  # Sample for performance
+    df_sample['hour'] = df_sample['datetime'].dt.hour
     
-    # Cap at 120 minutes for better visualization
-    capped_times = response_df['response_time_minutes'].clip(upper=120)
-    
-    fig = px.histogram(capped_times, nbins=30, 
-                       title="⏱️ Response Time Distribution",
-                       labels={'value': 'Response Time (minutes)', 'count': 'Frequency'})
-    fig.update_traces(marker_color='#e74c3c')
-    return fig
-
-def create_conversation_flow(df):
-    """Create conversation flow visualization"""
-    df_sorted = df.sort_values('datetime')
-    
-    # Get sender transitions
-    transitions = []
-    for i in range(len(df_sorted) - 1):
-        sender1 = df_sorted.iloc[i]['sender']
-        sender2 = df_sorted.iloc[i + 1]['sender']
-        if sender1 != sender2:
-            transitions.append((sender1, sender2))
-    
-    if not transitions:
-        return None
-    
-    transition_counts = pd.DataFrame(transitions, columns=['From', 'To'])
-    transition_matrix = transition_counts.groupby(['From', 'To']).size().reset_index(name='Count')
-    
-    fig = go.Figure(data=[go.Sankey(
-        node = dict(
-            pad = 15,
-            thickness = 20,
-            line = dict(color = "black", width = 0.5),
-            label = list(set(transition_matrix['From']) | set(transition_matrix['To'])),
-            color = "blue"
+    fig = go.Figure(data=[go.Scatter3d(
+        x=df_sample['hour'],
+        y=df_sample['message_length'],
+        z=df_sample.groupby('sender').cumcount(),
+        mode='markers',
+        marker=dict(
+            size=5,
+            color=df_sample['message_length'],
+            colorscale=[[0, COLORS['chart1']], [0.5, COLORS['chart3']], [1, COLORS['chart2']]],
+            showscale=True,
+            colorbar=dict(title="Message Length", titlefont=dict(color=COLORS['text'])),
+            line=dict(width=0.5, color=COLORS['primary'])
         ),
-        link = dict(
-            source = [list(set(transition_matrix['From']) | set(transition_matrix['To'])).index(x) for x in transition_matrix['From']],
-            target = [list(set(transition_matrix['From']) | set(transition_matrix['To'])).index(x) for x in transition_matrix['To']],
-            value = transition_matrix['Count']
-        ))])
+        text=df_sample['sender'],
+        hovertemplate='<b>%{text}</b><br>Hour: %{x}<br>Length: %{y}<br>Sequence: %{z}<extra></extra>'
+    )])
     
-    fig.update_layout(title_text="🔄 Conversation Flow Diagram", font_size=10)
+    fig.update_layout(
+        **create_plotly_theme(),
+        title="📊 3D Message Analysis",
+        scene=dict(
+            xaxis=dict(title='Hour of Day', backgroundcolor=COLORS['bg_card'], gridcolor=COLORS['text_muted']),
+            yaxis=dict(title='Message Length', backgroundcolor=COLORS['bg_card'], gridcolor=COLORS['text_muted']),
+            zaxis=dict(title='Message Sequence', backgroundcolor=COLORS['bg_card'], gridcolor=COLORS['text_muted']),
+            bgcolor=COLORS['bg_dark']
+        ),
+        height=600
+    )
+    return fig
+
+def create_sunburst_chart(df):
+    """Create sunburst chart of conversation patterns"""
+    df['hour'] = df['datetime'].dt.hour
+    df['period'] = df['hour'].apply(lambda x: 'Morning' if 5 <= x < 12 else 
+                                              'Afternoon' if 12 <= x < 17 else 
+                                              'Evening' if 17 <= x < 21 else 'Night')
+    
+    sunburst_data = df.groupby(['period', 'sender']).size().reset_index(name='count')
+    
+    fig = px.sunburst(
+        sunburst_data,
+        path=['period', 'sender'],
+        values='count',
+        title='🌅 Time Period & Sender Distribution',
+        color='count',
+        color_continuous_scale=[[0, COLORS['chart1']], [0.5, COLORS['chart3']], [1, COLORS['chart2']]]
+    )
+    
+    fig.update_layout(**create_plotly_theme(), height=500)
+    fig.update_traces(textfont=dict(color='white', size=14))
+    return fig
+
+def create_timeline_animation(df):
+    """Create animated timeline of messages"""
+    df['date'] = df['datetime'].dt.date
+    daily_data = df.groupby(['date', 'sender']).size().reset_index(name='messages')
+    
+    fig = px.bar(
+        daily_data,
+        x='date',
+        y='messages',
+        color='sender',
+        title='📅 Animated Message Timeline',
+        animation_frame='date',
+        color_discrete_sequence=[COLORS['chart1'], COLORS['chart2'], COLORS['chart3']],
+        barmode='group'
+    )
+    
+    fig.update_layout(**create_plotly_theme(), height=500, showlegend=True)
+    fig.update_xaxes(showgrid=True, gridcolor=COLORS['text_muted'])
+    fig.update_yaxes(showgrid=True, gridcolor=COLORS['text_muted'])
+    return fig
+
+def create_violin_plot(df):
+    """Create violin plot for message length distribution"""
+    fig = go.Figure()
+    
+    for sender in df['sender'].unique():
+        sender_data = df[df['sender'] == sender]
+        fig.add_trace(go.Violin(
+            y=sender_data['message_length'],
+            name=sender,
+            box_visible=True,
+            meanline_visible=True,
+            fillcolor=COLORS['chart1'] if sender == df['sender'].unique()[0] else COLORS['chart2'],
+            opacity=0.6,
+            line_color='white'
+        ))
+    
+    fig.update_layout(
+        **create_plotly_theme(),
+        title='🎻 Message Length Distribution (Violin Plot)',
+        yaxis_title='Message Length (characters)',
+        height=500
+    )
+    return fig
+
+def create_radar_chart(health_results):
+    """Create radar chart for health components"""
+    categories = ['Communication<br>Balance', 'Initiation<br>Balance', 'Response<br>Quality', 
+                  'Consistency', 'Engagement']
+    
+    scores = [
+        (health_results['balance_points'] / 25) * 100,
+        (health_results['init_points'] / 20) * 100,
+        (health_results['response_points'] / 25) * 100,
+        (health_results['consistency_points'] / 15) * 100,
+        (health_results['engagement_points'] / 15) * 100
+    ]
+    
+    fig = go.Figure()
+    
+    fig.add_trace(go.Scatterpolar(
+        r=scores,
+        theta=categories,
+        fill='toself',
+        fillcolor=COLORS['primary'],
+        opacity=0.5,
+        line=dict(color=COLORS['primary'], width=3),
+        marker=dict(size=10, color=COLORS['secondary'])
+    ))
+    
+    fig.update_layout(
+        **create_plotly_theme(),
+        polar=dict(
+            radialaxis=dict(
+                visible=True,
+                range=[0, 100],
+                gridcolor=COLORS['text_muted'],
+                tickfont=dict(color=COLORS['text'])
+            ),
+            angularaxis=dict(
+                gridcolor=COLORS['text_muted'],
+                tickfont=dict(color=COLORS['text'], size=12)
+            ),
+            bgcolor=COLORS['bg_card']
+        ),
+        title='🎯 Health Component Radar',
+        height=500
+    )
+    return fig
+
+def create_heatmap_calendar(df):
+    """Create calendar heatmap of activity"""
+    df['date'] = df['datetime'].dt.date
+    df['weekday'] = df['datetime'].dt.day_name()
+    df['week'] = df['datetime'].dt.isocalendar().week
+    
+    heatmap_data = df.groupby(['week', 'weekday']).size().reset_index(name='messages')
+    pivot = heatmap_data.pivot(index='weekday', columns='week', values='messages').fillna(0)
+    
+    # Reorder days
+    day_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+    pivot = pivot.reindex(day_order)
+    
+    fig = go.Figure(data=go.Heatmap(
+        z=pivot.values,
+        x=pivot.columns,
+        y=pivot.index,
+        colorscale=[[0, COLORS['bg_card']], [0.5, COLORS['chart3']], [1, COLORS['chart1']]],
+        hoverongaps=False,
+        hovertemplate='Week: %{x}<br>Day: %{y}<br>Messages: %{z}<extra></extra>'
+    ))
+    
+    fig.update_layout(
+        **create_plotly_theme(),
+        title='📆 Weekly Activity Heatmap',
+        xaxis_title='Week Number',
+        yaxis_title='Day of Week',
+        height=400
+    )
+    return fig
+
+def create_treemap(df):
+    """Create treemap of sender and time period distribution"""
+    df['hour'] = df['datetime'].dt.hour
+    df['period'] = df['hour'].apply(lambda x: 'Morning' if 5 <= x < 12 else 
+                                              'Afternoon' if 12 <= x < 17 else 
+                                              'Evening' if 17 <= x < 21 else 'Night')
+    
+    treemap_data = df.groupby(['sender', 'period']).size().reset_index(name='messages')
+    
+    fig = px.treemap(
+        treemap_data,
+        path=['sender', 'period'],
+        values='messages',
+        title='🗺️ Sender & Time Period Treemap',
+        color='messages',
+        color_continuous_scale=[[0, COLORS['chart1']], [0.5, COLORS['chart3']], [1, COLORS['chart2']]]
+    )
+    
+    fig.update_layout(**create_plotly_theme(), height=500)
+    fig.update_traces(textfont=dict(color='white', size=14))
     return fig
 
 def display_eda_analysis(df):
-    """Display comprehensive EDA using the EDA module"""
+    """Display comprehensive EDA with interactive visualizations"""
     st.subheader("📊 Exploratory Data Analysis")
     
     try:
         eda = ChatEDA(df)
         summary = eda.generate_comprehensive_summary()
         
-        # Display dataset info
+        # Metrics in modern cards
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            st.metric("Total Messages", summary['dataset_info']['total_messages'])
+            st.metric("💬 Total Messages", f"{summary['dataset_info']['total_messages']:,}")
         with col2:
-            st.metric("Duration (days)", summary['dataset_info']['duration_days'])
+            st.metric("📅 Duration", f"{summary['dataset_info']['duration_days']} days")
         with col3:
-            st.metric("Peak Hour", summary['activity_patterns']['peak_hour'])
+            st.metric("⏰ Peak Hour", f"{summary['activity_patterns']['peak_hour']}:00")
         with col4:
-            st.metric("Active Period", summary['activity_patterns']['most_active_period'])
+            st.metric("🌟 Active Period", summary['activity_patterns']['most_active_period'])
         
-        # Activity patterns
-        st.write("**Activity Insights:**")
+        st.markdown("---")
+        
+        # Row 1: 3D Scatter and Sunburst
         col1, col2 = st.columns(2)
-        
         with col1:
-            # Word frequency
-            word_freq_fig = create_word_frequency_chart(df)
-            if word_freq_fig:
-                st.plotly_chart(word_freq_fig, use_container_width=True)
-        
+            fig_3d = create_3d_scatter(df)
+            st.plotly_chart(fig_3d, use_container_width=True)
         with col2:
-            # Hourly heatmap
-            heatmap_fig = create_hourly_heatmap(df)
-            st.plotly_chart(heatmap_fig, use_container_width=True)
+            fig_sunburst = create_sunburst_chart(df)
+            st.plotly_chart(fig_sunburst, use_container_width=True)
+        
+        # Row 2: Treemap and Violin
+        col1, col2 = st.columns(2)
+        with col1:
+            fig_treemap = create_treemap(df)
+            st.plotly_chart(fig_treemap, use_container_width=True)
+        with col2:
+            fig_violin = create_violin_plot(df)
+            st.plotly_chart(fig_violin, use_container_width=True)
+        
+        # Calendar heatmap
+        fig_calendar = create_heatmap_calendar(df)
+        st.plotly_chart(fig_calendar, use_container_width=True)
         
     except Exception as e:
         st.error(f"EDA analysis error: {e}")
 
 def display_sentiment_analysis(df):
-    """Display sentiment analysis"""
+    """Display sentiment analysis with modern visualizations"""
     st.subheader("😊 Sentiment Analysis")
     
     try:
-        # Run sentiment analysis
         with st.spinner("Analyzing sentiment..."):
             df_sentiment = analyze_sentiment(df.copy(), message_col='message')
         
         if 'sentiment_label' in df_sentiment.columns:
-            # Sentiment distribution
             col1, col2 = st.columns(2)
             
             with col1:
+                # Animated donut chart
                 sentiment_counts = df_sentiment['sentiment_label'].value_counts()
-                fig_pie = px.pie(values=sentiment_counts.values, 
-                                names=sentiment_counts.index,
-                                title="Overall Sentiment Distribution",
-                                color_discrete_map={'Positive': '#2ecc71', 
-                                                   'Neutral': '#f39c12', 
-                                                   'Negative': '#e74c3c'})
-                st.plotly_chart(fig_pie, use_container_width=True)
+                fig_donut = go.Figure(data=[go.Pie(
+                    labels=sentiment_counts.index,
+                    values=sentiment_counts.values,
+                    hole=0.5,
+                    marker=dict(colors=[COLORS['success'], COLORS['warning'], COLORS['danger']]),
+                    textfont=dict(color='white', size=14)
+                )])
+                fig_donut.update_layout(
+                    **create_plotly_theme(),
+                    title='Overall Sentiment Distribution',
+                    height=400,
+                    annotations=[dict(text=f'{len(df_sentiment)}<br>Messages', 
+                                    x=0.5, y=0.5, font_size=20, showarrow=False,
+                                    font=dict(color=COLORS['text']))]
+                )
+                st.plotly_chart(fig_donut, use_container_width=True)
             
             with col2:
-                # Sentiment by sender
+                # Stacked bar by sender
                 if 'sender' in df_sentiment.columns:
                     sentiment_by_sender = df_sentiment.groupby(['sender', 'sentiment_label']).size().reset_index(name='count')
-                    fig_bar = px.bar(sentiment_by_sender, x='sender', y='count', color='sentiment_label',
-                                    title="Sentiment Distribution by Sender",
-                                    color_discrete_map={'Positive': '#2ecc71', 
-                                                       'Neutral': '#f39c12', 
-                                                       'Negative': '#e74c3c'})
-                    st.plotly_chart(fig_bar, use_container_width=True)
+                    fig_stacked = px.bar(
+                        sentiment_by_sender, x='sender', y='count', color='sentiment_label',
+                        title="Sentiment by Sender",
+                        color_discrete_map={'Positive': COLORS['success'], 
+                                          'Neutral': COLORS['warning'], 
+                                          'Negative': COLORS['danger']},
+                        barmode='stack'
+                    )
+                    fig_stacked.update_layout(**create_plotly_theme(), height=400)
+                    st.plotly_chart(fig_stacked, use_container_width=True)
             
-            # Sentiment timeline
+            # Animated sentiment timeline
             if 'datetime' in df_sentiment.columns and 'sentiment_score' in df_sentiment.columns:
                 df_sentiment['date'] = df_sentiment['datetime'].dt.date
-                daily_sentiment = df_sentiment.groupby('date')['sentiment_score'].mean().reset_index()
+                daily_sentiment = df_sentiment.groupby(['date', 'sender'])['sentiment_score'].mean().reset_index()
                 
-                fig_line = px.line(daily_sentiment, x='date', y='sentiment_score',
-                                  title="📈 Sentiment Timeline",
-                                  labels={'sentiment_score': 'Average Sentiment Score'})
-                fig_line.add_hline(y=0, line_dash="dash", line_color="gray")
-                st.plotly_chart(fig_line, use_container_width=True)
-            
-            # Sentiment metrics
-            st.write("**Sentiment Metrics:**")
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                positive_pct = (sentiment_counts.get('Positive', 0) / len(df_sentiment)) * 100
-                st.metric("Positive Messages", f"{positive_pct:.1f}%")
-            
-            with col2:
-                neutral_pct = (sentiment_counts.get('Neutral', 0) / len(df_sentiment)) * 100
-                st.metric("Neutral Messages", f"{neutral_pct:.1f}%")
-            
-            with col3:
-                negative_pct = (sentiment_counts.get('Negative', 0) / len(df_sentiment)) * 100
-                st.metric("Negative Messages", f"{negative_pct:.1f}%")
+                fig_timeline = px.line(
+                    daily_sentiment, x='date', y='sentiment_score', color='sender',
+                    title="📈 Sentiment Timeline by Sender",
+                    color_discrete_sequence=[COLORS['chart1'], COLORS['chart2'], COLORS['chart3']]
+                )
+                fig_timeline.add_hline(y=0, line_dash="dash", line_color=COLORS['text_muted'], 
+                                      annotation_text="Neutral", annotation_position="right")
+                fig_timeline.update_layout(**create_plotly_theme(), height=400)
+                fig_timeline.update_traces(line=dict(width=3), marker=dict(size=8))
+                st.plotly_chart(fig_timeline, use_container_width=True)
         
         return df_sentiment
     
@@ -411,14 +738,13 @@ def generate_pdf_report_data(df, health_results):
 def main():
     load_css()
     
-    # Header
+    # Animated Header
     st.markdown('<h1 class="main-header">💬 Chat Analyzer Pro</h1>', unsafe_allow_html=True)
-    st.markdown("### Comprehensive chat analysis with AI-powered insights, sentiment analysis, and PDF reports")
+    st.markdown('<p class="subtitle">Unlock the power of your conversations with AI-driven insights</p>', unsafe_allow_html=True)
     
     # Sidebar
     st.sidebar.title("📁 Upload Your Chat")
     
-    # File upload - supports multiple formats
     uploaded_file = st.sidebar.file_uploader(
         "Choose a chat file",
         type=['txt', 'json', 'zip', 'pdf', 'png', 'jpg', 'jpeg'],
@@ -427,7 +753,6 @@ def main():
     
     if uploaded_file is not None:
         try:
-            # Use ingestion module for unified parsing
             with st.spinner('🔍 Processing your file...'):
                 messages, media_ocr = process_uploaded_file(uploaded_file)
             
@@ -435,29 +760,24 @@ def main():
                 st.error("❌ No messages found in the file. Please check the format.")
                 return
             
-            # Convert to DataFrame
             df = pd.DataFrame(messages)
             
-            # Ensure datetime column
+            # Data preparation
             if 'datetime' not in df.columns and 'date' in df.columns and 'time' in df.columns:
                 df['datetime'] = pd.to_datetime(df['date'].astype(str) + ' ' + df['time'].astype(str), errors='coerce')
             elif 'datetime' not in df.columns:
                 st.error("❌ Could not parse datetime information from messages.")
                 return
             
-            # Rename author/sender to consistent 'sender'
             if 'author' in df.columns and 'sender' not in df.columns:
                 df['sender'] = df['author']
             
-            # Rename text to message if needed
             if 'text' in df.columns and 'message' not in df.columns:
                 df['message'] = df['text']
             
-            # Add message_length if not present
             if 'message_length' not in df.columns:
                 df['message_length'] = df['message'].str.len()
             
-            # Drop rows with invalid datetime
             df = df.dropna(subset=['datetime'])
             
             if df.empty:
@@ -466,7 +786,6 @@ def main():
             
             st.sidebar.success(f"✅ Parsed {len(df)} messages from {len(df['sender'].unique())} participants")
             
-            # Show media OCR results if any
             if media_ocr:
                 with st.sidebar.expander("📷 Media/OCR Results"):
                     for item in media_ocr[:5]:
@@ -476,123 +795,110 @@ def main():
                         if 'note' in item:
                             st.caption(item['note'])
             
-            # Calculate health score
             with st.spinner('🔍 Analyzing your chat...'):
                 health_results = calculate_health_score(df)
             
             if health_results:
-                # Create tabs for different analyses
+                # Create tabs
                 tab1, tab2, tab3, tab4, tab5 = st.tabs([
-                    "📊 Overview", 
-                    "📈 EDA", 
+                    "🏠 Overview", 
+                    "📊 Interactive EDA", 
                     "😊 Sentiment", 
-                    "🔍 Advanced", 
-                    "📄 Report"
+                    "🎯 Advanced", 
+                    "📄 Export"
                 ])
                 
                 with tab1:
-                    # Health Score Overview
-                    col1, col2, col3 = st.columns([1, 2, 1])
+                    # Animated gauge and metrics
+                    col1, col2 = st.columns([1, 1])
+                    
+                    with col1:
+                        score = health_results['total_score']
+                        fig_gauge = create_animated_gauge(score)
+                        st.plotly_chart(fig_gauge, use_container_width=True)
                     
                     with col2:
-                        score = health_results['total_score']
                         if score >= 85:
                             grade = "Excellent"
                             color = "excellent"
+                            emoji = "🌟"
                         elif score >= 70:
                             grade = "Good"
                             color = "good"
+                            emoji = "✨"
                         elif score >= 55:
                             grade = "Fair"
                             color = "fair"
+                            emoji = "⭐"
                         else:
                             grade = "Needs Improvement"
                             color = "poor"
+                            emoji = "💫"
                         
-                        st.markdown(f'<div class="health-score {color}">{score:.1f}/100</div>', unsafe_allow_html=True)
-                        st.markdown(f'<h3 style="text-align: center; color: gray;">Relationship Health: {grade}</h3>', unsafe_allow_html=True)
+                        st.markdown(f'<div class="health-score {color}">{emoji}<br>{score:.1f}</div>', unsafe_allow_html=True)
+                        st.markdown(f'<h2 style="text-align: center; color: {COLORS["text_muted"]};">Grade: {grade}</h2>', unsafe_allow_html=True)
                     
-                    # Metrics
+                    st.markdown("---")
+                    
+                    # Metrics row
                     col1, col2, col3, col4 = st.columns(4)
-                    
                     with col1:
-                        st.metric("📊 Total Messages", len(df))
-                    
+                        st.metric("💬 Messages", f"{len(df):,}")
                     with col2:
                         st.metric("👥 Participants", len(df['sender'].unique()))
-                    
                     with col3:
-                        st.metric("📅 Days Analyzed", health_results['date_range'])
-                    
+                        st.metric("📅 Days", health_results['date_range'])
                     with col4:
                         avg_response = health_results['response_df']['response_time_minutes'].mean() if len(health_results['response_df']) > 0 else 0
                         st.metric("⏱️ Avg Response", f"{avg_response:.1f} min")
                     
-                    # Charts
-                    st.subheader("📈 Analysis Dashboard")
+                    st.markdown("---")
                     
-                    chart_col1, chart_col2 = st.columns(2)
-                    
-                    with chart_col1:
-                        fig_pie = px.pie(
-                            values=health_results['message_counts'].values,
-                            names=health_results['message_counts'].index,
-                            title="💬 Message Distribution"
-                        )
-                        st.plotly_chart(fig_pie, use_container_width=True)
-                    
-                    with chart_col2:
-                        categories = ['Communication\nBalance', 'Initiation\nBalance', 'Response\nQuality', 'Consistency', 'Engagement']
-                        scores = [
-                            health_results['balance_points'],
-                            health_results['init_points'],
-                            health_results['response_points'],
-                            health_results['consistency_points'],
-                            health_results['engagement_points']
-                        ]
-                        max_scores = [25, 20, 25, 15, 15]
-                        
-                        fig_bar = go.Figure()
-                        fig_bar.add_trace(go.Bar(x=categories, y=scores, name='Score', marker_color='#1f77b4'))
-                        fig_bar.add_trace(go.Bar(x=categories, y=max_scores, name='Max Score', marker_color='lightgray', opacity=0.5))
-                        fig_bar.update_layout(title='🎯 Health Score Breakdown', barmode='overlay')
-                        st.plotly_chart(fig_bar, use_container_width=True)
-                    
-                    # Daily activity
-                    df['date_str'] = df['datetime'].dt.date.astype(str)
-                    daily_activity = df.groupby('date_str').size().reset_index(name='messages')
-                    fig_line = px.line(daily_activity, x='date_str', y='messages', title='📅 Daily Message Activity', markers=True)
-                    st.plotly_chart(fig_line, use_container_width=True)
-                
-                with tab2:
-                    display_eda_analysis(df)
-                
-                with tab3:
-                    df_with_sentiment = display_sentiment_analysis(df)
-                
-                with tab4:
-                    st.subheader("🔍 Advanced Visualizations")
-                    
+                    # Charts row
                     col1, col2 = st.columns(2)
                     
                     with col1:
-                        # Response time distribution
-                        response_fig = create_response_time_distribution(health_results['response_df'])
-                        if response_fig:
-                            st.plotly_chart(response_fig, use_container_width=True)
+                        # Donut chart
+                        fig_donut = go.Figure(data=[go.Pie(
+                            labels=health_results['message_counts'].index,
+                            values=health_results['message_counts'].values,
+                            hole=0.6,
+                            marker=dict(colors=[COLORS['chart1'], COLORS['chart2'], COLORS['chart3']]),
+                            textfont=dict(color='white', size=14)
+                        )])
+                        fig_donut.update_layout(
+                            **create_plotly_theme(),
+                            title='💬 Message Distribution',
+                            height=400,
+                            annotations=[dict(text='Messages', x=0.5, y=0.5, font_size=16, 
+                                            showarrow=False, font=dict(color=COLORS['text']))]
+                        )
+                        st.plotly_chart(fig_donut, use_container_width=True)
                     
                     with col2:
-                        # Conversation flow
-                        flow_fig = create_conversation_flow(df)
-                        if flow_fig:
-                            st.plotly_chart(flow_fig, use_container_width=True)
+                        # Radar chart
+                        fig_radar = create_radar_chart(health_results)
+                        st.plotly_chart(fig_radar, use_container_width=True)
                     
-                    # Detailed insights
-                    st.subheader("📋 Detailed Insights")
+                    # Timeline
+                    df['date_str'] = df['datetime'].dt.date.astype(str)
+                    daily_activity = df.groupby(['date_str', 'sender']).size().reset_index(name='messages')
                     
-                    insight_col1, insight_col2 = st.columns(2)
+                    fig_area = px.area(
+                        daily_activity, x='date_str', y='messages', color='sender',
+                        title='📅 Daily Activity Timeline',
+                        color_discrete_sequence=[COLORS['chart1'], COLORS['chart2'], COLORS['chart3']]
+                    )
+                    fig_area.update_layout(**create_plotly_theme(), height=400)
+                    fig_area.update_traces(line=dict(width=2))
+                    st.plotly_chart(fig_area, use_container_width=True)
                     
-                    with insight_col1:
+                    # Insights
+                    st.markdown("### 💡 Key Insights")
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.markdown('<div class="insight-box">', unsafe_allow_html=True)
                         st.write("**💪 Strengths:**")
                         if health_results['balance_points'] >= 20:
                             st.write("✅ Well-balanced message distribution")
@@ -602,8 +908,10 @@ def main():
                             st.write("✅ Responsive communication")
                         if health_results['consistency_points'] >= 12:
                             st.write("✅ Consistent communication pattern")
+                        st.markdown('</div>', unsafe_allow_html=True)
                     
-                    with insight_col2:
+                    with col2:
+                        st.markdown('<div class="insight-box">', unsafe_allow_html=True)
                         st.write("**⚠️ Areas for Improvement:**")
                         if health_results['response_points'] < 20:
                             st.write("🔄 Could improve response times")
@@ -611,39 +919,114 @@ def main():
                             st.write("⚖️ Could balance message distribution")
                         if health_results['init_points'] < 16:
                             st.write("🚀 Could balance conversation initiation")
+                        st.markdown('</div>', unsafe_allow_html=True)
+                
+                with tab2:
+                    display_eda_analysis(df)
+                
+                with tab3:
+                    df_with_sentiment = display_sentiment_analysis(df)
+                
+                with tab4:
+                    st.subheader("🎯 Advanced Analytics")
+                    
+                    # Response time distribution with animation
+                    if len(health_results['response_df']) > 0:
+                        response_df = health_results['response_df'].copy()
+                        response_df['response_time_capped'] = response_df['response_time_minutes'].clip(upper=120)
+                        
+                        fig_hist = px.histogram(
+                            response_df, x='response_time_capped', color='responder',
+                            title='⏱️ Response Time Distribution',
+                            nbins=30,
+                            color_discrete_sequence=[COLORS['chart1'], COLORS['chart2']],
+                            marginal='violin'
+                        )
+                        fig_hist.update_layout(**create_plotly_theme(), height=500)
+                        st.plotly_chart(fig_hist, use_container_width=True)
+                    
+                    # Conversation flow Sankey
+                    st.subheader("🔄 Conversation Flow")
+                    df_sorted = df.sort_values('datetime')
+                    transitions = []
+                    for i in range(min(100, len(df_sorted) - 1)):  # Limit for performance
+                        sender1 = df_sorted.iloc[i]['sender']
+                        sender2 = df_sorted.iloc[i + 1]['sender']
+                        if sender1 != sender2:
+                            transitions.append((sender1, sender2))
+                    
+                    if transitions:
+                        transition_counts = pd.DataFrame(transitions, columns=['From', 'To'])
+                        transition_matrix = transition_counts.groupby(['From', 'To']).size().reset_index(name='Count')
+                        
+                        all_nodes = list(set(transition_matrix['From']) | set(transition_matrix['To']))
+                        node_colors = [COLORS['chart1'], COLORS['chart2'], COLORS['chart3']][:len(all_nodes)]
+                        
+                        fig_sankey = go.Figure(data=[go.Sankey(
+                            node=dict(
+                                pad=15,
+                                thickness=20,
+                                line=dict(color=COLORS['primary'], width=2),
+                                label=all_nodes,
+                                color=node_colors
+                            ),
+                            link=dict(
+                                source=[all_nodes.index(x) for x in transition_matrix['From']],
+                                target=[all_nodes.index(x) for x in transition_matrix['To']],
+                                value=transition_matrix['Count'],
+                                color='rgba(0, 217, 255, 0.3)'
+                            )
+                        )])
+                        
+                        fig_sankey.update_layout(**create_plotly_theme(), height=500, title='Message Flow Between Participants')
+                        st.plotly_chart(fig_sankey, use_container_width=True)
                 
                 with tab5:
-                    st.subheader("📄 Generate PDF Report")
-                    st.write("Create a comprehensive PDF report with all your analysis results.")
+                    st.subheader("📄 Export & Reports")
+                    st.write("Generate comprehensive reports and export your data.")
                     
-                    if st.button("🔥 Generate PDF Report", type="primary"):
-                        with st.spinner("Generating PDF report..."):
-                            try:
-                                # Prepare data for PDF
-                                pdf_data = generate_pdf_report_data(df, health_results)
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        if st.button("🔥 Generate PDF Report", type="primary", use_container_width=True):
+                            with st.spinner("Generating PDF report..."):
+                                try:
+                                    pdf_data = generate_pdf_report_data(df, health_results)
+                                    pdf_filename = f"chat_analysis_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+                                    pdf_path = generate_chat_analysis_pdf(pdf_data, pdf_filename)
+                                    
+                                    with open(pdf_path, "rb") as pdf_file:
+                                        pdf_bytes = pdf_file.read()
+                                        st.success("✅ PDF report generated successfully!")
+                                        st.download_button(
+                                            label="📥 Download PDF Report",
+                                            data=pdf_bytes,
+                                            file_name=pdf_filename,
+                                            mime="application/pdf",
+                                            use_container_width=True
+                                        )
                                 
-                                # Generate PDF
-                                pdf_filename = f"chat_analysis_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
-                                pdf_path = generate_chat_analysis_pdf(pdf_data, pdf_filename)
-                                
-                                # Read and offer download
-                                with open(pdf_path, "rb") as pdf_file:
-                                    pdf_bytes = pdf_file.read()
-                                    st.success("✅ PDF report generated successfully!")
-                                    st.download_button(
-                                        label="📥 Download PDF Report",
-                                        data=pdf_bytes,
-                                        file_name=pdf_filename,
-                                        mime="application/pdf"
-                                    )
-                            
-                            except Exception as e:
-                                st.error(f"Error generating PDF: {e}")
-                                st.info("PDF generation requires all analysis modules to be properly configured.")
+                                except Exception as e:
+                                    st.error(f"Error generating PDF: {e}")
+                    
+                    with col2:
+                        # Export CSV
+                        csv = df.to_csv(index=False).encode('utf-8')
+                        st.download_button(
+                            label="📊 Download CSV Data",
+                            data=csv,
+                            file_name=f"chat_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                            mime="text/csv",
+                            use_container_width=True
+                        )
                 
-                # Raw data preview
-                if st.checkbox("📋 Show Raw Data"):
-                    st.dataframe(df[['datetime', 'sender', 'message', 'message_length']].head(100))
+                # Raw data viewer
+                with st.expander("📋 View Raw Data"):
+                    st.dataframe(
+                        df[['datetime', 'sender', 'message', 'message_length']].head(100),
+                        use_container_width=True,
+                        height=400
+                    )
             
         except Exception as e:
             st.error(f"❌ Error processing file: {str(e)}")
@@ -652,116 +1035,98 @@ def main():
                 st.code(traceback.format_exc())
     
     else:
-        # Welcome message
+        # Welcome screen
         st.markdown("""
-        <div style="border: 2px dashed #1f77b4; border-radius: 10px; padding: 2rem; text-align: center; margin: 1rem 0;">
-            <h3>👋 Welcome to Chat Analyzer Pro!</h3>
+        <div class="welcome-card">
+            <h2>👋 Welcome to Chat Analyzer Pro!</h2>
             <p>Upload your WhatsApp (.txt), Telegram (.json), ZIP, PDF, or Images to get started.</p>
-            <p>Get comprehensive insights into your communication patterns, relationship health, sentiment analysis, and more!</p>
+            <p>Experience comprehensive insights with beautiful, interactive visualizations!</p>
         </div>
         """, unsafe_allow_html=True)
         
         # Features
-        st.subheader("🚀 Features")
+        st.markdown("### ✨ Features")
         
-        feature_col1, feature_col2, feature_col3, feature_col4 = st.columns(4)
+        col1, col2, col3, col4 = st.columns(4)
         
-        with feature_col1:
-            st.write("""
-            **📊 Analytics**
-            - Message statistics
-            - Communication patterns
-            - Response time analysis
-            - Activity heatmaps
-            - Word frequency
-            """)
+        with col1:
+            st.markdown('<div class="feature-card">', unsafe_allow_html=True)
+            st.markdown("#### 📊 Interactive EDA")
+            st.write("• 3D scatter plots")
+            st.write("• Sunburst charts")
+            st.write("• Treemaps")
+            st.write("• Violin plots")
+            st.write("• Calendar heatmaps")
+            st.markdown('</div>', unsafe_allow_html=True)
         
-        with feature_col2:
-            st.write("""
-            **🏥 Health Score**
-            - Relationship assessment
-            - Balance metrics
-            - Engagement quality
-            - Component breakdown
-            - Personalized insights
-            """)
+        with col2:
+            st.markdown('<div class="feature-card">', unsafe_allow_html=True)
+            st.markdown("#### 🏥 Health Score")
+            st.markdown("• Animated gauges")
+            st.write("• Radar charts")
+            st.write("• Component breakdown")
+            st.write("• Personalized insights")
+            st.write("• Grade system")
+            st.markdown('</div>', unsafe_allow_html=True)
         
-        with feature_col3:
-            st.write("""
-            **😊 Sentiment Analysis**
-            - VADER sentiment scoring
-            - Positive/Negative detection
-            - Sentiment timeline
-            - Sender-wise analysis
-            - Emotional trends
-            """)
+        with col3:
+            st.markdown('<div class="feature-card">', unsafe_allow_html=True)
+            st.markdown("#### 😊 Sentiment")
+            st.write("• VADER analysis")
+            st.write("• Timeline tracking")
+            st.write("• Sender comparison")
+            st.write("• Emotional trends")
+            st.write("• Donut visualizations")
+            st.markdown('</div>', unsafe_allow_html=True)
         
-        with feature_col4:
-            st.write("""
-            **📄 PDF Reports**
-            - Comprehensive reports
-            - Visual charts
-            - Detailed metrics
-            - Recommendations
-            - Export & share
-            """)
+        with col4:
+            st.markdown('<div class="feature-card">', unsafe_allow_html=True)
+            st.markdown("#### 📄 Export")
+            st.write("• PDF reports")
+            st.write("• CSV export")
+            st.write("• Professional format")
+            st.write("• Charts included")
+            st.write("• One-click download")
+            st.markdown('</div>', unsafe_allow_html=True)
         
-        st.subheader("📁 Supported Formats")
+        st.markdown("---")
         
-        format_col1, format_col2 = st.columns(2)
+        # Supported formats
+        st.markdown("### 📁 Supported Formats")
         
-        with format_col1:
-            st.write("""
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.info("""
             **Direct Upload:**
-            - **WhatsApp**: Export chat as `.txt` file
-            - **Telegram**: Export chat as `.json` file
-            - **ZIP Archives**: Upload multiple files at once
+            - 📱 WhatsApp: Export as `.txt`
+            - 💬 Telegram: Export as `.json`
+            - 📦 ZIP: Multiple files at once
             """)
         
-        with format_col2:
-            st.write("""
+        with col2:
+            st.info("""
             **OCR Support:**
-            - **PDF Files**: Extract text from PDF documents
-            - **Images**: PNG, JPG, JPEG support with OCR
-            - **Scanned Chats**: Automatic text extraction
+            - 📄 PDF: Text extraction
+            - 🖼️ Images: PNG, JPG, JPEG
+            - 📸 Screenshots: Automatic OCR
             """)
         
-        # How to export guide
+        # How to guide
         with st.expander("❓ How to Export Your Chats"):
             st.markdown("""
             ### WhatsApp Export:
-            1. Open the chat you want to analyze
-            2. Tap on the contact/group name at the top
-            3. Scroll down and tap "Export Chat"
-            4. Choose "Without Media"
-            5. Upload the `.txt` file here
+            1. Open the chat → Tap contact name
+            2. Scroll down → "Export Chat"
+            3. Choose "Without Media"
+            4. Upload the `.txt` file here
             
             ### Telegram Export:
             1. Open Telegram Desktop
-            2. Click on the three dots (⋮) menu
-            3. Select "Export Chat History"
-            4. Choose JSON format
-            5. Upload the `.json` file here
-            
-            ### OCR Upload:
-            - Screenshot your chat conversations
-            - Or scan chat printouts as images/PDFs
-            - Upload directly for automatic text extraction
+            2. Menu (⋮) → "Export Chat History"
+            3. Select JSON format
+            4. Upload the `.json` file here
             """)
-        
-        # Sample data option
-        st.subheader("🎯 Try with Sample Data")
-        st.write("Don't have a chat file? Try our sample datasets:")
-        
-        sample_col1, sample_col2 = st.columns(2)
-        
-        with sample_col1:
-            if st.button("📱 Load WhatsApp Sample"):
-                st.info("Sample WhatsApp data would be loaded here (if available in your repo)")
-        
-        with sample_col2:
-            if st.button("💬 Load Telegram Sample"):
-                st.info("Sample Telegram data would be loaded here (if available in your repo)")
 
 if __name__ == "__main__":
     main()
