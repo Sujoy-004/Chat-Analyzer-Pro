@@ -2,5 +2,9 @@
 Reporting modules for Chat Analyzer Pro
 """
 
-# Import when needed to avoid missing dependencies
-__all__ = []
+from .pdf_report import generate_chat_analysis_pdf, ChatAnalysisPDFGenerator
+
+__all__ = [
+    'generate_chat_analysis_pdf',
+    'ChatAnalysisPDFGenerator',
+]
