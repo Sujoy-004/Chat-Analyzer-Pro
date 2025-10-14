@@ -16,8 +16,7 @@ from src.ingest.ingestion import process_uploaded_file
 from src.parser.whatsapp_parser import WhatsAppParser
 from src.parser.telegram_parser import parse_telegram_chat
 from src.analysis.eda import ChatEDA
-from src.analysis.sentiment import analyze_sentiment  # Add if exists
-from src.analysis.relationship_health import calculate_relationship_health  # Add if exists
+from src.analysis.sentiment import analyze_sentiment
 
 # Configure page
 st.set_page_config(
