@@ -784,6 +784,11 @@ def main():
                 st.error("❌ Could not parse valid messages with timestamps.")
                 return
             
+            # Ensure all required columns exist
+            df['hour'] = df['datetime'].dt.hour
+            df['day_of_week'] = df['datetime'].dt.day_name()
+            df['date'] = df['datetime'].dt.date
+            
             st.sidebar.success(f"✅ Parsed {len(df)} messages from {len(df['sender'].unique())} participants")
             
             if media_ocr:
