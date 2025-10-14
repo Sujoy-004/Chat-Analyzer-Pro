@@ -1,22 +1,13 @@
 """
-Chat Parser Package
-
-This package contains parsers for different chat platforms:
-- WhatsApp parser: whatsapp_parser.py
-- Telegram parser: telegram_parser.py
-
-Usage:
-    from src.parser.whatsapp_parser import parse_whatsapp_chat
-    from src.parser.telegram_parser import parse_telegram_chat
+Parser package for Chat Analyzer Pro
+Handles WhatsApp and Telegram chat parsing
 """
 
-from .whatsapp_parser import parse_whatsapp_chat
-from .telegram_parser import parse_telegram_json
+from .whatsapp_parser import WhatsAppParser, parse_whatsapp_chat
+from .telegram_parser import parse_telegram_chat
 
 __all__ = [
+    'WhatsAppParser',
     'parse_whatsapp_chat',
-    'parse_telegram_json'
+    'parse_telegram_chat',
 ]
-
-__version__ = '1.0.0'
-__author__ = 'Chat Analyzer Pro Team'
