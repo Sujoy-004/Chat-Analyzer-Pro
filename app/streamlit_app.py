@@ -373,30 +373,37 @@ def create_animated_gauge(score):
     return fig
 
 def create_3d_scatter(df):
-    """Create 3D scatter plot of messages by time, length, and sender"""
-    df_sample = df.sample(n=min(500, len(df)))  # Sample for performance
+    """Create a 3D scatter plot of messages by hour, length, and sender sequence."""
+    df_sample = df.sample(n=min(500, len(df))).copy()
     df_sample['hour'] = df_sample['datetime'].dt.hour
+    df_sample['sequence'] = df_sample.groupby('sender').cumcount()
     
-    fig = go.Figure(data=[go.Scatter3d(
-        x=df_sample['hour'],
-        y=df_sample['message_length'],
-        z=df_sample.groupby('sender').cumcount(),
-        mode='markers',
-        marker=dict(
-            size=5,
-            color=df_sample['message_length'],
-            colorscale=[[0, COLORS['chart1']], [0.5, COLORS['chart3']], [1, COLORS['chart2']]],
-            showscale=True,
-            colorbar=dict(title="Message Length", titlefont=dict(color=COLORS['text'])),
-            line=dict(width=0.5, color=COLORS['primary'])
-        ),
-        text=df_sample['sender'],
-        hovertemplate='<b>%{text}</b><br>Hour: %{x}<br>Length: %{y}<br>Sequence: %{z}<extra></extra>'
-    )])
+    fig = go.Figure(
+        data=[
+            go.Scatter3d(
+                x=df_sample['hour'],
+                y=df_sample['message_length'],
+                z=df_sample['sequence'],
+                mode='markers',
+                marker=dict(
+                    size=5,
+                    color=df_sample['message_length'],
+                    colorscale=[[0, COLORS['chart1']], [0.5, COLORS['chart3']], [1, COLORS['chart2']]],
+                    showscale=True,
+                    colorbar=dict(
+                        title=dict(text="Message Length", font=dict(color=COLORS['text']))
+                    ),
+                    line=dict(width=0.5, color=COLORS['primary'])
+                ),
+                text=df_sample['sender'],
+                hovertemplate='<b>%{text}</b><br>Hour: %{x}<br>Length: %{y}<br>Sequence: %{z}<extra></extra>'
+            )
+        ]
+    )
     
     fig.update_layout(
         **create_plotly_theme(),
-        title="📊 3D Message Analysis",
+        title="3D Message Analysis",
         scene=dict(
             xaxis=dict(title='Hour of Day', backgroundcolor=COLORS['bg_card'], gridcolor=COLORS['text_muted']),
             yaxis=dict(title='Message Length', backgroundcolor=COLORS['bg_card'], gridcolor=COLORS['text_muted']),
