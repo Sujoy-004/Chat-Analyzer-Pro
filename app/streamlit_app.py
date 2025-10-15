@@ -373,37 +373,30 @@ def create_animated_gauge(score):
     return fig
 
 def create_3d_scatter(df):
-    """Create a 3D scatter plot of messages by hour, length, and sender sequence."""
-    df_sample = df.sample(n=min(500, len(df))).copy()
+    """Create 3D scatter plot of messages by time, length, and sender"""
+    df_sample = df.sample(n=min(500, len(df)))  # Sample for performance
     df_sample['hour'] = df_sample['datetime'].dt.hour
-    df_sample['sequence'] = df_sample.groupby('sender').cumcount()
     
-    fig = go.Figure(
-        data=[
-            go.Scatter3d(
-                x=df_sample['hour'],
-                y=df_sample['message_length'],
-                z=df_sample['sequence'],
-                mode='markers',
-                marker=dict(
-                    size=5,
-                    color=df_sample['message_length'],
-                    colorscale=[[0, COLORS['chart1']], [0.5, COLORS['chart3']], [1, COLORS['chart2']]],
-                    showscale=True,
-                    colorbar=dict(
-                        title=dict(text="Message Length", font=dict(color=COLORS['text']))
-                    ),
-                    line=dict(width=0.5, color=COLORS['primary'])
-                ),
-                text=df_sample['sender'],
-                hovertemplate='<b>%{text}</b><br>Hour: %{x}<br>Length: %{y}<br>Sequence: %{z}<extra></extra>'
-            )
-        ]
-    )
+    fig = go.Figure(data=[go.Scatter3d(
+        x=df_sample['hour'],
+        y=df_sample['message_length'],
+        z=df_sample.groupby('sender').cumcount(),
+        mode='markers',
+        marker=dict(
+            size=5,
+            color=df_sample['message_length'],
+            colorscale=[[0, COLORS['chart1']], [0.5, COLORS['chart3']], [1, COLORS['chart2']]],
+            showscale=True,
+            colorbar=dict(title="Message Length", titlefont=dict(color=COLORS['text'])),
+            line=dict(width=0.5, color=COLORS['primary'])
+        ),
+        text=df_sample['sender'],
+        hovertemplate='<b>%{text}</b><br>Hour: %{x}<br>Length: %{y}<br>Sequence: %{z}<extra></extra>'
+    )])
     
     fig.update_layout(
         **create_plotly_theme(),
-        title="3D Message Analysis",
+        title="📊 3D Message Analysis",
         scene=dict(
             xaxis=dict(title='Hour of Day', backgroundcolor=COLORS['bg_card'], gridcolor=COLORS['text_muted']),
             yaxis=dict(title='Message Length', backgroundcolor=COLORS['bg_card'], gridcolor=COLORS['text_muted']),
@@ -461,24 +454,34 @@ def create_violin_plot(df):
     """Create violin plot for message length distribution"""
     fig = go.Figure()
     
-    for sender in df['sender'].unique():
+    colors = [COLORS['chart1'], COLORS['chart2'], COLORS['chart3']]
+    for i, sender in enumerate(df['sender'].unique()):
         sender_data = df[df['sender'] == sender]
         fig.add_trace(go.Violin(
             y=sender_data['message_length'],
             name=sender,
             box_visible=True,
             meanline_visible=True,
-            fillcolor=COLORS['chart1'] if sender == df['sender'].unique()[0] else COLORS['chart2'],
-            opacity=0.6,
-            line_color='white'
+            fillcolor=colors[i % len(colors)],
+            opacity=0.7,
+            line=dict(color=colors[i % len(colors)], width=2)
         ))
     
     fig.update_layout(
         **create_plotly_theme(),
         title='🎻 Message Length Distribution (Violin Plot)',
         yaxis_title='Message Length (characters)',
-        height=500
+        height=500,
+        showlegend=True,
+        legend=dict(
+            font=dict(color=COLORS['text']),
+            bgcolor='rgba(30, 34, 42, 0.8)',
+            bordercolor=COLORS['primary'],
+            borderwidth=1
+        )
     )
+    fig.update_xaxes(showgrid=False)
+    fig.update_yaxes(gridcolor=COLORS['text_muted'], gridwidth=0.5)
     return fig
 
 def create_radar_chart(health_results):
@@ -584,6 +587,14 @@ def display_eda_analysis(df):
     st.subheader("📊 Exploratory Data Analysis")
     
     try:
+        # Ensure required columns exist before creating EDA object
+        if 'hour' not in df.columns:
+            df['hour'] = df['datetime'].dt.hour
+        if 'day_of_week' not in df.columns:
+            df['day_of_week'] = df['datetime'].dt.day_name()
+        if 'date' not in df.columns:
+            df['date'] = df['datetime'].dt.date
+        
         eda = ChatEDA(df)
         summary = eda.generate_comprehensive_summary()
         
@@ -637,38 +648,74 @@ def display_sentiment_analysis(df):
             col1, col2 = st.columns(2)
             
             with col1:
-                # Animated donut chart
+                # Animated donut chart with full dark theme
                 sentiment_counts = df_sentiment['sentiment_label'].value_counts()
                 fig_donut = go.Figure(data=[go.Pie(
                     labels=sentiment_counts.index,
                     values=sentiment_counts.values,
                     hole=0.5,
-                    marker=dict(colors=[COLORS['success'], COLORS['warning'], COLORS['danger']]),
-                    textfont=dict(color='white', size=14)
+                    marker=dict(
+                        colors=[COLORS['success'], COLORS['warning'], COLORS['danger']],
+                        line=dict(color=COLORS['bg_dark'], width=3)
+                    ),
+                    textfont=dict(color=COLORS['text'], size=16),
+                    textposition='outside'
                 )])
                 fig_donut.update_layout(
                     **create_plotly_theme(),
-                    title='Overall Sentiment Distribution',
+                    title=dict(text='Overall Sentiment Distribution', font=dict(color=COLORS['text'], size=18)),
                     height=400,
-                    annotations=[dict(text=f'{len(df_sentiment)}<br>Messages', 
-                                    x=0.5, y=0.5, font_size=20, showarrow=False,
-                                    font=dict(color=COLORS['text']))]
+                    showlegend=True,
+                    legend=dict(
+                        font=dict(color=COLORS['text'], size=12),
+                        bgcolor='rgba(30, 34, 42, 0.8)',
+                        bordercolor=COLORS['primary'],
+                        borderwidth=1
+                    ),
+                    annotations=[dict(
+                        text=f'{len(df_sentiment)}<br>Messages', 
+                        x=0.5, y=0.5, 
+                        font=dict(size=18, color=COLORS['text']), 
+                        showarrow=False
+                    )]
                 )
                 st.plotly_chart(fig_donut, use_container_width=True)
             
             with col2:
-                # Stacked bar by sender
+                # Stacked bar by sender with dark theme
                 if 'sender' in df_sentiment.columns:
                     sentiment_by_sender = df_sentiment.groupby(['sender', 'sentiment_label']).size().reset_index(name='count')
                     fig_stacked = px.bar(
                         sentiment_by_sender, x='sender', y='count', color='sentiment_label',
                         title="Sentiment by Sender",
-                        color_discrete_map={'Positive': COLORS['success'], 
-                                          'Neutral': COLORS['warning'], 
-                                          'Negative': COLORS['danger']},
+                        color_discrete_map={
+                            'Positive': COLORS['success'], 
+                            'Neutral': COLORS['warning'], 
+                            'Negative': COLORS['danger']
+                        },
                         barmode='stack'
                     )
-                    fig_stacked.update_layout(**create_plotly_theme(), height=400)
+                    fig_stacked.update_layout(
+                        **create_plotly_theme(), 
+                        height=400,
+                        title=dict(font=dict(color=COLORS['text'], size=18)),
+                        legend=dict(
+                            title=dict(text='Sentiment', font=dict(color=COLORS['text'])),
+                            font=dict(color=COLORS['text'], size=12),
+                            bgcolor='rgba(30, 34, 42, 0.8)',
+                            bordercolor=COLORS['primary'],
+                            borderwidth=1
+                        ),
+                        xaxis=dict(
+                            title=dict(text='Sender', font=dict(color=COLORS['text'])),
+                            tickfont=dict(color=COLORS['text'])
+                        ),
+                        yaxis=dict(
+                            title=dict(text='Count', font=dict(color=COLORS['text'])),
+                            gridcolor=COLORS['text_muted'],
+                            gridwidth=0.5
+                        )
+                    )
                     st.plotly_chart(fig_stacked, use_container_width=True)
             
             # Animated sentiment timeline
@@ -870,20 +917,35 @@ def main():
                     col1, col2 = st.columns(2)
                     
                     with col1:
-                        # Donut chart
+                        # Donut chart with dark theme
                         fig_donut = go.Figure(data=[go.Pie(
                             labels=health_results['message_counts'].index,
                             values=health_results['message_counts'].values,
                             hole=0.6,
-                            marker=dict(colors=[COLORS['chart1'], COLORS['chart2'], COLORS['chart3']]),
-                            textfont=dict(color='white', size=14)
+                            marker=dict(
+                                colors=[COLORS['chart1'], COLORS['chart2'], COLORS['chart3']],
+                                line=dict(color=COLORS['bg_dark'], width=2)
+                            ),
+                            textfont=dict(color=COLORS['text'], size=16),
+                            textposition='outside'
                         )])
                         fig_donut.update_layout(
                             **create_plotly_theme(),
-                            title='💬 Message Distribution',
+                            title=dict(text='💬 Message Distribution', font=dict(color=COLORS['text'], size=18)),
                             height=400,
-                            annotations=[dict(text='Messages', x=0.5, y=0.5, font_size=16, 
-                                            showarrow=False, font=dict(color=COLORS['text']))]
+                            showlegend=True,
+                            legend=dict(
+                                font=dict(color=COLORS['text'], size=12),
+                                bgcolor='rgba(30, 34, 42, 0.8)',
+                                bordercolor=COLORS['primary'],
+                                borderwidth=1
+                            ),
+                            annotations=[dict(
+                                text='Messages', 
+                                x=0.5, y=0.5, 
+                                font=dict(size=16, color=COLORS['text_muted']), 
+                                showarrow=False
+                            )]
                         )
                         st.plotly_chart(fig_donut, use_container_width=True)
                     
@@ -892,7 +954,7 @@ def main():
                         fig_radar = create_radar_chart(health_results)
                         st.plotly_chart(fig_radar, use_container_width=True)
                     
-                    # Timeline
+                    # Timeline with dark theme
                     df['date_str'] = df['datetime'].dt.date.astype(str)
                     daily_activity = df.groupby(['date_str', 'sender']).size().reset_index(name='messages')
                     
@@ -901,8 +963,29 @@ def main():
                         title='📅 Daily Activity Timeline',
                         color_discrete_sequence=[COLORS['chart1'], COLORS['chart2'], COLORS['chart3']]
                     )
-                    fig_area.update_layout(**create_plotly_theme(), height=400)
-                    fig_area.update_traces(line=dict(width=2))
+                    fig_area.update_layout(
+                        **create_plotly_theme(),
+                        height=400,
+                        showlegend=True,
+                        title=dict(font=dict(color=COLORS['text'], size=18)),
+                        legend=dict(
+                            font=dict(color=COLORS['text'], size=12),
+                            bgcolor='rgba(30, 34, 42, 0.8)',
+                            bordercolor=COLORS['primary'],
+                            borderwidth=1
+                        ),
+                        xaxis=dict(
+                            title=dict(text='Date', font=dict(color=COLORS['text'])),
+                            gridcolor=COLORS['text_muted'],
+                            gridwidth=0.5
+                        ),
+                        yaxis=dict(
+                            title=dict(text='Messages', font=dict(color=COLORS['text'])),
+                            gridcolor=COLORS['text_muted'],
+                            gridwidth=0.5
+                        )
+                    )
+                    fig_area.update_traces(line=dict(width=2.5), marker=dict(size=8))
                     st.plotly_chart(fig_area, use_container_width=True)
                     
                     # Insights
