@@ -14,6 +14,54 @@ class ChatEDA:  # changed class name from ChatEDAWithPlotly to ChatEDA
         self.df = self.prepare_data(df.copy())
         self.summary = None
 
+    def generate_comprehensive_summary(self):
+        """Return all high-signal EDA summary metrics used by the app."""
+        df = self.df
+
+        summary = {}
+
+        summary["total_messages"] = len(df)
+        summary["total_days"] = (df["date"].max() - df["date"].min()).days + 1
+        summary["average_messages_per_day"] = round(summary["total_messages"] / summary["total_days"], 2)
+
+        summary["unique_senders"] = df["sender"].nunique()
+        summary["messages_per_sender"] = (
+            df["sender"].value_counts().to_dict()
+        )
+
+        summary["most_active_day"] = (
+            df["day_of_week"].value_counts().idxtop()
+            if len(df) else None
+        )
+
+        summary["most_active_hour"] = (
+            df["hour"].value_counts().idxtop()
+            if len(df) else None
+        )
+
+        summary["avg_word_count"] = float(df["word_count"].mean()) if "word_count" in df else None
+
+        summary["media_messages"] = int(df["is_media"].sum()) if "is_media" in df else 0
+        summary["emoji_messages"] = int(df["has_emoji"].sum()) if "has_emoji" in df else 0
+
+        response_times = []
+        df_sorted = df.sort_values("datetime").reset_index(drop=True)
+        for i in range(1, len(df_sorted)):
+            if df_sorted.iloc[i]["sender"] != df_sorted.iloc[i - 1]["sender"]:
+                delta = (
+                    df_sorted.iloc[i]["datetime"]
+                    - df_sorted.iloc[i - 1]["datetime"]
+                ).total_seconds() / 60
+                if delta < 1440:
+                    response_times.append(delta)
+
+        summary["average_response_time_minutes"] = (
+            round(float(np.mean(response_times)), 2)
+            if response_times else None
+        )
+
+        return summary    
+
     def prepare_data(self, df):
         """Prepare and enhance data for analysis"""
         # Convert datetime columns
