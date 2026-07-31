@@ -77,7 +77,7 @@ Each task was committed atomically:
 2. **Task 2: Create pyproject.toml, delete web-app artifacts, fix PROJECT.md floor** - `7823759` (feat)
 3. **Task 3: Package legitimacy gate (blocking-human checkpoint)** - `85df6d0` (docs: approve gate)
 
-**Plan metadata:** pending final phase-1 commit (this SUMMARY + STATE/ROADMAP)
+**Plan metadata:** `15243ab` (docs: complete plan 01-01 — SUMMARY + STATE + ROADMAP + REQUIREMENTS)
 
 ## Files Created/Modified
 
@@ -178,6 +178,11 @@ All plan gates pass (re-run in full on continuation):
 ## Known Stubs
 
 - **`chat-analyzer` console script → `chat_analyzer.cli:app`** (pyproject.toml `[project.scripts]`): the target module does not exist yet — INTENTIONAL, explicitly planned as key_link D-01 ("target created in plan 02"). Entry-point resolution is lazy so `pip install -e .` succeeds now; invocation verified in plan 02. Not a blocker for this plan's goal (structural package readiness).
+
+## Self-Check: PASSED
+
+- [x] SUMMARY.md exists; PLAN.md exists with gate approval annotation; pyproject.toml and package markers exist; requirements.txt confirmed deleted
+- [x] All plan commits present: `1c279aa` (Task 1), `7823759` (Task 2), `85df6d0` (Task 3 gate), `734001c` (SUMMARY), `15243ab` (phase-1 completion metadata)
 
 ## Next Phase Readiness
 
