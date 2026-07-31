@@ -94,38 +94,38 @@ Which phases cover which requirements. Updated during roadmap creation.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | CLI-01 | Phase 1 | Pending |
-| CLI-02 | Phase 1 | Pending |
-| CLI-03 | Phase 1 | Pending |
-| CLI-04 | Phase 1 | Pending |
+| CLI-02 | Phase 2 | Pending |
+| CLI-03 | Phase 2 | Pending |
+| CLI-04 | Phase 4 | Pending |
 | CLI-05 | Phase 1 | Pending |
-| ANAL-01 | Phase 1 | Pending |
-| ANAL-02 | Phase 1 | Pending |
-| ANAL-03 | Phase 1 | Pending |
-| ANAL-04 | Phase 1 | Pending |
-| ANAL-05 | Phase 1 | Pending |
-| ANAL-06 | Phase 1 | Pending |
-| ANAL-07 | Phase 1 | Pending |
-| ANAL-08 | Phase 1 | Pending |
-| ANAL-09 | Phase 1 | Pending |
-| OUT-01 | Phase 1 | Pending |
-| OUT-02 | Phase 1 | Pending |
-| OUT-03 | Phase 1 | Pending |
-| OUT-04 | Phase 1 | Pending |
-| OUT-05 | Phase 1 | Pending |
+| ANAL-01 | Phase 2 | Pending |
+| ANAL-02 | Phase 2 | Pending |
+| ANAL-03 | Phase 2 | Pending |
+| ANAL-04 | Phase 2 | Pending |
+| ANAL-05 | Phase 2 | Pending |
+| ANAL-06 | Phase 4 | Pending |
+| ANAL-07 | Phase 4 | Pending |
+| ANAL-08 | Phase 4 | Pending |
+| ANAL-09 | Phase 4 | Pending |
+| OUT-01 | Phase 2 | Pending |
+| OUT-02 | Phase 2 | Pending |
+| OUT-03 | Phase 3 | Pending |
+| OUT-04 | Phase 3 | Pending |
+| OUT-05 | Phase 3 | Pending |
 | PKG-01 | Phase 1 | Pending |
 | PKG-02 | Phase 1 | Pending |
 | PKG-03 | Phase 1 | Pending |
 | PKG-04 | Phase 1 | Pending |
 | PKG-05 | Phase 1 | Pending |
 | QUAL-01 | Phase 1 | Pending |
-| QUAL-02 | Phase 1 | Pending |
-| QUAL-03 | Phase 1 | Pending |
+| QUAL-02 | Phase 4 | Pending |
+| QUAL-03 | Phase 4 | Pending |
 | QUAL-04 | Phase 1 | Pending |
 
 **Coverage:**
 - v1 requirements: 28 total
-- Mapped to phases: 0
-- Unmapped: 28 (awaiting roadmap)
+- Mapped to phases: 28
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-07-31*
