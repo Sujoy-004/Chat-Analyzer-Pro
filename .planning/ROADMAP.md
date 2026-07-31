@@ -32,7 +32,10 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Installing on Python older than 3.11 fails with a clear error message (floor enforced)
   4. All existing analysis modules still import and run after the move to `chat_analyzer.*` (parsers, sentiment, EDA, relationship health produce results)
   5. The installed package contains no web-app-only code (no `app/`, no `deployment/`, no `exec()` module fetcher)
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 01-01-PLAN.md — Package surgery: src/ → src/chat_analyzer/ restructure, pyproject (>=3.11, [nlp] extra), web-app deletion, dep legitimacy gate
+- [ ] 01-02-PLAN.md — CLI interactive slice: installable command, prompt flow + smoke tests, QUAL-01/04 quality gates
 
 ### Phase 2: One-Command Terminal Insights
 **Goal**: `analyze <chat_file>` parses real WhatsApp/Telegram exports correctly and prints trusted insights with inline charts to the terminal.
@@ -79,7 +82,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Package Foundation | TBD | Not started | - |
+| 1. Package Foundation | 0 / 2 | Not started | - |
 | 2. One-Command Terminal Insights | TBD | Not started | - |
 | 3. Shareable HTML Report | TBD | Not started | - |
 | 4. NLP Extras & Quality Gate | TBD | Not started | - |
