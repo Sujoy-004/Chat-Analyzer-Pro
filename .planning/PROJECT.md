@@ -35,7 +35,7 @@ One command turns a raw chat export into real insights about the conversation â€
 - [ ] CLI entry point: single command like `analyze <chat_file>` that runs the full pipeline
 - [ ] Terminal output: insights with inline charts (plotext/rich)
 - [ ] HTML report generation: shareable report of the analysis
-- [ ] Installable via pip (`pip install chat-analyzer-pro` + `analyze` command)
+- [ ] Installable via pip (`pip install chat-analyzer-pro` + `chat-analyzer` command)
 - [ ] User-friendly error handling and export instructions for WhatsApp/Telegram
 - [ ] README updated with "how a friend uses it" quickstart
 
@@ -57,7 +57,7 @@ One command turns a raw chat export into real insights about the conversation â€
 
 ## Constraints
 
-- **Tech stack**: Python 3.8+ (runtime) / 3.10 (dev), pip packaging. Reuse existing `src/` analysis modules rather than rewriting analysis logic.
+- **Tech stack**: Python 3.11+ (runtime and dev), pip packaging (hatchling src-layout). Reuse existing `src/` analysis modules rather than rewriting analysis logic.
 - **Dependencies**: Heavy NLP (torch, transformers) retained per decision â€” local runtime accepts the install cost.
 - **Output**: Must produce both terminal output and an HTML report for v1.
 - **Distribution**: pip-installable (PyPI or GitHub) â€” no hosting, no account, no web server.
