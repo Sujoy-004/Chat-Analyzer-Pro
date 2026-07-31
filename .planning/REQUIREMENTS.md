@@ -37,10 +37,10 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Packaging
 
-- [ ] **PKG-01**: Code is restructured into a single importable package (`src/chat_analyzer/`) with valid package markers
-- [ ] **PKG-02**: Heavy NLP deps (torch, transformers) are gated behind an optional `[nlp]` extra and lazy imports
-- [ ] **PKG-03**: Base install avoids heavy deps and installs quickly
-- [ ] **PKG-04**: Python >= 3.11 floor is documented and enforced
+- [x] **PKG-01**: Code is restructured into a single importable package (`src/chat_analyzer/`) with valid package markers
+- [x] **PKG-02**: Heavy NLP deps (torch, transformers) are gated behind an optional `[nlp]` extra and lazy imports
+- [x] **PKG-03**: Base install avoids heavy deps and installs quickly
+- [x] **PKG-04**: Python >= 3.11 floor is documented and enforced
 - [ ] **PKG-05**: Package is installable from the repo (and PyPI-ready)
 
 ### Quality
@@ -112,10 +112,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | OUT-03 | Phase 3 | Pending |
 | OUT-04 | Phase 3 | Pending |
 | OUT-05 | Phase 3 | Pending |
-| PKG-01 | Phase 1 | Pending |
-| PKG-02 | Phase 1 | Pending |
-| PKG-03 | Phase 1 | Pending |
-| PKG-04 | Phase 1 | Pending |
+| PKG-01 | Phase 1 | Complete |
+| PKG-02 | Phase 1 | Complete |
+| PKG-03 | Phase 1 | Complete |
+| PKG-04 | Phase 1 | Complete |
 | PKG-05 | Phase 1 | Pending |
 | QUAL-01 | Phase 1 | Pending |
 | QUAL-02 | Phase 4 | Pending |

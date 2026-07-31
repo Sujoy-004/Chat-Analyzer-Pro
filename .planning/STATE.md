@@ -1,3 +1,19 @@
+---
+gsd_state_version: 1.0
+milestone: v1.0
+milestone_name: milestone
+status: executing
+stopped_at: Plan
+last_updated: "2026-07-31T13:24:05.633Z"
+last_activity: 2026-07-31 — Plan 01-01 complete (package surgery + gate approved); wave 2 (plan 01-02) next
+progress:
+  total_phases: 4
+  completed_phases: 0
+  total_plans: 2
+  completed_plans: 1
+  percent: 50
+---
+
 # Project State
 
 ## Project Reference
@@ -10,27 +26,29 @@ See: .planning/PROJECT.md (updated 2026-07-31)
 ## Current Position
 
 Phase: 1 of 4 (Package Foundation)
-Plan: 0 of 2 in current phase
-Status: Ready to execute
-Last activity: 2026-07-31 — Phase 1 planned (2 plans, 2 waves, verified)
+Plan: 1 of 2 in current phase
+Status: Executing
+Last activity: 2026-07-31 — Plan 01-01 complete (package surgery + gate approved); wave 2 (plan 01-02) next
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [█████░░░░░] 50%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 0
-- Average duration: —
-- Total execution time: 0.0 hours
+
+- Total plans completed: 1
+- Average duration: 20min
+- Total execution time: 0.3 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| - | - | - | - |
+| 1. Package Foundation | 1 / 2 | 20min | 20min |
 
 **Recent Trend:**
-- Last 5 plans: —
+
+- Last 5 plans: 01-01 Package Foundation (20min)
 - Trend: —
 
 *Updated after each plan completion*
@@ -51,6 +69,10 @@ Recent decisions affecting current work:
 - [Phase 1]: Web app deleted entirely — app/, deployment/, .streamlit/, apt.txt, packages.txt removed (D-05/06)
 - [Phase 1]: v1 distribution = clone-and-run `python -m chat_analyzer`; no PyPI publication required (D-07/08)
 - [Phase 1]: All src/ modules ship in the package; reporting CLI exposure deferred to v2 (D-10/11)
+- [Phase 1]: Base deps = verified-import list only (grep over src/): pandas, numpy, matplotlib, seaborn, vaderSentiment, wordcloud, networkx, requests, reportlab, Pillow, typer, rich, plotext — requirements.txt was a stale manifest, not blind-copied
+- [Phase 1]: transformers pin <6 in [nlp] extra (5.x breaks the 4.x-era core code); torch/transformers excluded from base install by design (PKG-03)
+- [Phase 1]: requirements.txt deleted — pyproject.toml is the single dependency manifest (avoids duplicated-manifests drift, CONCERNS.md:42-45; recoverable from git)
+- [Phase 1]: Package-legitimacy gate human-approved: typer/rich/plotext/hatchling verified real on PyPI with in-range versions (T-01-SC mitigated) — plan 01-02 may pip install -e .
 
 ### Pending Todos
 
@@ -63,7 +85,7 @@ None yet.
 [Issues that affect future work]
 
 - [Phase 1]: `analyze` command name collides with existing PyPI tools — RESOLVED in Phase 1 context (D-01: `chat-analyzer`)
-- [Phase 1]: `_init_.py` → `__init__.py` rename must clean stale re-exports (they import functions that don't exist — would break imports)
+- [Phase 1]: `_init_.py` → `__init__.py` rename must clean stale re-exports — RESOLVED in plan 01-01 Task 1 (markers rewritten, broken symbols stripped, all imports verified)
 - [Phase 2]: Parser silently fabricates timestamps via `datetime.now()` fallback on unknown date formats — must never ship (strict parse + skip counter)
 
 ## Deferred Items
@@ -79,6 +101,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-31 (Phase 1 planned)
-Stopped at: Phase 1 PLAN.md files written + verified (0 blockers, 3 warnings resolved via revision); plans committed
-Resume file: .planning/phases/01-package-foundation/01-01-PLAN.md
+Last session: 2026-07-31T13:24:05.623Z
+Stopped at: Plan
+Resume file: .planning/phases/01-package-foundation/01-02-PLAN.md
