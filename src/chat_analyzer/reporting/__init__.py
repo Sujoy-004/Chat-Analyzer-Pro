@@ -6,7 +6,7 @@ This package contains report generation modules:
 - Weekly Digest: weekly_digest.py (future)
 
 Usage:
-    from src.reporting.pdf_report import generate_chat_analysis_pdf
+    from chat_analyzer.reporting.pdf_report import generate_chat_analysis_pdf
 """
 
 from .pdf_report import (

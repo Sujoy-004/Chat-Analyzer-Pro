@@ -682,7 +682,7 @@ if __name__ == "__main__":
     Example usage in Google Colab:
     
     import pandas as pd
-    from src.utils.visualization import ChatVisualizer, quick_dashboard
+    from chat_analyzer.utils.visualization import ChatVisualizer, quick_dashboard
     
     # Load data
     df = pd.read_csv('data/processed/example_parsed.csv')

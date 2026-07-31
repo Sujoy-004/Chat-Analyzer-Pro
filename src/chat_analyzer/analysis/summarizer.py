@@ -9,7 +9,6 @@ Enhanced version with group chat analysis features.
 import pandas as pd
 import numpy as np
 from typing import List, Dict, Union, Optional, Tuple
-from transformers import pipeline, T5Tokenizer, T5ForConditionalGeneration
 from collections import Counter
 import warnings
 warnings.filterwarnings('ignore')
@@ -49,6 +48,7 @@ class ConversationSummarizer:
         
         # Initialize T5 model and tokenizer
         try:
+            from transformers import pipeline, T5Tokenizer, T5ForConditionalGeneration
             self.tokenizer = T5Tokenizer.from_pretrained(model_name)
             self.model = T5ForConditionalGeneration.from_pretrained(model_name)
             self.summarizer = pipeline(
