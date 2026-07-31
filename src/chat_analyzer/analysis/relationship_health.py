@@ -797,7 +797,7 @@ def plot_relationship_health_dashboard_enhanced(
     """
     if use_viz_module:
         try:
-            from src.utils.visualization import ChatVisualizer
+            from chat_analyzer.utils.visualization import ChatVisualizer
             viz = ChatVisualizer(figsize=(12, 6))
             
             # Use prepared data from analysis

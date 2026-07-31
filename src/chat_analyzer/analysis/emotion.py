@@ -12,7 +12,7 @@ Dependencies:
     - numpy>=1.24.0
 
 Usage:
-    from src.analysis.emotion import EmotionAnalyzer
+    from chat_analyzer.analysis.emotion import EmotionAnalyzer
     
     analyzer = EmotionAnalyzer()
     df_with_emotions = analyzer.analyze_emotions(df)
@@ -474,6 +474,7 @@ def combine_sentiment_emotion(df_sentiment: pd.DataFrame,
 
 
 # Module info
-print("🎭 Emotion Classification Module - Chat Analyzer Pro")
-print("This module provides advanced emotion analysis using transformers")
-print("Usage: from emotion import EmotionAnalyzer; analyzer = EmotionAnalyzer()")
+if __name__ == "__main__":
+    print("🎭 Emotion Classification Module - Chat Analyzer Pro")
+    print("This module provides advanced emotion analysis using transformers")
+    print("Usage: from emotion import EmotionAnalyzer; analyzer = EmotionAnalyzer()")
