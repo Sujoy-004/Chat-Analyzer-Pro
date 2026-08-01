@@ -9,11 +9,11 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Core CLI
 
-- [ ] **CLI-01**: User installs the tool with `pip install chat-analyzer-pro` and gets an `analyze` command
+- [x] **CLI-01**: User installs the tool with `pip install chat-analyzer-pro` and gets an `analyze` command
 - [ ] **CLI-02**: User runs `analyze <chat_file>` on a WhatsApp `.txt` or Telegram `.json` export and the full pipeline runs automatically
 - [ ] **CLI-03**: User sees a progress indicator while the pipeline runs
 - [ ] **CLI-04**: User gets a friendly, actionable error with export instructions when a file can't be parsed
-- [ ] **CLI-05**: User can see CLI help (`analyze --help`) with clear usage
+- [x] **CLI-05**: User can see CLI help (`analyze --help`) with clear usage
 
 ### Analysis
 
@@ -41,14 +41,14 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **PKG-02**: Heavy NLP deps (torch, transformers) are gated behind an optional `[nlp]` extra and lazy imports
 - [x] **PKG-03**: Base install avoids heavy deps and installs quickly
 - [x] **PKG-04**: Python >= 3.11 floor is documented and enforced
-- [ ] **PKG-05**: Package is installable from the repo (and PyPI-ready)
+- [x] **PKG-05**: Package is installable from the repo (and PyPI-ready)
 
 ### Quality
 
-- [ ] **QUAL-01**: Existing analysis modules still work (parsers, sentiment, analysis functions)
+- [x] **QUAL-01**: Existing analysis modules still work (parsers, sentiment, analysis functions)
 - [ ] **QUAL-02**: Tests pass for the new CLI (parse → analyze → render pipeline)
 - [ ] **QUAL-03**: README documents the "how a friend uses it" quickstart (export → pip install → one command)
-- [ ] **QUAL-04**: Web-app-only code (streamlit_app.py, unsafe_allow_html, exec-of-remote-code) is removed or excluded from the package
+- [x] **QUAL-04**: Web-app-only code (streamlit_app.py, unsafe_allow_html, exec-of-remote-code) is removed or excluded from the package
 
 ## v2 Requirements
 
@@ -93,11 +93,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CLI-01 | Phase 1 | Pending |
+| CLI-01 | Phase 1 | Complete |
 | CLI-02 | Phase 2 | Pending |
 | CLI-03 | Phase 2 | Pending |
 | CLI-04 | Phase 4 | Pending |
-| CLI-05 | Phase 1 | Pending |
+| CLI-05 | Phase 1 | Complete |
 | ANAL-01 | Phase 2 | Pending |
 | ANAL-02 | Phase 2 | Pending |
 | ANAL-03 | Phase 2 | Pending |
@@ -116,11 +116,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PKG-02 | Phase 1 | Complete |
 | PKG-03 | Phase 1 | Complete |
 | PKG-04 | Phase 1 | Complete |
-| PKG-05 | Phase 1 | Pending |
-| QUAL-01 | Phase 1 | Pending |
+| PKG-05 | Phase 1 | Complete |
+| QUAL-01 | Phase 1 | Complete |
 | QUAL-02 | Phase 4 | Pending |
 | QUAL-03 | Phase 4 | Pending |
-| QUAL-04 | Phase 1 | Pending |
+| QUAL-04 | Phase 1 | Complete |
 
 **Coverage:**
 - v1 requirements: 28 total

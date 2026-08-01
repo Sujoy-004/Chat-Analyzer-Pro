@@ -14,7 +14,7 @@ Four coarse-grained phases (compressing the research plan's 7 dependency-ordered
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Package Foundation** - Repackage `src/` → `src/chat_analyzer/`, pyproject with `[nlp]` extra, working `analyze` command; existing analysis core survives intact
+- [x] **Phase 1: Package Foundation** - Repackage `src/` → `src/chat_analyzer/`, pyproject with `[nlp]` extra, working `analyze` command; existing analysis core survives intact
 - [ ] **Phase 2: One-Command Terminal Insights** - Parser hardening + pipeline + rich/plotext terminal output: correct insights in one command
 - [ ] **Phase 3: Shareable HTML Report** - Self-contained single-file report with `--output` path and `--no-report` opt-out
 - [ ] **Phase 4: NLP Extras & Quality Gate** - `[nlp]`-gated features (emotion, health, summary, network), friendly errors with export instructions, tests, README quickstart
@@ -34,9 +34,9 @@ Decimal phases appear between their surrounding integers in numeric order.
   5. The installed package contains no web-app-only code (no `app/`, no `deployment/`, no `exec()` module fetcher)
 **Plans**: 2 plans
 
-**Wave 1** — 01-01-PLAN (package surgery: restructure + pyproject + deletions)
+**Wave 1** — 01-01-PLAN (package surgery: restructure + pyproject + deletions) — DONE
 
-**Wave 2** *(blocked on Wave 1 completion)* — 01-02-PLAN (CLI interactive slice)
+**Wave 2** — 01-02-PLAN (CLI interactive slice) — DONE
 
 **Cross-cutting constraints:** lean base install (no torch/transformers/streamlit/plotly in base — gated behind `[nlp]` extra with lazy imports); Python >=3.11 floor enforced; reuse existing analysis modules (no rewrite); reporting modules move but are NOT wired into the CLI; console script `chat-analyzer` (D-01) with `python -m chat_analyzer` fallback (D-02)
 
@@ -85,7 +85,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Package Foundation | 1/2 | In Progress|  |
+| 1. Package Foundation | 2/2 | Complete | 2026-08-01 |
 | 2. One-Command Terminal Insights | TBD | Not started | - |
 | 3. Shareable HTML Report | TBD | Not started | - |
 | 4. NLP Extras & Quality Gate | TBD | Not started | - |

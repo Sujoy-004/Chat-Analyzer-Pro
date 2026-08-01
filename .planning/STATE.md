@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Plan
-last_updated: "2026-07-31T13:24:05.633Z"
-last_activity: 2026-07-31 — Plan 01-01 complete (package surgery + gate approved); wave 2 (plan 01-02) next
+last_updated: "2026-08-01T06:27:00Z"
+last_activity: 2026-08-01 -- Phase 1 complete (2/2 plans); plan 01-02 CLI interactive slice done
 progress:
   total_phases: 4
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 1
-  percent: 50
+  completed_plans: 2
+  percent: 100
 ---
 
 # Project State
@@ -25,30 +25,30 @@ See: .planning/PROJECT.md (updated 2026-07-31)
 
 ## Current Position
 
-Phase: 1 of 4 (Package Foundation)
-Plan: 1 of 2 in current phase
-Status: Executing
-Last activity: 2026-07-31 — Plan 01-01 complete (package surgery + gate approved); wave 2 (plan 01-02) next
+Phase: 1 of 4 (Package Foundation) — COMPLETE
+Plan: 2 of 2 in current phase
+Status: Phase 1 complete — ready for Phase 2 planning
+Last activity: 2026-08-01 — Plan 01-02 complete (CLI interactive slice); Phase 1 done
 
-Progress: [█████░░░░░] 50%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 1
-- Average duration: 20min
-- Total execution time: 0.3 hours
+- Total plans completed: 2
+- Average duration: 22.5min
+- Total execution time: 0.8 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 1. Package Foundation | 1 / 2 | 20min | 20min |
+| 1. Package Foundation | 2 / 2 | 45min | 22.5min |
 
 **Recent Trend:**
 
-- Last 5 plans: 01-01 Package Foundation (20min)
+- Last 5 plans: 01-01 Package Foundation (20min), 01-02 CLI Interactive Slice (25min)
 - Trend: —
 
 *Updated after each plan completion*
@@ -73,6 +73,10 @@ Recent decisions affecting current work:
 - [Phase 1]: transformers pin <6 in [nlp] extra (5.x breaks the 4.x-era core code); torch/transformers excluded from base install by design (PKG-03)
 - [Phase 1]: requirements.txt deleted — pyproject.toml is the single dependency manifest (avoids duplicated-manifests drift, CONCERNS.md:42-45; recoverable from git)
 - [Phase 1]: Package-legitimacy gate human-approved: typer/rich/plotext/hatchling verified real on PyPI with in-range versions (T-01-SC mitigated) — plan 01-02 may pip install -e .
+- [Phase 1]: Import-matrix smoke test uses `-X utf8` + explicit utf-8 decode — legacy sentiment.py emoji module-load print crashes bare cp1252 subprocesses (Pitfall 5); legacy modules stay byte-identical
+- [Phase 1]: typer.prompt on EOF raises typer Abort → app exits 1 "Aborted." with no traceback — accepted as re-prompt-loop EOF behavior
+- [Phase 1]: BLE001 # noqa on main.py `except Exception` — plan-mandated degrade-not-crash convention overrides ruff blanket-ban
+- [Phase 1]: plotly 6.7.0 pre-exists in local base env (old app era) — not pulled by `pip install -e .`; QUAL-04 proven structurally + via package-tree scan
 
 ### Pending Todos
 
@@ -101,6 +105,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-31T13:24:05.623Z
-Stopped at: Plan
-Resume file: .planning/phases/01-package-foundation/01-02-PLAN.md
+Last session: 2026-08-01T06:27:00Z
+Stopped at: Plan (Phase 1 complete — 2/2 plans)
+Resume file: None — next: plan Phase 2 (One-Command Terminal Insights)
