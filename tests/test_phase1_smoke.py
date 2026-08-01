@@ -9,17 +9,21 @@ Covers, in order:
 6. QUAL-01: all chat_analyzer.* modules import after install
 7. QUAL-04: no web-app tokens (exec(code / unsafe_allow_html / streamlit / plotly)
 8. ROADMAP criterion 4: the analysis core PRODUCES results, not just imports
+9. PKG-02/03: lean base install — heavy deps structurally confined to [nlp]
+10. D-10/D-11: reporting modules importable but NOT wired into the CLI
 """
 
 import importlib.util
 import re
 import subprocess
 import sys
+import tomllib
+import warnings
 from pathlib import Path
 
 import pandas as pd
-import pytest
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
 SAMPLE_WHATSAPP = "data/sample_chats/whatsapp_sample.txt"
 KNOWN_WHATSAPP_COUNT = 27
 
@@ -62,6 +66,7 @@ def run_cli(args, stdin_text):
         text=True,
         capture_output=True,
         timeout=90,
+        check=False,
     )
 
 
@@ -73,6 +78,7 @@ def run_python_m(args, stdin_text=""):
         text=True,
         capture_output=True,
         timeout=90,
+        check=False,
     )
 
 
@@ -132,6 +138,7 @@ def test_import_matrix():
         errors="replace",
         capture_output=True,
         timeout=90,
+        check=False,
     )
     assert result.returncode == 0, result.stderr
     assert "IMPORT-MATRIX-OK" in result.stdout
@@ -187,3 +194,69 @@ def test_analysis_core_produces_results():
     assert "health_score" in health
     assert "conversation_stats" in health
     assert health["conversation_stats"]["total_messages"] == 4
+
+
+def _dependency_names(entries):
+    """Strip version specifiers from pyproject dependency entries."""
+    names = []
+    for entry in entries:
+        match = re.match(r"^[A-Za-z0-9._-]+", entry)
+        if match:
+            names.append(match.group(0))
+    return names
+
+
+def test_lean_base_structural():
+    """Heavy deps confined to [nlp]; base install stays lean (PKG-02/03)."""
+    with (REPO_ROOT / "pyproject.toml").open("rb") as handle:
+        pyproject = tomllib.load(handle)
+
+    project = pyproject["project"]
+    assert project["requires-python"] == ">=3.11"
+
+    base_names = _dependency_names(project["dependencies"])
+    for heavy in ("torch", "transformers", "streamlit", "plotly"):
+        assert heavy not in base_names, f"{heavy} must not be a base dependency"
+
+    nlp_names = _dependency_names(project["optional-dependencies"]["nlp"])
+    assert nlp_names == ["torch", "transformers"]
+
+    # Environment half: confirm torch is absent from the current base env.
+    # Non-fatal if a pre-existing torch happens to be installed (old app era).
+    if importlib.util.find_spec("torch") is None:
+        assert importlib.util.find_spec("transformers") is None
+    else:
+        warnings.warn(
+            "torch is importable in this base environment (pre-existing install); "
+            "only the pyproject structural confinement is asserted.",
+            stacklevel=2,
+        )
+
+
+def test_reporting_importable_but_not_wired():
+    """Reporting modules ship importable; the CLI does not reference them (D-10/11)."""
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-X",
+            "utf8",
+            "-c",
+            (
+                "import chat_analyzer.reporting.pdf_report, "
+                "chat_analyzer.reporting.weekly_digest; print('REPORTING-OK')"
+            ),
+        ],
+        encoding="utf-8",
+        errors="replace",
+        capture_output=True,
+        timeout=90,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "REPORTING-OK" in result.stdout
+
+    cli_source = (REPO_ROOT / "src" / "chat_analyzer" / "cli" / "main.py").read_text(
+        encoding="utf-8"
+    )
+    for token in ("pdf_report", "weekly_digest", "reportlab"):
+        assert token not in cli_source, f"CLI must not reference {token}"
