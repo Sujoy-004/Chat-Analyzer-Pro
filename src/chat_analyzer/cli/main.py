@@ -43,7 +43,7 @@ def main() -> None:
             typer.echo(f"Processed {path}:")
             typer.echo(f"Messages: {len(messages)}")
             typer.echo(f"Media items: {len(media)}")
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - degrade-not-crash convention
             typer.echo(f"Could not process {path}: {exc}", err=True)
             raise typer.Exit(code=1)
         raise typer.Exit(code=0)
