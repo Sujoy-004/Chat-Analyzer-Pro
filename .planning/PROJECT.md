@@ -35,9 +35,16 @@ One command turns a raw chat export into real insights about the conversation �
 - [ ] CLI entry point: single command like `analyze <chat_file>` that runs the full pipeline
 - [ ] Terminal output: insights with inline charts (plotext/rich)
 - [ ] HTML report generation: shareable report of the analysis
-- [ ] Installable via pip (`pip install chat-analyzer-pro` + `chat-analyzer` command)
 - [ ] User-friendly error handling and export instructions for WhatsApp/Telegram
 - [ ] README updated with "how a friend uses it" quickstart
+
+#### Validated in Phase 1: Package Foundation
+
+- ✓ Installable via pip — `pip install -e .` / wheel build (PKG-05), `chat-analyzer` console script (D-01) + `python -m chat_analyzer` fallback (D-02), both answering `--help` instantly (CLI-01, CLI-05)
+- ✓ `src/` restructured into single importable `src/chat_analyzer/` package with valid markers (PKG-01); Python `>=3.11` floor enforced (PKG-04)
+- ✓ Heavy deps gated behind `[nlp]` extra + lazy imports; base install stays lean (PKG-02, PKG-03)
+- ✓ Existing analysis core survives restructure — 20-module import matrix + live `Messages: 27` run (QUAL-01)
+- ✓ Web-app-only code removed (no `app/`, `deployment/`, `exec()` fetcher, streamlit/plotly) (QUAL-04)
 
 ### Out of Scope
 
@@ -74,6 +81,10 @@ One command turns a raw chat export into real insights about the conversation �
 | Terminal + HTML output | Terminal = instant insights with inline charts; HTML = shareable report card | — Pending |
 | WhatsApp + Telegram formats | Both have native one-tap exports and parsers already exist in `src/` | — Pending |
 | Drop web-app-only code (streamlit_app.py, unsafe_allow_html, exec-of-remote-code) | Not needed for CLI; removes the security concerns mapped in CONCERNS.md | — Pending |
+| Console script `chat-analyzer` (not `analyze`) | `analyze` collides with existing PyPI tools; `chat-analyzer` is free (D-01) | — Accepted (Phase 1) |
+| requirements.txt deleted; pyproject.toml is single manifest | Avoids duplicated-manifests drift (CONCERNS.md:42-45) | — Accepted (Phase 1) |
+| transformers pinned <6 in `[nlp]` extra | 5.x breaks the 4.x-era core code; torch/transformers excluded from base by design | — Accepted (Phase 1) |
+| Interactive file-path prompt is the CLI UX (no positional arg yet) | Walking-skeleton phase; `analyze <file>` lands in Phase 2 | — Accepted (Phase 1) |
 
 ## Evolution
 
@@ -93,4 +104,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-07-31 after initialization*
+*Last updated: 2026-08-01 after Phase 1 completion*
