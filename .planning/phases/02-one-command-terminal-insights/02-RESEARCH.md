@@ -563,7 +563,10 @@ console.print(f"Report: {report_path}")                     # absolute path (D-0
 | A5 | rich `Panel` default (rounded) box renders acceptably on modern Windows Terminal after utf-8 reconfigure | Terminal | LOW — ASCII box recommended as the safe default (Pitfall 5), cosmetics are D-05 discretion |
 | A6 | `get_sentiment_summary`'s `consensus_sentiment` key is present when only VADER is available | Adapters | LOW — verified logic: `sentiment_cols` includes `vader_sentiment` → `consensus_sentiment` = VADER labels in base install |
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+> All five questions below are resolved in `02-PLAN.md` → **Reconciliation Summary**:
+> 1. parser-direct pipeline in `run_pipeline` (hardened parsers called directly; `process_uploaded_file` untouched) — 2. OUT-05 "not applicable in Phase 2, report always generated" — 3. `*_with_report` entry points returning `(rows, counts_dict)` wrapped in `cli/contracts.py` `ParseReport` (old signatures preserved) — 4. `contextlib.redirect_stdout` around the analysis stage — 5. `chat-analyzer 0.1.0` via `importlib.metadata.version("chat-analyzer-pro")` with a manual eager `--version` callback.
 
 1. **Pipeline data path: parser-direct vs `process_uploaded_file` delegation.** The CONTEXT names `process_uploaded_file` as "pipeline entry point" AND names `parser/*.py` as the hardening targets; only the latter contains the `datetime.now()` fabrication. Recommended resolution: pipeline calls the hardened parser modules directly for `.txt`/`.json` (rows + `ParseReport`), keeping `process_uploaded_file` for other formats/back-compat. Planner must pick one and keep it consistent.
    - What we know: both paths exist; ingestion's `parse_whatsapp_text`/`parse_json_chat` have their own (un-hardened) behavior and the telegram dict path carries a date-field bug (`date` = full ISO, `time` = "").
