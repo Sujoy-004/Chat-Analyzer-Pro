@@ -31,7 +31,7 @@ requirements: [CLI-02, CLI-03, ANAL-01, ANAL-02, ANAL-03, ANAL-04, ANAL-05, OUT-
 must_haves:
   truths:
     - "User runs one command (`chat-analyzer <file>` or `python -m chat_analyzer` + interactive prompt) and the full pipeline runs end-to-end automatically"
-    - "Terminal narrates each stage (Parsing/Computing/Writing) with ASCII spinners and surfaces the parsed-message count immediately after parsing (D-05, CLI-03)"
+    - "Terminal narrates each stage (Parsing/Computing/Writing) with ASCII spinners and surfaces the parsed-message count immediately after parsing as BOTH an `[OK] Parsed N messages...` stage line AND a `Messages: N` token — the latter in the exact case-sensitive `Messages:\s*(\d+)` shape that Phase 1's test_phase1_smoke.py::message_count() regexes on, so smoke tests 3 & 4 keep passing (D-05, CLI-03)"
     - "No fabricated timestamps anywhere: unparseable lines are counted in skipped_lines and surfaced on a single line; a fake timestamp is corrupt data (D-15/D-16)"
     - "System messages (encryption notice, X added Y, header-without-sender) are classified as type=system, counted, and never appended to the previous message (D-18)"
     - "Telegram exports parse in both shapes (bare Chat + chats.list[]), join entity-array text recursively, filter service messages, and normalize tz-aware dates to naive UTC (D-19/D-20)"
@@ -48,7 +48,7 @@ must_haves:
       provides: "Module dicts (ChatEDA/sentiment/parse counts) → AnalysisResults + narrative insight lead-in builders (D-11)"
       exports: ["adapt"]
     - path: "src/chat_analyzer/cli/render.py"
-      provides: "rich terminal narration: parsed count, skip line (D-16), ASCII summary panel (D-07), absolute path (D-08)"
+      provides: "rich terminal narration: skip line (D-16), system line (D-18), ASCII summary panel (D-07), absolute path (D-08)"
       exports: ["show_summary"]
     - path: "src/chat_analyzer/cli/report_html.py"
       provides: "jinja2 autoescape single-file report (5 tabs, lead-ins, base64 charts), filename sanitize (D-14), utf-8 write, auto-open (D-09)"
@@ -104,8 +104,12 @@ WhatsApp `.txt` / Telegram `.json` export, computes insights with the existing
 analysis core (ChatEDA + VADER — **reused, never rewritten**), and produces a
 self-contained, tabbed HTML report card with narrative insight lead-ins and
 base64-embedded matplotlib charts. The terminal stays thin: stage narration,
-an immediate parsed-message count, a skip-count line, a compact summary panel,
-and the absolute report path. The report auto-opens in the default browser.
+an immediate parsed-message count surfaced twice — the `[OK] Parsed N messages...`
+stage line from the pipeline **and** a literal `Messages: N` token printed by
+`main.py` (the exact case-sensitive shape Phase 1's
+`test_phase1_smoke.py::message_count()` regexes on, so smoke tests 3 & 4 keep
+passing) — a skip-count line, a compact summary panel, and the absolute report
+path. The report auto-opens in the default browser.
 
 > **CONTEXT reshaped this phase (02-CONTEXT.md):** the HTML report card is the
 > primary deliverable. OUT-03/04/05 and CLI-08 are **pulled forward** into this
@@ -133,7 +137,7 @@ must be updated post-planning** (see section below); this table is the new truth
 | Req ID | Description (reconciled) | Status in Phase 2 | Delivered By |
 |--------|--------------------------|-------------------|--------------|
 | CLI-02 | `chat-analyzer <chat_file>` runs the full pipeline automatically | **IN SCOPE** (D-02 positional arg; no-arg still prompts) | Task 8, Task 5, Task 9 |
-| CLI-03 | Progress indicator + parsed-message count surfaced early | **IN SCOPE** (D-05 rich Status, ASCII `line` spinner) | Task 6, Task 5 |
+| CLI-03 | Progress indicator + parsed-message count surfaced early | **IN SCOPE** (D-05 rich Status, ASCII `line` spinner; `Messages: N` smoke-contract token) | Task 6, Task 5, Task 8 |
 | ANAL-01 | Summary stats (volume, participants, date range, counts) | **IN SCOPE** (D-13 full depth via ChatEDA) | Task 5 |
 | ANAL-02 | Per-participant stats (messages, avg length, response behavior) | **IN SCOPE** | Task 5 |
 | ANAL-03 | Timeline/activity trends (per day/week/hour, busiest times) | **IN SCOPE** | Task 5 |
@@ -169,6 +173,10 @@ must be updated post-planning** (see section below); this table is the new truth
 - **`--version` (Open Question 5):** `chat-analyzer 0.1.0` via
   `importlib.metadata.version("chat-analyzer-pro")` — typer 0.27 has **no**
   `version` param [VERIFIED], so a manual eager callback.
+- **Phase 1 smoke contract preserved:** the terminal keeps a literal
+  `Messages: <int>` token (printed once by `_analyze_path` in Task 8) because
+  `test_phase1_smoke.py::message_count()` regexes `Messages:\s*(\d+)`
+  case-sensitively — smoke tests 3 & 4 depend on it and would fail without it.
 
 ## Dependency Graph
 
@@ -190,6 +198,21 @@ Task 9 (CLI e2e tests + full verification)
 | 3 | Task 5 — pipeline + adapters + viz logging fix; Task 6 — render | Task 5: `cli/pipeline.py`, `cli/adapters.py`, `utils/visualization.py`, `tests/test_phase2_pipeline.py`; Task 6: `cli/render.py` | **Yes** (Task 6 does not touch Task 5 files) |
 | 4 | Task 7 — report_html; Task 8 — main.py wiring | Task 7: `cli/report_html.py`, `tests/test_phase2_report.py`; Task 8: `cli/main.py` | **Yes** |
 | 5 | Task 9 — CLI e2e tests + full verification | `tests/test_phase2_cli.py` | after Wave 4 |
+
+> **Single-file plan rationale (checker WARNING #10 — kept as one file):** the
+> 9 tasks form a strict linear DAG — `1 → {2,3} → 4 → {5,6} → {7,8} → 9` — where
+> every task either consumes a Task-1 contract or a prior wave's output, and no
+> branch could execute in parallel across any split boundary. Each wave's task
+> files are disjoint, so the execute-phase wave scheduler (which parallelizes
+> same-wave plans from `wave:` frontmatter) already achieves exactly the
+> parallelism a two-file split would. Splitting into `02-01`/`02-02` would
+> duplicate the must_haves / verification / threat-model sections and add
+> cross-file `depends_on` + interface handoff bookkeeping for zero execution
+> benefit. (Phase 1's two-file split existed because the 01-01 restructure and
+> 01-02 CLI slice were genuinely independent capability slices; Phase 2 is one
+> pipeline.) Each task is individually sized 10–30% context and execute-plan
+> reads one task at a time, so the single file does not exceed a single
+> executor's context budget.
 
 ## Task Breakdown
 
@@ -221,7 +244,11 @@ Task 9 (CLI e2e tests + full verification)
       (timeline|activity|participants|sentiment → base64 PNG data URI);
       `insights: List[str]` (narrative lead-ins, D-11); `report_path: str` (filled by
       `main.py` after `report_html.write_report`).
-    - Use double quotes, `from typing import Any, Dict, List, TypedDict`, `from dataclasses import dataclass`.
+    - LINT (this file sits in the hard-clean `cli/` dir — battery step 7): use double
+      quotes and MODERN typing — `from typing import Any, TypedDict` only, plus builtin
+      generics `dict[str, Any]`, `list[tuple[str, int]]`, `list[str]`, `str | None`.
+      Do NOT use `typing.Dict`/`typing.List`/`Optional[...]` (ruff 0.16.1 default select
+      flags them UP035/UP006/UP045 and this file must lint clean).
       Do NOT put implementation logic here — contracts only (TypedDicts are runtime-checkable no-ops).
 
     Create `tests/fixtures/` directory and three fixture files (exact content, byte-for-byte —
@@ -276,11 +303,13 @@ Task 9 (CLI e2e tests + full verification)
       # fixture files exist and line counts match
       (Get-Content tests/fixtures/whatsapp_system_skip.txt).Count -eq 7
       Test-Path tests/fixtures/telegram_full_export.json; Test-Path tests/fixtures/telegram_bare_entity.json
+      # lint: new cli file must be clean under ruff 0.16.1 defaults (battery step 7)
+      python -m ruff check src/chat_analyzer/cli/contracts.py
     </automated>
   </verify>
   <done>
-    contracts.py imports with both symbols; the three fixture files exist with the exact
-    content above; existing sample_chats untouched.
+    contracts.py imports with both symbols and lints clean; the three fixture files exist
+    with the exact content above; existing sample_chats untouched.
   </done>
 </task>
 
@@ -313,10 +342,21 @@ Task 9 (CLI e2e tests + full verification)
     - Test 5 (multiline): a continuation line joins the previous message with "\n".
     - Test 6 (exact counts): parse_file_with_report(tests/fixtures/whatsapp_system_skip.txt)
       returns parsed=3, skipped=1, system=2, total_lines=7, and exactly 3 rows.
-    - Test 7 (QUAL-01): parse_file(path) still returns a pandas DataFrame (hardened internals).
+    - Test 7 (QUAL-01, HIGH #2): parse_file(path) still returns a pandas DataFrame
+      (hardened internals) whose columns include "time_period" — proving the strict rows
+      carry `hour` (plus date/time/day_of_week/word_count) into `_add_features` so its
+      line 169 (`df['hour'].apply(...)`) does NOT KeyError.
   </behavior>
   <action>
     Implement in `src/chat_analyzer/parser/whatsapp_parser.py` (modify, do not rewrite):
+
+    LINT note for this file (under the battery step 7 non-growth gate — baseline 84
+    findings across parser/ + ingestion/, Phase 1 precedent: legacy debt stays):
+    new annotations use builtin generics / PEP 604 unions (`dict`, `list`,
+    `X | None`, `tuple[list[dict], dict]`) — NOT `Dict`/`List`/`Optional` (UP006/UP035/UP045);
+    no bare `except:` (E722); the one new `datetime.strptime` call site carries
+    `# noqa: DTZ007` with a justification comment (WhatsApp exports carry no timezone —
+    the naive datetime is deliberate and normalized to naive UTC downstream).
 
     1. **Delete the four `datetime.now()` fallbacks** at lines 61, 63, 77, 79 entirely
        (D-15). Add a class-level `DATE_FORMATS` tuple (module-level is fine) listing the
@@ -324,9 +364,10 @@ Task 9 (CLI e2e tests + full verification)
        `%m/%d/%y %I:%M %p`, `%d/%m/%y %I:%M %p`, `%m/%d/%Y %I:%M %p`, `%d/%m/%Y %I:%M %p`,
        `%m/%d/%y %I:%M:%S %p`, `%d/%m/%y %I:%M:%S %p`, `%m/%d/%y %H:%M`, `%d/%m/%y %H:%M`,
        `%m/%d/%Y %H:%M`, `%d/%m/%Y %H:%M`, `%m/%d/%y %H:%M:%S`, `%d/%m/%y %H:%M:%S`.
-    2. Add a private `_parse_datetime_strict(self, datetime_str) -> Optional[datetime]`
+    2. Add a private `_parse_datetime_strict(self, datetime_str) -> datetime | None`
        that tries each format and returns None on total failure (research Pitfall 1 code
-       example) — NEVER `datetime.now()`.
+       example) — NEVER `datetime.now()`. The `datetime.strptime` call line ends with
+       `  # noqa: DTZ007 - WhatsApp timestamps carry no tz; naive is deliberate (normalized downstream)`.
     3. **Counter state:** in `__init__` add `self.skipped_lines = 0`,
        `self.system_messages = 0`, `self.total_lines = 0` (reset per parse call — see step 6).
     4. **System classification (D-18):** add a header-only regex
@@ -336,24 +377,30 @@ Task 9 (CLI e2e tests + full verification)
        gated to lines <= 120 chars to avoid swallowing prose continuations. Also match the
        encryption notice explicitly:
        `self.encryption_notice = re.compile(r"^Messages and calls are end-to-end encrypted\.?$", re.IGNORECASE)`.
-    5. **Per-line classification order in a new `parse_line_strict(line) -> Optional[Dict]`**
+    5. **Per-line classification order in a new `parse_line_strict(line) -> dict | None`**
        (keep `parse_line` as a thin delegate for QUAL-01, or have parse_line call it):
        a. strip line; if empty → None.
        b. `message_pattern`/`alt_pattern` match WITH sender → parse date strictly; if
           `_parse_datetime_strict` returns None → `self.skipped_lines += 1`, return None
           (never a continuation — D-15); else return the message dict with key `datetime`
-          (not `timestamp`), plus `sender`, `message`, `message_length`, `type: "message"`.
+          (not `timestamp`), plus `sender`, `message`, `message_length`, `type: "message"`,
+          and — **HIGH #2, required for `_add_features` parity** — `date: dt.date()`,
+          `time: dt.time()`, `hour: dt.hour`, `day_of_week: dt.strftime('%A')`,
+          `word_count: len(message.strip().split())` (identical key set to today's
+          `parse_line` contract at lines 85-90, so line 169's `df['hour'].apply(...)`
+          never KeyErrors).
        c. encryption-notice match → `self.system_messages += 1`; return None.
        d. system-header match (timestamp, no sender) → `self.system_messages += 1`; return None.
        e. system-phrase match → `self.system_messages += 1`; return None.
        f. otherwise → None (caller decides continuation vs skip).
-    6. **`parse_file_with_report(self, file_path: str) -> Tuple[List[Dict], Dict]`** — NEW
+    6. **`parse_file_with_report(self, file_path: str) -> tuple[list[dict], dict]`** — NEW
        entry point: reset counters, open the file with `encoding="utf-8-sig", errors="replace"`
        (BOM-safe, Pitfall Integration table), loop lines with `self.total_lines += 1` per
        non-empty line, classify per step 5; a bare non-message line when a current message
-       exists → append as continuation (`"\n" + stripped`); a bare non-message line with NO
-       current message → `self.skipped_lines += 1` (honest count, no orphan fabrication).
-       Returns `(rows, {"total_lines":..., "parsed_messages": len(rows),
+       exists → append as continuation (`"\n" + stripped`) AND refresh the row's
+       `message_length`/`word_count` (same as today's lines 119-120); a bare non-message
+       line with NO current message → `self.skipped_lines += 1` (honest count, no orphan
+       fabrication). Returns `(rows, {"total_lines":..., "parsed_messages": len(rows),
        "skipped_lines":..., "system_messages":...})`. System rows never enter `rows`.
     7. **`parse_file(self, file_path) -> pd.DataFrame`** — KEPT for QUAL-01: delegate to the
        same hardened loop (call `parse_file_with_report`), build the df from rows, then
@@ -373,7 +420,9 @@ Task 9 (CLI e2e tests + full verification)
   </verify>
   <done>
     All 7 behavior tests pass; exactly 0 matches for `datetime.now()` in whatsapp_parser.py;
-    parse_file_with_report returns exact counts on the fixture; test_import_matrix still passes.
+    parse_file_with_report returns exact counts on the fixture (and rows carry
+    date/time/hour/day_of_week/word_count — HIGH #2); parse_file yields the "time_period"
+    column without KeyError; test_import_matrix still passes.
   </done>
 </task>
 
@@ -397,28 +446,42 @@ Task 9 (CLI e2e tests + full verification)
       04:16:00 naive UTC.
     - Test 6 (malformed dropped honestly): bad-date message → skipped_lines += 1 (never a
       silent bare `except: continue`); non-"message" type (e.g. "forwarded") → skipped += 1.
-    - Test 7 (not a chat export): `{"chats": []}` or a dict with neither "messages" nor
-      "chats" → raises ValueError containing "Not a Telegram chat export".
+    - Test 7 (not a chat export, MEDIUM #3): `{"chats": []}` AND `{"messages": []}` AND a
+      dict with neither "messages" nor "chats" all raise ValueError containing
+      "Not a Telegram chat export".
     - Test 8 (QUAL-01): parse_telegram_chat(source) still returns a pandas DataFrame
       (hardened internals; system/service rows excluded; datetime naive UTC).
   </behavior>
   <action>
     Implement in `src/chat_analyzer/parser/telegram_parser.py` (modify, do not rewrite):
 
+    LINT note for this file (battery step 7 non-growth gate): new annotations use builtin
+    generics (`dict`, `list`, `datetime | None` style), no bare `except:` (E722), and
+    `datetime.fromisoformat` is called directly (Python >= 3.11 accepts a trailing `Z`
+    natively — the old `.replace("Z", "+00:00")` trips ruff FURB162 and is removed, which
+    also deletes the pre-existing FURB162 at line 34).
+
     1. Add module-level helpers per research Pitfall 4 code example:
-       - `_load_messages(data: dict) -> list`: if `data.get("messages")` is a list → return
-         it (bare Chat, single-chat export); elif `data.get("chats")` is a list → flatten
+       - `_load_messages(data: dict) -> list`: if `data.get("messages")` is a list → use it
+         (bare Chat, single-chat export); elif `data.get("chats")` is a list → flatten
          `chat["messages"]` for every dict chat that has a messages list (full export);
-         else raise `ValueError("Not a Telegram chat export (no 'messages' or 'chats' key)")`
-         — replaces the `data.get('messages', [])` at line 25 and the silent empty result.
+         else raise `ValueError("Not a Telegram chat export (no 'messages' or 'chats' key)")`.
+         **After either branch: `if not result: raise ValueError("Not a Telegram chat export (no messages found)")`**
+         — so `{"chats": []}` and `{"messages": []}` raise instead of silently parsing to
+         zero (MEDIUM #3; matches Behavior Test 7 — an empty export is not a usable chat,
+         and the friendly D-19 error beats a silent empty result; the pipeline's empty-df
+         guard remains the second net for all-messages-skipped files). This replaces the
+         `data.get('messages', [])` at line 25 and the silent empty result.
        - `_join_text(parts) -> str`: str → as-is; list → join str parts AND entity-dict parts'
          `"text"` values (this fixes the dropped-dict-parts bug at lines 44-46); dict parts
          without a text key are skipped; empty result + `photo`/`video`/`document`/`audio`
          present → `"<Media omitted>"`.
-       - `_to_naive_utc(date_str: str) -> datetime`: `datetime.fromisoformat(date_str.replace("Z", "+00:00"))`,
-         then `.astimezone(timezone.utc).replace(tzinfo=None)` when tz-aware, pass-through
+       - `_to_naive_utc(date_str: str) -> datetime`: `datetime.fromisoformat(date_str)`
+         DIRECTLY (Python >= 3.11 handles the `Z` suffix natively — no
+         `.replace("Z", "+00:00")`, ruff FURB162), then
+         `.astimezone(timezone.utc).replace(tzinfo=None)` when tz-aware, pass-through
          when naive (D-20; Telegram exports are UTC per official schema).
-    2. **`parse_telegram_chat_with_report(source: str) -> Tuple[List[Dict], Dict]`** — NEW:
+    2. **`parse_telegram_chat_with_report(source: str) -> tuple[list[dict], dict]`** — NEW:
        load JSON (keep the existing URL-vs-file handling with `requests`); `messages =
        _load_messages(data)`; loop each message (counters: `total_lines = len(messages)`):
        - `type == "service"` → `system_messages += 1`; continue (D-18/19).
@@ -428,13 +491,17 @@ Task 9 (CLI e2e tests + full verification)
          drops without counting (fixes lines 35-36).
        - `text = _join_text(msg.get("text"))`; `sender = msg.get("from") or msg.get("actor")
          or "Unknown"` (channels/service-adjacent posts; D-19).
-       - row = `{"datetime": dt, "sender": sender, "message": text, "message_length": len(text)}`
-         (optionally keep `id`/`message_id` when present — the builder tolerates extra keys).
+       - row = `{"datetime": dt, "sender": sender, "message": text, "message_length": len(text),
+         "date": dt.date(), "time": dt.time(), "hour": dt.hour, "type": "message"}` plus
+         `message_id: msg.get("id")` when present — parity with today's contract at lines
+         51-61 so `parse_telegram_chat`'s QUAL-01 df keeps its core columns; the canonical
+         builder tolerates the extra keys.
        Returns `(rows, {"total_lines", "parsed_messages": len(rows), "skipped_lines", "system_messages"})`.
     3. **`parse_telegram_chat(source)`** — KEPT for QUAL-01: delegate to the hardened logic
        and return a DataFrame with the same core columns as today (datetime, sender, message,
        date, time, hour, message_length, message_id, type) — system/service rows excluded,
-       datetime naive UTC.
+       datetime naive UTC. Documented behavior change: empty/unparseable exports now raise
+       ValueError from `_load_messages` (previously returned an empty DataFrame).
   </action>
   <verify>
     <automated>
@@ -446,7 +513,9 @@ Task 9 (CLI e2e tests + full verification)
   </verify>
   <done>
     All 8 behavior tests pass; parse_telegram_chat_with_report returns exact counts on both
-    new fixtures and 5/5 on the sample; every row datetime is tz-naive; no bare `except: continue`.
+    new fixtures and 5/5 on the sample; `{"chats": []}`/`{"messages": []}`/missing-key dicts
+    all raise "Not a Telegram chat export" (MEDIUM #3); every row datetime is tz-naive; no
+    bare `except: continue`; no `.replace("Z", ...)` remains (FURB162).
   </done>
 </task>
 
@@ -477,13 +546,19 @@ Task 9 (CLI e2e tests + full verification)
   <action>
     Modify `src/chat_analyzer/ingest/ingestion.py` (additive):
 
+    LINT note for this file (battery step 7 non-growth gate — baseline 84 findings across
+    parser/ + ingestion/, Phase 1 precedent: legacy debt stays): new code must add ZERO
+    new ruff findings — builtin generics, no bare excepts, and `datetime.fromisoformat`
+    called directly (no `.replace("Z", "+00:00")`, FURB162).
+
     1. Add `from datetime import timezone` to the existing datetime import (line 25).
     2. Add a module-level `_to_naive_utc(value) -> datetime` helper (same logic as the
        telegram parser's — single normalization contract, D-20): accepts datetime objects
-       and ISO strings (`str.replace("Z", "+00:00")` → `fromisoformat` → aware → naive UTC;
-       naive → unchanged). Raise nothing — return the best-effort parse and let the caller
-       decide.
-    3. Add `def messages_to_dataframe(messages: List[Dict]) -> pd.DataFrame` (research
+       and ISO strings — `datetime.fromisoformat(value)` directly (Python >= 3.11 accepts a
+       trailing `Z` natively, no `.replace("Z", "+00:00")` — ruff FURB162 flags the replace
+       as unnecessary on the 3.11 floor) → aware → naive UTC; naive → unchanged.
+       Raise nothing — return the best-effort parse and let the caller decide.
+    3. Add `def messages_to_dataframe(messages: list[dict]) -> pd.DataFrame` (research
        Anti-Pattern 5 — the SINGLE source for dicts→df; never a second copy in `cli/`):
        per message: `dt = m.get("datetime") or m.get("timestamp")`; elif `"T" in str(m.get("date",""))`
        → `_to_naive_utc(m["date"])` (ingestion-path telegram full-ISO bug); elif
@@ -501,7 +576,8 @@ Task 9 (CLI e2e tests + full verification)
     4. `normalize_message` (line 323): in the `elif raw_msg.get("datetime")` branch, replace
        `datetime.fromisoformat(str(raw_msg["datetime"]).replace('Z', '+00:00'))` with a call
        to `_to_naive_utc(str(raw_msg["datetime"]))` so tz-aware telegram values normalize to
-       naive UTC at the ingestion boundary too. No other normalize_message changes.
+       naive UTC at the ingestion boundary too (this also removes the pre-existing FURB162
+       at line 353). No other normalize_message changes.
     5. Do NOT modify `process_uploaded_file` (line 399) — it stays the back-compat path for
        other formats; the pipeline calls the hardened parsers directly (research Open Question 1).
 
@@ -523,7 +599,8 @@ Task 9 (CLI e2e tests + full verification)
     </automated>
   </verify>
   <done>
-    All 5 builder tests pass; DEPS-OK prints; test_lean_base_structural still passes.
+    All 5 builder tests pass; DEPS-OK prints; test_lean_base_structural still passes;
+    no `.replace("Z", ...)` remains in the new helper or normalize_message (FURB162).
   </done>
 </task>
 
@@ -558,6 +635,9 @@ Task 9 (CLI e2e tests + full verification)
       containing "Unsupported" (only .txt/.json supported in this phase).
     - Test 6 (Agg headless): importing cli.pipeline and calling run_pipeline succeeds with
       no display/TclError; matplotlib backend is "Agg" during the run.
+    - Test 7 (LOW #9 edge): adapt()/build_insights on a single-message chat whose dynamics
+      has no "avg_response_time" key → the assembled insights contain NO "None" substring
+      and the response insight reads "no measurable" phrasing; adapt() does not crash.
   </behavior>
   <action>
     Neutralize core logging first (CONTEXT-mandated, research Anti-Pattern 4):
@@ -565,6 +645,10 @@ Task 9 (CLI e2e tests + full verification)
       `logging.basicConfig(level=logging.INFO)` with
       `logging.getLogger(__name__).addHandler(logging.NullHandler())` (keep line 20
       `logger = logging.getLogger(__name__)` and all 12 plot methods byte-identical).
+
+    LINT note: these are NEW files in the hard-clean `cli/` dir (battery step 7) — use
+    builtin generics (`dict`/`list`/`X | None`), no `typing.Dict/List/Optional`
+    (UP035/UP006/UP045), no bare excepts, no `.replace("Z", "+00:00")` (FURB162).
 
     Create `src/chat_analyzer/cli/pipeline.py` (the ONLY orchestration — research Pattern 1):
     - `def run_pipeline(path: Path, console) -> AnalysisResults`:
@@ -581,7 +665,9 @@ Task 9 (CLI e2e tests + full verification)
          (participant count computed from rows' senders) and, when
          `counts["skipped_lines"] > 0`, `console.print(f"[WARN] Skipped {counts['skipped_lines']} lines that couldn't be parsed")`
          (D-16 — single line, no per-line examples). Build `ParseReport(source=...,
-         **counts)` from `cli/contracts.py`.
+         **counts)` from `cli/contracts.py`. NOTE: the pipeline does NOT print the
+         `Messages: N` token — that single smoke-contract line is owned by `main.py`
+         `_analyze_path` (Task 8) so it is not duplicated.
       4. `df = messages_to_dataframe(rows)` (ingest/ingestion.py — the single builder).
          If `df.empty`: raise `ValueError("No messages could be parsed from this file")`.
       5. `with console.status("Computing insights...", spinner="line"):` — wrap the whole
@@ -617,8 +703,9 @@ Task 9 (CLI e2e tests + full verification)
       stats (total_messages from len(df); participants count + list; date_range from
       df['datetime'].min()/max() as %Y-%m-%d; duration_days; busiest day from
       volume['hourly_activity'].sum(axis=1).idxmax(); peak_hour from summary
-      ['activity_patterns']['peak_hour']; avg_response_time from dynamics
-      ['avg_response_time']; media_messages from df['message'].str.contains('<Media omitted>',
+      ['activity_patterns']['peak_hour']; avg_response_time from
+      dynamics.get('avg_response_time') — **None on single-message chats; build_insights
+      formats it defensively (LOW #9)**; media_messages from df['message'].str.contains('<Media omitted>',
       case=False, na=False).sum()); participants dict (per-sender messages count, avg
       message_length, share_pct = messages/total*100 rounded to 1dp, sorted desc);
       content (top_words = content['word_frequency'].most_common(15); top_emojis =
@@ -627,11 +714,14 @@ Task 9 (CLI e2e tests + full verification)
       sentiment['average_scores'].get('vader_compound', {}).get('mean'); by_sender from
       sentiment['by_sender']; daily_avg from sentiment['temporal_analysis'].get('daily_avg_sentiment', {})).
       Defensive `.get()` everywhere — an empty edge-case dict must never KeyError.
-    - `def build_insights(stats, participants, content, sentiment) -> List[str]` (D-11 —
+    - `def build_insights(stats, participants, content, sentiment) -> list[str]` (D-11 —
       narrative lead-ins, one per tab, natural-language): e.g. (i) f"Most messages land on
       {busiest_day} — {busiest_share}% of the week's activity."; (ii) f"{top_sender} is the
-      most active participant, sending {share}% of all messages."; (iii) f"Replies take on
-      average {avg_response_time} minutes when they come at all."; (iv) f"The most-used word
+      most active participant, sending {share}% of all messages."; (iii) avg =
+      stats.get("avg_response_time"); f"Replies take on average {avg:.0f} minutes when they
+      come at all." if avg else "Replies take no measurable time — mostly one-off messages."
+      (**LOW #9 — avg is None on single-message chats; `f"{avg:.0f}" if avg else "no
+      measurable"` — never print "None minutes"**); (iv) f"The most-used word
       is '{top_word}'."; (v) f"The overall tone leans {dominant_sentiment} ({pct}% of messages).";
       (vi) f"This conversation spans {duration_days} days and {total_messages} messages.";
       (vii) f"The busiest hour is {peak_hour}:00." Return 5-7 short sentences; every value
@@ -646,11 +736,14 @@ Task 9 (CLI e2e tests + full verification)
       $env:PYTHONPATH="src"; python -c "import sys, chat_analyzer.cli.pipeline; assert 'matplotlib' not in sys.modules, 'eager matplotlib import in pipeline module top'; print('LAZY-OK')"
       # visualization logging neutralized — no basicConfig at import
       Select-String -Path src/chat_analyzer/utils/visualization.py -Pattern "logging\.basicConfig" | Measure-Object
+      # lint: new cli files clean (battery step 7)
+      python -m ruff check src/chat_analyzer/cli/pipeline.py src/chat_analyzer/cli/adapters.py
     </automated>
   </verify>
   <done>
-    All 6 pipeline tests pass; LAZY-OK prints; zero `logging.basicConfig` in visualization.py;
-    run_pipeline produces a complete AnalysisResults (all 9 keys) for both sample exports.
+    All 7 pipeline tests pass (incl. the None-avg_response_time edge — LOW #9); LAZY-OK
+    prints; zero `logging.basicConfig` in visualization.py; run_pipeline produces a complete
+    AnalysisResults (all 9 keys) for both sample exports; pipeline.py + adapters.py lint clean.
   </done>
 </task>
 
@@ -662,9 +755,11 @@ Task 9 (CLI e2e tests + full verification)
   <action>
     Create `src/chat_analyzer/cli/render.py` — thin, ASCII-first (D-05/D-07/D-16; Pitfall 5):
     - `def show_summary(results: AnalysisResults, console) -> None`: prints, in order:
-      1. Parsed-count line — already printed by pipeline right after parsing (D-05); this
-         function does NOT repeat it (single-source narration: pipeline owns stage lines,
-         render owns the end summary).
+      1. Parsed-count line — the `[OK] Parsed N messages...` stage line is printed by the
+         pipeline right after parsing, and the `Messages: N` smoke-contract token is printed
+         by `_analyze_path` in main.py (Task 8); this function does NOT repeat either
+         (single-source narration: pipeline owns stage lines, main owns the `Messages:`
+         token, render owns the end summary).
       2. Skip line when `results["parse"]["skipped_lines"] > 0`:
          `console.print(f"[WARN] Skipped {n} lines that couldn't be parsed")` (D-16 — one
          line, no examples).
@@ -681,6 +776,7 @@ Task 9 (CLI e2e tests + full verification)
       box-drawing glyphs (Pitfall 5 — the CLI's utf-8 reconfigure is a safety net, not a
       license to ship non-ASCII).
     - No business logic: render reads AnalysisResults only.
+    - LINT: new file in the hard-clean `cli/` dir — builtin generics only.
   </action>
   <verify>
     <automated>
@@ -698,11 +794,13 @@ for token in ('Skipped 2 lines', 'Excluded 1 system', 'Total messages: 3', 'Date
     assert token in out, token
 print('RENDER-OK')
 "
+      python -m ruff check src/chat_analyzer/cli/render.py
     </automated>
   </verify>
   <done>
-    RENDER-OK prints; show_summary emits exactly the D-07/D-16/D-18 lines in ASCII; no logic
-    beyond reading AnalysisResults.
+    RENDER-OK prints; show_summary emits exactly the D-07/D-16/D-18 lines in ASCII and does
+    NOT print a parsed-count or `Messages:` line (single-source narration); render.py lints
+    clean; no logic beyond reading AnalysisResults.
   </done>
 </task>
 
@@ -741,7 +839,9 @@ print('RENDER-OK')
       words, sentiment) and the first insight sentence text.
   </behavior>
   <action>
-    Create `src/chat_analyzer/cli/report_html.py` (research Pattern 4; Pitfall 11):
+    Create `src/chat_analyzer/cli/report_html.py` (research Pattern 4; Pitfall 11;
+    LINT: hard-clean `cli/` dir — builtin generics only):
+
     - `TEMPLATE` as a module-level inline string constant (NOT a separate `.j2` file —
       sidesteps hatchling wheel package-data risk, research A1). Structure:
       `<!DOCTYPE html>`, `<html lang="en">`, `<head>` with `<meta charset="utf-8">`,
@@ -777,11 +877,13 @@ print('RENDER-OK')
       $env:PYTHONPATH="src"; python -m pytest tests/test_phase2_report.py -q
       # no unsafe patterns shipped (QUAL-04 regression scan)
       Select-String -Path src/chat_analyzer/cli/report_html.py -Pattern "unsafe_allow_html|exec\(|markupsafe\.escape" | Measure-Object
+      python -m ruff check src/chat_analyzer/cli/report_html.py
     </automated>
   </verify>
   <done>
     All 8 report tests pass; report file is single-file, escaped, utf-8, next to input,
-    sanitized; auto-open degrades without crashing; no unsafe tokens in report_html.py.
+    sanitized; auto-open degrades without crashing; no unsafe tokens in report_html.py;
+    report_html.py lints clean.
   </done>
 </task>
 
@@ -792,7 +894,11 @@ print('RENDER-OK')
   </files>
   <action>
     Modify `src/chat_analyzer/cli/main.py` (extend, don't rewrite — Phase 1 conventions hold:
-    encoding bootstrap stays, BLE001 degrade-not-crash stays, docstring updated):
+    encoding bootstrap stays, BLE001 degrade-not-crash stays, docstring updated).
+
+    LINT note: main.py is in the hard-clean `cli/` dir — use PEP 604 unions
+    (`Path | None`, `bool | None` — typer 0.27.0 accepts them, VERIFIED) instead of
+    `typing.Optional[...]` (ruff UP045).
 
     1. **`--version`** (D-03 — typer 0.27.0 has NO `version` param, VERIFIED): add
        ```
@@ -803,13 +909,18 @@ print('RENDER-OK')
                raise typer.Exit()
        ```
     2. **Command signature** (D-02/D-03 — positional argument, no other flags):
-       `def main(chat_file: Optional[Path] = typer.Argument(None, help="Path to WhatsApp .txt or Telegram .json export"), version: Optional[bool] = typer.Option(None, "--version", is_eager=True, callback=_version_callback, help="Show version and exit")) -> None`
+       `def main(chat_file: Path | None = typer.Argument(None, help="Path to WhatsApp .txt or Telegram .json export"), version: bool | None = typer.Option(None, "--version", is_eager=True, callback=_version_callback, help="Show version and exit")) -> None`
+       (PEP 604 unions — verified typer 0.27.0 accepts `Path | None`; avoids ruff UP045).
        Keep the existing utf-8 stdout/stderr reconfigure loop as the FIRST statements.
     3. **Positional path** (D-02): if `chat_file` is not None:
        - `if not chat_file.is_file(): typer.echo(f"File not found: {chat_file}", err=True); raise typer.Exit(1)`.
        - if suffix not in {".txt", ".json"}: friendly
          `typer.echo("Unsupported file type: expected a WhatsApp .txt or Telegram .json export", err=True)`; exit 1.
-       - else run the shared `_analyze_path(path)` helper (below) and exit 0/1.
+       - else wrap the shared `_analyze_path(chat_file)` call in
+         `try/except ValueError as exc:` → `typer.echo(str(exc), err=True); raise typer.Exit(1)`
+         (MEDIUM #4 — a positional malformed file (zero parsed rows, "Not a Telegram chat
+         export", "No messages could be parsed") must exit 1 with a friendly line, NEVER a
+         traceback — D-06); on success exit 0.
     4. **Interactive no-arg** (D-01/D-06): keep the Phase 1 prompt loop ("Enter path to chat
        export", strip quotes, `File not found: ...` re-prompt), but each successful
        path goes through `_analyze_path`; on `ValueError` (UnsupportedFormat /
@@ -818,8 +929,15 @@ print('RENDER-OK')
        EOF/Abort behavior unchanged (Phase 1 accepted: exits 1 "Aborted.").
     5. **`_analyze_path(path: Path) -> None`** helper (module-level function):
        - `console = Console()` (rich; create once).
-       - `results = run_pipeline(path, console)` — stage narration + immediate parsed count
-         happen inside (Task 5).
+       - `results = run_pipeline(path, console)` — stage narration + the `[OK] Parsed N
+         messages...` count happen inside (Task 5).
+       - **`console.print(f"Messages: {results['parse']['parsed_messages']}")`** — the D-05
+         count line in its Phase 1 smoke-contract shape (CRITICAL #1). 
+         `test_phase1_smoke.py::message_count()` regexes `Messages:\s*(\d+)`
+         case-sensitively and smoke tests 3 & 4 depend on it — without this exact token
+         they fail. Printed HERE, ONCE, so the token appears in BOTH positional and
+         interactive stdout; pipeline.py (Task 5) and render.py (Task 6) must NOT print a
+         second `Messages:` token.
        - `with console.status("Writing report...", spinner="line"): results["report_path"] = str(write_report(results, path).resolve())`.
        - `show_summary(results, console)` (Task 6 — summary panel + path).
        - `open_report(Path(results["report_path"]))` (D-09 — returns bool; the path is
@@ -832,18 +950,23 @@ print('RENDER-OK')
   </action>
   <verify>
     <automated>
-      # Phase 1 smoke regression — CLI contract unchanged where it must be (10 tests)
+      # Phase 1 smoke regression — CLI contract unchanged where it must be (10 tests;
+      # the `Messages: 27` token printed by _analyze_path keeps tests 3 & 4 green)
       $env:PYTHONPATH="src"; python -m pytest tests/test_phase1_smoke.py -q
       # --version works (typer 0.27 has no built-in — the eager callback closes the gap)
       $env:PYTHONPATH="src"; python -m chat_analyzer --version
       # help still instant
       $env:PYTHONPATH="src"; python -m chat_analyzer --help
+      # lint: modified main.py stays clean (hard gate)
+      python -m ruff check src/chat_analyzer/cli/main.py
     </automated>
   </verify>
   <done>
-    All 10 Phase 1 smoke tests still pass; `python -m chat_analyzer --version` prints
+    All 10 Phase 1 smoke tests still pass (the `Messages: N` token in `_analyze_path` keeps
+    `message_count()` matching — CRITICAL #1); `python -m chat_analyzer --version` prints
     "chat-analyzer 0.1.0" and exits 0; --help exits 0; positional + interactive paths route
-    into run_pipeline; no reporting/plotly/plotext tokens in main.py.
+    into run_pipeline; a positional malformed .txt exits 1 with a friendly message and NO
+    traceback (MEDIUM #4); main.py lints clean; no reporting/plotly/plotext tokens in main.py.
   </done>
 </task>
 
@@ -859,36 +982,43 @@ print('RENDER-OK')
   <action>
     Create `tests/test_phase2_cli.py` — follow `test_phase1_smoke.py`'s plain-pytest style
     (subprocess against the real installed `chat-analyzer` console script and
-    `python -m chat_analyzer`; assert on stdout/stderr; the 5 ROADMAP criteria):
-    - Test 1 (ROADMAP crit 1 — one command end-to-end): subprocess
-      `chat-analyzer data/sample_chats/whatsapp_sample.txt` → returncode 0; stdout contains
-      "Parsed 27 messages" (CLI-03 count surfaced) and "Report:".
-    - Test 2 (ROADMAP crit 4 — stage narration): stdout contains all three stage lines
-      ("Parsing chat", "Computing insights", "Writing report" — narrate via rich Status,
-      which writes to stderr when not a tty; assert across stdout+stderr) and the parsed
-      count appears before the summary panel (index ordering assertion).
-    - Test 3 (ROADMAP crit 5 — counts match export): report file exists at
-      `data/sample_chats/whatsapp_sample_report.html` (D-08 location); delete it after.
-    - Test 4 (ROADMAP crit 2+3 — report card exists and is well-formed): generated HTML
-      contains all 5 tab ids and >= 4 `data:image/png;base64,` URIs and `<meta charset="utf-8">`.
+    `python -m chat_analyzer`; assert on stdout/stderr; the 5 ROADMAP criteria).
+    **tmp_path discipline (LOW #8): every test that generates a report first COPIES the
+    sample export into `tmp_path` and runs the CLI against the copy — the repo is never
+    written to, so there is NO `data/sample_chats/*_report.html` cleanup step.**
+    - Test 1 (ROADMAP crit 1 — one command end-to-end): copy the whatsapp sample to
+      `tmp_path/whatsapp_sample.txt`; subprocess `chat-analyzer {tmp}/whatsapp_sample.txt` →
+      returncode 0; stdout contains "Parsed 27 messages", "Messages: 27" (the smoke-contract
+      token, CRITICAL #1) and "Report:".
+    - Test 2 (ROADMAP crit 4 — stage narration): stdout+stderr contains all three stage lines
+      ("Parsing chat", "Computing insights", "Writing report" — rich Status writes to stderr
+      when not a tty; assert across stdout+stderr) and the "Messages: 27" token appears
+      BEFORE the "Total messages:" summary panel text (index ordering assertion).
+    - Test 3 (ROADMAP crit 5 — counts match export): the report file exists at
+      `tmp_path/whatsapp_sample_report.html` — the D-08 location NEXT TO THE INPUT COPY
+      (LOW #8); assert `(tmp_path / "whatsapp_sample_report.html").exists()`; nothing was
+      written inside the repo.
+    - Test 4 (ROADMAP crit 2+3 — report card exists and is well-formed): the generated HTML
+      (from the tmp_path copy) contains all 5 tab ids, >= 4 `data:image/png;base64,` URIs,
+      and `<meta charset="utf-8">`.
     - Test 5 (interactive path, D-01): `chat-analyzer` with stdin
-      "data/sample_chats/whatsapp_sample.txt\n" → exit 0, count surfaced.
+      "{tmp}/whatsapp_sample.txt\n" → exit 0, stdout contains "Messages: 27".
     - Test 6 (--version, D-03): `chat-analyzer --version` → exit 0, output matches
       `chat-analyzer \d+\.\d+\.\d+`.
-    - Test 7 (unsupported extension re-prompt, D-06): stdin
-      "chat.pdf\nnonexistent.txt\n" → does NOT crash, no "Traceback", stays in the loop
-      (assert the friendly message "expected a WhatsApp .txt or Telegram .json" appears);
-      positional `chat-analyzer chat.pdf` → exit 1, no traceback.
-    - Test 8 (telegram, D-19/D-20): `chat-analyzer data/sample_chats/telegram_sample.json`
-      → exit 0, stdout contains "Parsed 5 messages".
+    - Test 7 (unsupported extension re-prompt + positional error path, D-06 + MEDIUM #4):
+      stdin "chat.pdf\nnonexistent.txt\n" → does NOT crash, no "Traceback", stays in the
+      loop (assert the friendly message "expected a WhatsApp .txt or Telegram .json"
+      appears); positional `chat-analyzer chat.pdf` → exit 1, no traceback; positional
+      `chat-analyzer {tmp}/all_unparseable.txt` (a .txt whose every line fails to parse) →
+      exit 1, stderr contains the friendly ValueError message, no "Traceback" — exercises
+      the NEW positional try/except in `_analyze_path`'s caller.
+    - Test 8 (telegram, D-19/D-20): copy telegram_sample.json to tmp_path; run → exit 0,
+      stdout contains "Parsed 5 messages" and "Messages: 5".
     - Test 9 (skip surfacing, D-15/D-16): a small tmp fixture with one valid + one
       bad-date line → stdout contains "Skipped 1 lines that couldn't be parsed" and the
       report contains a skip note; no timestamp equals today in the report's stats.
     - Test 10 (no pollution, Pitfall 5): full stdout+stderr of the whatsapp run does NOT
       contain "🚀" or "Initializing Sentiment" (analysis prints captured).
-    Use `tmp_path` for generated reports (write a copy of the sample into tmp_path and run
-    there) so the repo stays clean; clean up `data/sample_chats/whatsapp_sample_report.html`
-    in Test 3.
 
     Then run the FULL verification battery (below) and confirm the 39 pre-existing legacy
     failures are unchanged (Phase 4 QUAL-02 scope — do NOT fix, do NOT commit the
@@ -901,9 +1031,11 @@ print('RENDER-OK')
     </automated>
   </verify>
   <done>
-    All 10 CLI e2e tests pass; full battery below green; legacy suite state confirmed
-    unchanged (39 failed / 72 passed baseline; `git status` shows only the pre-existing
-    `tests/test_analysis.py` modification).
+    All 10 CLI e2e tests pass (no repo writes — all reports land in tmp_path, LOW #8); full
+    battery below green (incl. the ruff lint gate); legacy suite state confirmed unchanged —
+    the SAME 39 legacy failures still fail and `git status` shows only the pre-existing
+    `tests/test_analysis.py` modification (the overall passed count is NOT compared — it
+    grows with the new Phase 2 suites, LOW #7).
   </done>
 </task>
 
@@ -915,7 +1047,7 @@ Run in order at the end of the phase (Windows PowerShell):
 # 1. New Phase 2 suites (all must pass)
 $env:PYTHONPATH="src"; python -m pytest tests/test_phase2_whatsapp.py tests/test_phase2_telegram.py tests/test_phase2_builder.py tests/test_phase2_pipeline.py tests/test_phase2_report.py tests/test_phase2_cli.py -q
 
-# 2. Phase 1 regression (must stay 10 passed)
+# 2. Phase 1 regression (must stay 10 passed; the `Messages: N` token keeps tests 3 & 4 green)
 $env:PYTHONPATH="src"; python -m pytest tests/test_phase1_smoke.py -q
 
 # 3. No datetime.now() anywhere in the parsers (grep hygiene: code tokens, not comments)
@@ -927,29 +1059,50 @@ python -c "import tomllib,pathlib; d=tomllib.loads(pathlib.Path('pyproject.toml'
 # 5. Manual smoke — one command end-to-end on both samples (ROADMAP crit 1)
 $env:PYTHONPATH="src"; python -m chat_analyzer data/sample_chats/whatsapp_sample.txt
 $env:PYTHONPATH="src"; python -m chat_analyzer data/sample_chats/telegram_sample.json
-# Assert: exit 0, stage narration, parsed counts (27 / 5), ASCII summary panel, absolute
-# report path, report file exists next to input, auto-open attempted (or degraded).
+# Assert: exit 0, stage narration, parsed counts via BOTH the `[OK] Parsed N messages` stage
+# line AND the `Messages: N` token (27 / 5), ASCII summary panel, absolute report path,
+# report file exists next to input, auto-open attempted (or degraded).
 
-# 6. Legacy baseline unchanged — count, do not fix
-python -m pytest tests -q   # expect the SAME 39 failed / 72 passed baseline as research time
+# 6. Legacy baseline unchanged — compare LEGACY failures + git status only (LOW #7: the
+#    passed count is NOT pinned — it grows with the new Phase 2 suites; only the 39 legacy
+#    failures and the git state must match research time)
+python -m pytest tests -q   # expect the same 39 legacy failures still failing (do not fix — QUAL-02, Phase 4)
 git status --short           # expect only the pre-existing tests/test_analysis.py modification
+
+# 7. Lint gate (AGENTS.md "run lint per phase plan"; ruff 0.16.1 with NO ruff config in the
+#    repo → ruff's default select includes UP/B/I/C4/DTZ/S/RUF — verified empirically).
+#    a) HARD gate — NEW Phase 2 code must be 100% clean:
+python -m ruff check src/chat_analyzer/cli tests/test_phase2_*.py   # expect "All checks passed!" (exit 0)
+#    b) NON-GROWTH gate — MODIFIED legacy files must not ADD lint debt. Baseline verified at
+#       planning time (2026-08-01): 84 findings on parser/ + ingestion/ (Phase 1 precedent:
+#       legacy debt tracked for a later quality phase, not fixed here). Tasks 2-4 REMOVE
+#       ~10 findings (4x DTZ005 datetime.now, 3x E722 bare except, 1x S112, 2x FURB162
+#       .replace('Z',...)) and must add ZERO new ones (new annotations use builtin generics;
+#       the one new strptime site carries `# noqa: DTZ007` with justification):
+$out = python -m ruff check src/chat_analyzer/parser src/chat_analyzer/ingest/ingestion.py --output-format=concise 2>&1
+if ($out -match 'Found (\d+) errors') {
+  $n = [int]$Matches[1]; if ($n -gt 84) { throw "ruff debt grew to $n (>84 baseline)" }
+  "RUFF-NONGROWTH-OK ($n <= 84)"
+} else { "RUFF-CLEAN" }
 ```
 
 ## Test Plan (new tests, all exercise real `chat_analyzer.*` modules per AGENTS.md)
 
 | Test file | Covers | Requirement |
 |-----------|--------|-------------|
-| `tests/test_phase2_whatsapp.py` | strict date parsing (no `datetime.now()`), skip counting, system classification (encryption notice + "X added Y"), header-without-sender, common formats (US 12h/EU 24h/iOS bracket/4-digit year), multiline continuation, exact fixture counts, `parse_file` QUAL-01 | D-15, D-16, D-17, D-18, ANAL-01 |
-| `tests/test_phase2_telegram.py` | both JSON shapes (bare Chat + chats.list[]), recursive entity-array text join, service-message filter, malformed drop counting (no silent `except: continue`), tz-aware → naive UTC (Z and +offset), "not a chat export" error, `parse_telegram_chat` QUAL-01 | D-19, D-20 |
+| `tests/test_phase2_whatsapp.py` | strict date parsing (no `datetime.now()`), skip counting, system classification (encryption notice + "X added Y"), header-without-sender, common formats (US 12h/EU 24h/iOS bracket/4-digit year), multiline continuation, exact fixture counts, strict-row feature keys feeding `_add_features` without KeyError (HIGH #2), `parse_file` QUAL-01 | D-15, D-16, D-17, D-18, ANAL-01 |
+| `tests/test_phase2_telegram.py` | both JSON shapes (bare Chat + chats.list[]), recursive entity-array text join, service-message filter, malformed drop counting (no silent `except: continue`), tz-aware → naive UTC (Z and +offset), empty/missing-key exports raise "Not a Telegram chat export" (MEDIUM #3), `parse_telegram_chat` QUAL-01 | D-19, D-20 |
 | `tests/test_phase2_builder.py` | canonical df schema (datetime/timestamp alias/date/hour/sender/message/message_length/source/uid), tz normalization, ingestion-path telegram full-ISO date bug, unparseable-row drop | D-20, Anti-Pattern 5 |
-| `tests/test_phase2_pipeline.py` | run_pipeline e2e (whatsapp 27, telegram 5), AnalysisResults shape + 4 base64 charts + insights, all-skipped → friendly error, unsupported format error, emoji-print capture, Agg headless | CLI-02, CLI-03, ANAL-01..05, D-05, D-12 |
+| `tests/test_phase2_pipeline.py` | run_pipeline e2e (whatsapp 27, telegram 5), AnalysisResults shape + 4 base64 charts + insights, all-skipped → friendly error, unsupported format error, emoji-print capture, Agg headless, None-avg_response_time insight edge (LOW #9) | CLI-02, CLI-03, ANAL-01..05, D-05, D-12 |
 | `tests/test_phase2_report.py` | single-file report (no external refs), `<meta charset="utf-8">` + valid UTF-8, HTML escaping (`<script>`/`<3` inert), filename sanitize + fallback, report next to input, auto-open degrade, skip note, 5 tabs + insights | OUT-03, OUT-04, OUT-05, D-08, D-09, D-10, D-11, D-14, V5 |
-| `tests/test_phase2_cli.py` | one-command e2e (positional + interactive), stage narration order, counts match export, report card well-formed, `--version`, unsupported-extension re-prompt, skip surfacing, no console pollution | CLI-02, CLI-03, D-01, D-02, D-03, D-06, D-15, D-16, ROADMAP crits 1-5 |
+| `tests/test_phase2_cli.py` | one-command e2e (positional + interactive) against tmp_path copies, `Messages: N` smoke-contract token (CRITICAL #1), stage narration order, counts match export, report card well-formed at the tmp_path D-08 location (LOW #8), `--version`, unsupported-extension re-prompt, positional malformed-file exit-1-no-traceback (MEDIUM #4), skip surfacing, no console pollution | CLI-02, CLI-03, D-01, D-02, D-03, D-06, D-15, D-16, ROADMAP crits 1-5 |
 
 **Scope guards:** legacy `tests/` files (test_parser.py, test_end_to_end.py,
 test_reporting.py, test_analysis.py — 39 pre-existing failures) are NOT touched
 (Phase 4 QUAL-02). The uncommitted `tests/test_analysis.py` change
 (`freq='6H'` → `'6h'`, pandas 3.x compat) is NOT committed, reverted, or expanded.
+`test_phase2_cli.py` writes reports ONLY to `tmp_path` copies of the samples
+(LOW #8) — the repo tree stays clean after the suite.
 
 ## Success Criteria Mapping (ROADMAP Phase 2, reconciled)
 
@@ -958,7 +1111,7 @@ test_reporting.py, test_analysis.py — 39 pre-existing failures) are NOT touche
 | 1. One command runs the full pipeline end-to-end | Task 8 (routing) + Task 5 (pipeline) + Task 4 (df builder) | test_phase2_cli.py tests 1/5/8; verification battery step 5 |
 | 2. Summary stats, per-participant, trends, top words/emojis, VADER sentiment — **in the report**; terminal shows compact summary per D-07 | Task 5 (ChatEDA + VADER reuse via adapters) + Task 7 (report tabs) + Task 6 (terminal panel) | test_phase2_pipeline.py tests 1/2; test_phase2_report.py test 8; RENDER-OK |
 | 3. (OUT-02 superseded) user sees the **decorated HTML report card with inferred insights** | Task 7 + Task 5 (`build_insights`) | test_phase2_report.py tests 1/8; test_phase2_cli.py test 4 |
-| 4. Progress indicator + parsed-message count surfaced early | Task 6 + Task 5 (status stages + immediate count) | test_phase2_cli.py test 2; RENDER-OK; pipeline tests |
+| 4. Progress indicator + parsed-message count surfaced early | Task 5 (status stages + `[OK] Parsed N messages` line) + Task 8 (`Messages: N` smoke-contract token, CRITICAL #1) + Task 6 (panel) | test_phase2_cli.py test 2; test_phase1_smoke.py tests 3/4; RENDER-OK; pipeline tests |
 | 5. Timestamps/counts match export — no fabricated dates, skipped lines counted and surfaced | Task 2 (WhatsApp), Task 3 (Telegram), Task 4 (tz-naive df) | test_phase2_whatsapp.py, test_phase2_telegram.py, test_phase2_builder.py; verification battery step 3 (0 × `datetime.now()`) |
 
 ## Threat Model
