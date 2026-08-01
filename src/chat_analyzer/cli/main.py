@@ -31,15 +31,22 @@ def main() -> None:
         except (AttributeError, ValueError):
             pass
 
-    path = Path(typer.prompt("Enter path to chat export").strip().strip('"').strip("'"))
+    while True:
+        path = Path(typer.prompt("Enter path to chat export").strip().strip('"').strip("'"))
+        if not path.is_file():
+            typer.echo(f"File not found: {path}", err=True)
+            continue
+        try:
+            from chat_analyzer.ingest.ingestion import process_uploaded_file
 
-    from chat_analyzer.ingest.ingestion import process_uploaded_file
-
-    messages, media = process_uploaded_file(str(path))
-    typer.echo(f"Processed {path}:")
-    typer.echo(f"Messages: {len(messages)}")
-    typer.echo(f"Media items: {len(media)}")
-    raise typer.Exit(code=0)
+            messages, media = process_uploaded_file(str(path))
+            typer.echo(f"Processed {path}:")
+            typer.echo(f"Messages: {len(messages)}")
+            typer.echo(f"Media items: {len(media)}")
+        except Exception as exc:
+            typer.echo(f"Could not process {path}: {exc}", err=True)
+            raise typer.Exit(code=1)
+        raise typer.Exit(code=0)
 
 
 if __name__ == "__main__":
