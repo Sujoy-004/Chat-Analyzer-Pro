@@ -18,17 +18,17 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-07-31)
+See: .planning/PROJECT.md (updated 2026-08-01)
 
 **Core value:** One command turns a raw chat export into real insights about the conversation — locally, fast, no accounts, no hosting.
-**Current focus:** Phase 1 — Package Foundation
+**Current focus:** Phase 2 — One-Command Terminal Insights
 
 ## Current Position
 
-Phase: 1 of 4 (Package Foundation) — COMPLETE
-Plan: 2 of 2 in current phase
+Phase: 2 of 4 (One-Command Terminal Insights) — Ready to plan
+Plan: Not started in current phase
 Status: Phase 1 complete — ready for Phase 2 planning
-Last activity: 2026-08-01 — Plan 01-02 complete (CLI interactive slice); Phase 1 done
+Last activity: 2026-08-01 — Phase 1 complete (2/2 plans); transitioned to Phase 2
 
 Progress: [██████████] 100%
 
@@ -106,5 +106,5 @@ Items acknowledged and carried forward from previous milestone close:
 ## Session Continuity
 
 Last session: 2026-08-01T06:27:00Z
-Stopped at: Plan (Phase 1 complete — 2/2 plans)
+Stopped at: Phase 1 complete (2/2 plans) — transitioned to Phase 2
 Resume file: None — next: plan Phase 2 (One-Command Terminal Insights)
