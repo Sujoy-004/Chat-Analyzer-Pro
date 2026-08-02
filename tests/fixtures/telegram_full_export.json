@@ -1,0 +1,10 @@
+{"chats": [{"name": "Team", "type": "private_supergroup", "messages": [
+  {"id": 1, "type": "message", "date": "2025-09-15T09:45:00", "from": "Sujoy",
+   "text": [{"type": "bold", "text": "hello "}, "world"]},
+  {"id": 2, "type": "service", "date": "2025-09-15T09:50:00", "actor": "Ravi",
+   "action": "edit_group_title", "title": "Team"},
+  {"id": 3, "type": "message", "date": "2025-09-15T10:00:00Z", "from": "Ravi", "text": "zoned time"},
+  {"id": 4, "type": "message", "date": "2025-09-15T10:01:00", "from": "Ananya", "text": "ok"},
+  {"id": 5, "type": "message", "date": "not-a-date", "from": "X", "text": "bad"},
+  {"id": 6, "type": "forwarded", "from": "Y", "date": "2025-09-15T10:02:00", "text": "fwd"}
+]}]}
