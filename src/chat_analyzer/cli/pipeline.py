@@ -47,6 +47,20 @@ def _safe_chart(fig) -> str:
         return ""
 
 
+def stage_status(console, label: str):
+    """Stage narration (D-05 / CLI-03).
+
+    On a real terminal, rich's Status shows the ASCII 'line' spinner. When
+    stdout is piped/not a tty, rich Status renders NOTHING — degrade to a
+    plain '[OK] <stage>' line so stage narration still reaches the user
+    (and captured output in CI/tests).
+    """
+    if console.is_terminal:
+        return console.status(label, spinner="line")
+    console.print(f"[OK] {label}...")
+    return contextlib.nullcontext()
+
+
 def run_pipeline(path: Path, console) -> AnalysisResults:
     """Parse, analyze and assemble the full AnalysisResults for one export."""
     import matplotlib
@@ -57,7 +71,7 @@ def run_pipeline(path: Path, console) -> AnalysisResults:
     rows: list[dict] = []
     counts: dict = {}
 
-    with console.status("Parsing chat...", spinner="line"):
+    with stage_status(console, "Parsing chat"):
         if path.suffix.lower() == ".txt":
             from chat_analyzer.parser.whatsapp_parser import WhatsAppParser
 
@@ -92,7 +106,7 @@ def run_pipeline(path: Path, console) -> AnalysisResults:
     if df.empty:
         raise ValueError("No messages could be parsed from this file")
 
-    with console.status("Computing insights...", spinner="line"):
+    with stage_status(console, "Computing insights"):
         with contextlib.redirect_stdout(io.StringIO()) as captured:
             from chat_analyzer.analysis import sentiment as _sentiment
 
