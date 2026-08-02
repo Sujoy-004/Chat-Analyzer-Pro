@@ -34,7 +34,7 @@ def test_unparseable_date_skipped_not_fabricated(tmp_path):
     assert counts["skipped_lines"] == 1
     assert counts["parsed_messages"] == 0
 
-    today = datetime.now().date()
+    today = datetime.now().date()  # noqa: DTZ005 - test-only "now", not a pipeline timestamp
     for row in rows:
         assert row["datetime"].date() != today
 
@@ -67,10 +67,10 @@ def test_common_datetime_formats():
     """US 12h, EU 24h, iOS bracket + 4-digit year each parse to the correct
     datetime (D-17: %m/%d tried first; no M/D-vs-D/M heuristics)."""
     cases = [
-        ("12/25/23, 9:30 AM - Alice: US 12h", datetime(2023, 12, 25, 9, 30)),
-        ("25/12/2023, 21:07 - Bob: EU 24h", datetime(2023, 12, 25, 21, 7)),
-        ("[14/06/2024, 2:30:45 PM] Maria: iOS bracket", datetime(2024, 6, 14, 14, 30, 45)),
-        ("01/15/2024, 10:00 - Carol: 4-digit year", datetime(2024, 1, 15, 10, 0)),
+        ("12/25/23, 9:30 AM - Alice: US 12h", datetime(2023, 12, 25, 9, 30)),  # noqa: DTZ001 - expected values are deliberately naive
+        ("25/12/2023, 21:07 - Bob: EU 24h", datetime(2023, 12, 25, 21, 7)),  # noqa: DTZ001
+        ("[14/06/2024, 2:30:45 PM] Maria: iOS bracket", datetime(2024, 6, 14, 14, 30, 45)),  # noqa: DTZ001
+        ("01/15/2024, 10:00 - Carol: 4-digit year", datetime(2024, 1, 15, 10, 0)),  # noqa: DTZ001
     ]
     parser = WhatsAppParser()
     for line, expected in cases:

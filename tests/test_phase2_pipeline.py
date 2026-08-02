@@ -83,7 +83,10 @@ def test_single_message_no_response_time():
     """LOW #9: a single-message chat has no avg_response_time — insights
     never print 'None' and the response insight reads 'no measurable'."""
     from chat_analyzer.analysis.eda import ChatEDA
-    from chat_analyzer.analysis.sentiment import add_sentiment_analysis, get_sentiment_summary
+    from chat_analyzer.analysis.sentiment import (
+        add_sentiment_analysis,
+        get_sentiment_summary,
+    )
     from chat_analyzer.ingest.ingestion import messages_to_dataframe
 
     df = messages_to_dataframe(

@@ -15,8 +15,8 @@ import warnings
 from datetime import datetime
 import logging
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+# Configure logging (Anti-Pattern 4: never hijack global log config at import)
+logging.getLogger(__name__).addHandler(logging.NullHandler())
 logger = logging.getLogger(__name__)
 
 # Suppress warnings
