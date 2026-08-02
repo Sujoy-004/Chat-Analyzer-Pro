@@ -94,6 +94,16 @@ def run_pipeline(path: Path, console) -> AnalysisResults:
 
     with console.status("Computing insights...", spinner="line"):
         with contextlib.redirect_stdout(io.StringIO()) as captured:
+            from chat_analyzer.analysis import sentiment as _sentiment
+
+            # Plan contract (A6): the CLI always uses the VADER sentiment
+            # path. A pre-existing transformers install in the env would
+            # otherwise make initialize_analyzers() load a HF model on every
+            # run (slow per-message inference + stderr warnings) — pin the
+            # flag before the analyzer decides (consensus degrades to VADER,
+            # exactly as in a clean base install).
+            _sentiment.TRANSFORMERS_AVAILABLE = False
+
             from chat_analyzer.analysis.eda import ChatEDA
 
             eda = ChatEDA(df)
