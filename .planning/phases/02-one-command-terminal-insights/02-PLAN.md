@@ -362,8 +362,11 @@ Task 9 (CLI e2e tests + full verification)
        (D-15). Add a class-level `DATE_FORMATS` tuple (module-level is fine) listing the
        common formats only (D-17 — no disambiguation heuristics):
        `%m/%d/%y %I:%M %p`, `%d/%m/%y %I:%M %p`, `%m/%d/%Y %I:%M %p`, `%d/%m/%Y %I:%M %p`,
-       `%m/%d/%y %I:%M:%S %p`, `%d/%m/%y %I:%M:%S %p`, `%m/%d/%y %H:%M`, `%d/%m/%y %H:%M`,
-       `%m/%d/%Y %H:%M`, `%d/%m/%Y %H:%M`, `%m/%d/%y %H:%M:%S`, `%d/%m/%y %H:%M:%S`.
+       `%m/%d/%y %I:%M:%S %p`, `%d/%m/%y %I:%M:%S %p`, `%m/%d/%Y %I:%M:%S %p`, `%d/%m/%Y %I:%M:%S %p`,
+       `%m/%d/%y %H:%M`, `%d/%m/%y %H:%M`, `%m/%d/%Y %H:%M`, `%d/%m/%Y %H:%M`,
+       `%m/%d/%y %H:%M:%S`, `%d/%m/%y %H:%M:%S`, `%m/%d/%Y %H:%M:%S`, `%d/%m/%Y %H:%M:%S`
+       (WARNING-1: 4-digit-year + seconds variants added so iOS exports like
+       `[14/06/2024, 2:30:45 PM] Maria: msg` parse — D-17 covers 2/4-digit year + optional seconds).
     2. Add a private `_parse_datetime_strict(self, datetime_str) -> datetime | None`
        that tries each format and returns None on total failure (research Pitfall 1 code
        example) — NEVER `datetime.now()`. The `datetime.strptime` call line ends with
@@ -916,11 +919,16 @@ print('RENDER-OK')
        - `if not chat_file.is_file(): typer.echo(f"File not found: {chat_file}", err=True); raise typer.Exit(1)`.
        - if suffix not in {".txt", ".json"}: friendly
          `typer.echo("Unsupported file type: expected a WhatsApp .txt or Telegram .json export", err=True)`; exit 1.
-       - else wrap the shared `_analyze_path(chat_file)` call in
-         `try/except ValueError as exc:` → `typer.echo(str(exc), err=True); raise typer.Exit(1)`
-         (MEDIUM #4 — a positional malformed file (zero parsed rows, "Not a Telegram chat
-         export", "No messages could be parsed") must exit 1 with a friendly line, NEVER a
-         traceback — D-06); on success exit 0.
+        - else wrap the shared `_analyze_path(chat_file)` call in
+          `try/except ValueError as exc:` → `typer.echo(str(exc), err=True); raise typer.Exit(1)`
+          (MEDIUM #4 — a positional malformed file (zero parsed rows, "Not a Telegram chat
+          export", "No messages could be parsed") must exit 1 with a friendly line, NEVER a
+          traceback — D-06); on success exit 0.
+          (WARNING-2 — keep the BLE001 degrade-not-crash convention: `_analyze_path` itself
+          catches broad `except Exception` (with `# noqa: BLE001`) and converts to a friendly
+          `ValueError`-style message, so unexpected exceptions (pandas/type errors on
+          pathological files, transformers runtime noise) also exit 1 with a friendly line,
+          never a raw traceback — D-06.)
     4. **Interactive no-arg** (D-01/D-06): keep the Phase 1 prompt loop ("Enter path to chat
        export", strip quotes, `File not found: ...` re-prompt), but each successful
        path goes through `_analyze_path`; on `ValueError` (UnsupportedFormat /
