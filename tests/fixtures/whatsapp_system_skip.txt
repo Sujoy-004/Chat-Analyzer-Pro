@@ -1,0 +1,7 @@
+12/25/23, 9:30 AM - Alice: First message
+Messages and calls are end-to-end encrypted.
+25/13/26, 9:30 AM - Alice: bad date line
+12/25/23, 9:31 AM - Alice: Second message
+this is a continuation line
+12/25/23, 9:32 AM - Bob: Third message
+Alice added Bob
