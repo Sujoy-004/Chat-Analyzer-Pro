@@ -16,7 +16,13 @@ from chat_analyzer.ingest.ingestion import messages_to_dataframe
 def test_schema_and_defaults():
     """The canonical schema carries all 9 columns with the right types."""
     df = messages_to_dataframe(
-        [{"datetime": datetime(2025, 9, 15, 9, 45), "sender": "A", "message": "hi"}]
+        [
+            {
+                "datetime": datetime(2025, 9, 15, 9, 45),  # noqa: DTZ001 - naive input is the point (D-20 contract)
+                "sender": "A",
+                "message": "hi",
+            }
+        ]
     )
     for col in (
         "datetime", "timestamp", "date", "hour", "sender",
@@ -64,7 +70,11 @@ def test_unparseable_rows_dropped():
     df = messages_to_dataframe(
         [
             {"sender": "A", "message": "no datetime at all"},
-            {"datetime": datetime(2025, 9, 15, 9, 45), "sender": "B", "message": "ok"},
+            {
+                "datetime": datetime(2025, 9, 15, 9, 45),  # noqa: DTZ001 - naive input is the point (D-20 contract)
+                "sender": "B",
+                "message": "ok",
+            },
         ]
     )
     assert len(df) == 1

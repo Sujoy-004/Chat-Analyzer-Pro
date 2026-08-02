@@ -98,7 +98,7 @@ class ChatEDA:
         """Clean text for analysis"""
         if pd.isna(text) or text == '<Media omitted>':
             return ""
-        return re.sub(r'[^\\w\\s]', ' ', text.lower())
+        return re.sub(r'[^\w\s]', ' ', text.lower())
     
     def generate_comprehensive_summary(self):
         """Generate comprehensive analysis summary"""
