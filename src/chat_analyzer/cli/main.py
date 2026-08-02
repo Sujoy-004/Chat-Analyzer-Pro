@@ -37,7 +37,7 @@ def _analyze_path(path: Path) -> None:
     """Run the full pipeline for one export and render the report."""
     from rich.console import Console
 
-    from chat_analyzer.cli.pipeline import run_pipeline
+    from chat_analyzer.cli.pipeline import run_pipeline, stage_status
     from chat_analyzer.cli.render import show_summary
     from chat_analyzer.cli.report_html import open_report, write_report
 
@@ -49,7 +49,7 @@ def _analyze_path(path: Path) -> None:
     # (pipeline.py and render.py must never print a second one).
     console.print(f"Messages: {results['parse']['parsed_messages']}")
 
-    with console.status("Writing report...", spinner="line"):
+    with stage_status(console, "Writing report"):
         results["report_path"] = str(write_report(results, path).resolve())
 
     show_summary(results, console)
