@@ -82,12 +82,17 @@ def test_agg_headless():
 def test_single_message_no_response_time():
     """LOW #9: a single-message chat has no avg_response_time — insights
     never print 'None' and the response insight reads 'no measurable'."""
+    from chat_analyzer.analysis import sentiment as _sentiment
     from chat_analyzer.analysis.eda import ChatEDA
     from chat_analyzer.analysis.sentiment import (
         add_sentiment_analysis,
         get_sentiment_summary,
     )
     from chat_analyzer.ingest.ingestion import messages_to_dataframe
+
+    # Pipeline contract (A6): VADER-only path — keep this direct-call test on
+    # the same sentiment path the CLI runs (no HF model load in this env).
+    _sentiment.TRANSFORMERS_AVAILABLE = False
 
     df = messages_to_dataframe(
         [{"datetime": "2025-09-15T09:45:00", "sender": "A", "message": "just me here"}]
