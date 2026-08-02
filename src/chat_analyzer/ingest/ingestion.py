@@ -22,9 +22,11 @@ import os
 import re
 import uuid
 import zipfile
-from datetime import datetime
+from datetime import UTC, datetime
 from io import BytesIO
 from typing import Any, Dict, List, Optional, Tuple
+
+import pandas as pd
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -320,6 +322,66 @@ def _format_file_size(size_bytes: int) -> str:
     return f"{size_bytes:.1f} TB"
 
 
+def _to_naive_utc(value) -> datetime:
+    """Normalize a datetime object or ISO string to naive UTC (D-20).
+
+    Single normalization contract shared with the parser boundary. Python
+    >= 3.11 accepts a trailing 'Z' natively in ``fromisoformat``, so no
+    zero-offset string surgery is needed (ruff FURB162). Best-effort parse
+    — unparseable values raise for the caller to decide; nothing is
+    silently fabricated.
+    """
+    if isinstance(value, str):
+        dt = datetime.fromisoformat(value)
+    else:
+        dt = value
+    if dt.tzinfo is not None:
+        return dt.astimezone(UTC).replace(tzinfo=None)
+    return dt
+
+
+def messages_to_dataframe(messages: list[dict]) -> pd.DataFrame:
+    """Build the canonical analysis DataFrame from message dicts (Anti-Pattern 5).
+
+    THE single dict->df builder for the whole pipeline — no second copy in
+    cli/. Every row carries datetime (tz-naive UTC), timestamp (alias — the
+    chat visualizer REQUIRES 'timestamp'), date, hour, sender, message,
+    message_length, source and uid. Rows with no parseable datetime are
+    dropped (caller owns skip accounting); nothing is fabricated.
+    """
+    rows = []
+    for m in messages:
+        dt = m.get("datetime") or m.get("timestamp")
+        if dt is None:
+            date_val = m.get("date")
+            if isinstance(date_val, str) and "T" in date_val:
+                dt = _to_naive_utc(date_val)
+            elif m.get("date") and m.get("time"):
+                dt = pd.to_datetime(f"{m['date']} {m['time']}")
+            else:
+                continue
+
+        dt = _to_naive_utc(dt)
+        text = m.get("text") or m.get("message") or ""
+
+        rows.append({
+            "datetime": dt,
+            "timestamp": dt,
+            "date": dt.date(),
+            "hour": dt.hour,
+            "sender": m.get("author") or m.get("sender") or m.get("from") or "unknown",
+            "message": text,
+            "message_length": len(text),
+            "source": m.get("source") or m.get("source_hint") or "unknown",
+            "uid": m.get("uid") or m.get("id") or str(uuid.uuid4()),
+        })
+
+    df = pd.DataFrame(rows)
+    if not df.empty:
+        df["datetime"] = pd.to_datetime(df["datetime"])
+    return df
+
+
 def normalize_message(raw_msg: Dict[str, Any]) -> Dict[str, Any]:
     """
     Normalize raw message to standard schema:
@@ -350,7 +412,7 @@ def normalize_message(raw_msg: Dict[str, Any]) -> Dict[str, Any]:
         )
     elif raw_msg.get("datetime"):
         try:
-            dt = datetime.fromisoformat(str(raw_msg["datetime"]).replace('Z', '+00:00'))
+            dt = _to_naive_utc(str(raw_msg["datetime"]))
             date_field = dt.strftime("%Y-%m-%d")
             time_field = dt.strftime("%H:%M")
         except (ValueError, TypeError):
