@@ -110,14 +110,21 @@ def test_stage_narration_and_order(tmp_path):
 
 
 def test_report_written_next_to_input(tmp_path):
-    """Test 3 (D-08/LOW #8): report next to the tmp copy; repo untouched."""
+    """Test 3 (D-08/LOW #8): report next to the tmp copy; no NEW repo writes.
+
+    Phase 1's smoke suite feeds the repo sample to the interactive CLI, which
+    writes the report next to the input — so snapshot the repo's existing
+    *_report.html files first and assert this CLI run added nothing new.
+    """
+    before = set(REPO_ROOT.rglob("*_report.html"))
     dst = _copy_sample(tmp_path, "whatsapp_sample.txt")
     res = _run(_cli_cmd(str(dst), console=True))
 
     assert res.returncode == 0, res.stdout + res.stderr
     report = tmp_path / "whatsapp_sample_report.html"
     assert report.exists(), f"report missing at {report}"
-    assert not list(REPO_ROOT.rglob("*_report.html")), "CLI wrote into the repo"
+    after = set(REPO_ROOT.rglob("*_report.html"))
+    assert after == before, f"CLI wrote into the repo: {after - before}"
 
 
 def test_report_card_wellformed(tmp_path):
