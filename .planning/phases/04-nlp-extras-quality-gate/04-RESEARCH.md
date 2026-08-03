@@ -277,13 +277,13 @@ def network_figure(df) -> "matplotlib.figure.Figure":
 | A4 | NPM network available for a genuine friend request | Model download | if offline → degrade to basic analysis + hint (already the fallback) — planned |
 | A5 | Dev machine has torch cpu + transformers for this merge | Environment | tests stay offline-safe via mock; dev run may re-download the emotion model |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Emotion default model — move to `bhadresh-savati/distilbert-base-uncased-emotion` or keep `j-hartmann/…` (+ code to 7-label)?**
+1. **Emotion default model — move to `bhadresh-savani/distilbert-base-uncased-emotion` or keep `j-hartmann/…` (+ code to 7-label)?**
    - We know: j-hartmann is 7-class (anger/disgust/.../neutral/surprise — no `love`); the alternative is a verified 6-class, 255 MB, ~94% F1.
-   - Recommendation: switch to the 6-class Baidu–Savani model; confirm via discuss.
-2. **Network graph gating (ANAL-09).** D-07 singles out pure relationship health as always-on; network graph is also no-torch (networkx/matplotlib). Recommendation: always-on too. Confirm.
-3. **Test-framework naming.** D-16 says "keep unittest (existing)" but Phase 2 added pytest-style `tests/test_phase2_*.py` and pytest is installed. Recommendation: new Phase 4 tests are pytest-style (`tmp_path`, `unittest.mock`, fixtures); legacy `test_analysis.py`/`test_parser.py` are rewired in-place (real imports), not repurposed. Flag to the agent.
+   - Recommendation: switch to the 6-class Baidu–Savani model; confirm via discuss. — RESOLVED: see CONTEXT D-07c (locked as `bhadresh-savani/distilbert-base-uncased-emotion`).
+2. **Network graph gating (ANAL-09).** D-07 singles out pure relationship health as always-on; network graph is also no-torch (networkx/matplotlib). Recommendation: always-on too. Confirm. — RESOLVED: see CONTEXT D-07b (network graph always-on).
+3. **Test-framework naming.** D-16 says "keep unittest (existing)" but Phase 2 added pytest-style `tests/test_phase2_*.py` and pytest is installed. Recommendation: new Phase 4 tests are pytest-style (`tmp_path`, `unittest.mock`, fixtures); legacy `test_analysis.py`/`test_parser.py` are rewired in-place (real imports), not repurposed. Flag to the agent. — RESOLVED: reconciliation note #5 in planning context (plan 04-04 rewires legacy tests in-place; new tests pytest-style per D-16/D-17).
 
 ## Environment Availability (probed)
 
