@@ -25,7 +25,10 @@ class AnalysisResults(TypedDict):
     """The complete analysis payload produced by run_pipeline.
 
     charts maps chart name -> base64 PNG data URI. report_path is filled by
-    main.py after report_html.write_report succeeds.
+    main.py after report_html.write_report succeeds. health and network hold
+    serializable scalars extracted by adapters.py from the always-on analysis
+    modules (D-07/D-07b) — never the raw prepared_data DataFrame or the
+    networkx DiGraph (Pattern 3).
     """
 
     source: str
@@ -34,6 +37,8 @@ class AnalysisResults(TypedDict):
     participants: dict[str, Any]
     content: dict[str, Any]
     sentiment: dict[str, Any]
+    health: dict[str, Any]
+    network: dict[str, Any]
     charts: dict[str, str]
     insights: list[str]
     report_path: str
