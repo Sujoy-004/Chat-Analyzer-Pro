@@ -32,8 +32,9 @@ The full v1 feature set ships: 6-class emotion classification (ANAL-06), relatio
 - **D-05:** "Download" means the tool installs the `[nlp]` extra at runtime: pip installs torch (CPU-only via `--index-url https://download.pytorch.org/whl/cpu` for the 0.6GB path, or default full torch for the 3GB path) + transformers, then downloads the emotion model weights. Announce model name + size before downloading (ROADMAP success criterion 2). Model downloads via transformers are announced with name and size before they start.
 - **D-06:** Non-interactive/positional runs (`chat-analyzer chat.txt`) never prompt: use NLP if available, else run basic analysis silently and print a single hint line (e.g., `pip install chat-analyzer-pro[nlp]` for richer insights).
 
-### Relationship Health (not gated)
+### Always-On Analysis (not gated)
 - **D-07:** Relationship health (ANAL-07) is ALWAYS available — it is cheap pandas/numpy/matplotlib code (no torch/transformers), so gating it behind `[nlp]` adds friction with zero benefit. REQUIREMENTS.md labels ANAL-07 as `[nlp]`; this decision overrides the label. The planner must update REQUIREMENTS.md traceability accordingly.
+- **D-07b:** Network graph (ANAL-09) is ALSO always available — it needs only networkx/matplotlib (no torch), same rationale as AN-07. The silent `[nlp]` gate applies only to the genuinely heavy features: emotion (ANAL-06) and summarization (ANAL-08). REQUIREMENTS.md traceability for ANAL-09 updated accordingly.
 
 ### Report & Flag Surface (Phase 3 leftovers resolved)
 - **D-08:** NO CLI flags ship in Phase 4 (consistent with Phase 2 D-03). OUT-04 (`--output`) and OUT-05 (`--no-report`) both resolve as **not applicable — no flag**. The report is the deliverable and is always generated.
@@ -59,11 +60,12 @@ The full v1 feature set ships: 6-class emotion classification (ANAL-06), relatio
 - **D-18:** README is quickstart-first: (1) one-line "what this is", (2) export instructions for WhatsApp/Telegram, (3) install, (4) the single command, (5) what the NLP download question means. A friend never reads past step 2 before trying it.
 - **D-19:** README presents the NLP download options **neutrally** (all three with sizes, no recommendation): full 3GB, CPU-only 0.6GB, or none.
 
+### NLP Model (locked from research finding)
+- **D-07c:** Emotion model is `bhadresh-savani/distilbert-base-uncased-emotion` — a verified exact-6-label model (joy/sadness/anger/fear/surprise/love), ~255 MB, ~94% F1, fast CPU inference. It replaces the current 7-class `j-hartmann/emotion-english-distilroberta-base` default (which makes the "love" class dead and drops disgust/neutral). See RESEARCH.md Pitfall 2.
+
 ### the agent's Discretion
 - Exact structure of the 3-option download menu UI and its rich rendering
-- Which specific HuggingFace emotion model (must be 6-class and reasonably small); model name + size announced before download
 - How the runtime pip install of `[nlp]` extra is implemented/guarded (subprocess pip, error handling when offline/no pip)
-- Rich progress-bar styling and stage labels
 - Report tab/CSS details for the 4 new tabs (within the tabbed + narrative-lead-in decision)
 - Which existing `ChatVisualizer` methods to reuse for emotion/health/network charts
 - Exact friendly-error copy and export-instruction wording
