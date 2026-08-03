@@ -26,8 +26,19 @@ def adapt(
     content,
     sentiment,
     charts,
+    *,
+    health=None,
+    network=None,
+    emotion=None,
+    conversation_summary=None,
 ) -> AnalysisResults:
-    """Assemble the AnalysisResults contract from the analysis module dicts."""
+    """Assemble the AnalysisResults contract from the analysis module dicts.
+
+    health/network/emotion/conversation_summary are keyword-only with None
+    defaults (reconciliation note #2) so Phase 2 direct-call tests stay green.
+    The always-on health + network blocks arrive in plan 04-01; emotion and
+    conversation_summary arrive in plan 04-02.
+    """
     total_messages = len(df)
 
     # --- stats -----------------------------------------------------------
@@ -99,6 +110,10 @@ def adapt(
         or {},
     }
 
+    # --- health + network (always-on, D-07/D-07b) ------------------------
+    health_block = _build_health_block(health) if health is not None else None
+    network_block = _build_network_block(network) if network is not None else None
+
     return AnalysisResults(
         source=parse.source,
         parse={
@@ -111,18 +126,70 @@ def adapt(
         participants=participant_dict,
         content=content_block,
         sentiment=sentiment_block,
+        health=health_block,
+        network=network_block,
         charts=dict(charts),
-        insights=build_insights(stats, participant_dict, content_block, sentiment_block),
+        insights=build_insights(
+            stats, participant_dict, content_block, sentiment_block,
+            health_block, network_block,
+        ),
         report_path="",
     )
 
 
-def build_insights(stats, participants, content, sentiment) -> list[str]:
+def _build_health_block(health: dict) -> dict:
+    """Extract serializable scalars from analyze_relationship_health (Pattern 3).
+
+    The module returns a 'prepared_data' DataFrame plus nested dicts — the
+    DataFrame is NEVER leaked into AnalysisResults (Jinja-consumed).
+    """
+    health_score = health.get("health_score") or {}
+    initiator = health.get("initiator_analysis") or {}
+    response = health.get("response_analysis") or {}
+    dominance = health.get("dominance_analysis") or {}
+    return {
+        "overall_score": health_score.get("overall_health_score"),
+        "grade": health_score.get("grade"),
+        "components": health_score.get("components")
+        or health_score.get("component_scores")
+        or {},
+        "initiator_balance": initiator.get("balance_score"),
+        "total_conversations": initiator.get("total_conversations"),
+        "avg_response_minutes": response.get("overall_avg_response_minutes"),
+        "response_balance": response.get("response_balance_score"),
+        "composite_dominance": dominance.get("composite_dominance_score"),
+    }
+
+
+def _build_network_block(network: dict) -> dict:
+    """Extract serializable scalars from analyze_network (Pattern 3).
+
+    The module returns a networkx.DiGraph and an interaction-matrix
+    DataFrame inside patterns — neither is leaked into AnalysisResults.
+    """
+    metrics = network.get("metrics") or {}
+    patterns = network.get("patterns") or {}
+    subgroups = network.get("subgroups") or {}
+    return {
+        "node_count": metrics.get("num_nodes"),
+        "edge_count": metrics.get("num_edges"),
+        "density": metrics.get("density"),
+        "reciprocity": patterns.get("reciprocity_score")
+        or metrics.get("reciprocity"),
+        "strongest_connections": patterns.get("strongest_connections"),
+        "key_participants": network.get("key_participants") or {},
+        "subgroup_count": len(subgroups),
+    }
+
+
+def build_insights(stats, participants, content, sentiment, health=None, network=None) -> list[str]:
     """Narrative lead-ins, one per report tab (D-11).
 
     Natural-language sentences driven entirely by stats values — no hardcoded
     numbers, and never the string "None" (LOW #9: avg_response_time may be
-    None on single-message chats).
+    None on single-message chats). Health and network lead-ins slot in at
+    tab indices 5 and 6 (after the five Phase-2 tabs); the duration and
+    busiest-hour sentences follow them.
     """
     insights: list[str] = []
 
@@ -153,6 +220,25 @@ def build_insights(stats, participants, content, sentiment) -> list[str]:
         pct = float(dist[dominant]) / max(sum(dist.values()), 1) * 100
         insights.append(f"The overall tone leans {dominant} ({pct:.0f}% of messages).")
 
+    # --- health + network lead-ins (D-11) — tab indices 5 and 6 -----------
+    score = (health or {}).get("overall_score")
+    grade = (health or {}).get("grade")
+    if score is not None and grade is not None:
+        insights.append(f"This conversation scores {grade} — overall health {score:.2f}.")
+
+    density = (network or {}).get("density")
+    strongest = (network or {}).get("strongest_connections") or []
+    if density is not None:
+        if strongest and strongest[0].get("from") and strongest[0].get("to"):
+            top = strongest[0]
+            insights.append(
+                f"The strongest connection is {top['from']} to {top['to']} "
+                f"({top['interactions']} interactions); the network has density "
+                f"{density:.2f}."
+            )
+        else:
+            insights.append(f"The conversation network has density {density:.2f}.")
+
     insights.append(
         f"This conversation spans {stats.get('duration_days', 0)} days "
         f"and {stats.get('total_messages', 0)} messages."
@@ -162,4 +248,4 @@ def build_insights(stats, participants, content, sentiment) -> list[str]:
     if peak is not None:
         insights.append(f"The busiest hour is {peak}:00.")
 
-    return insights[:7]
+    return insights[:11]
