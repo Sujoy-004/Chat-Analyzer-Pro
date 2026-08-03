@@ -64,19 +64,25 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: none (absorbed)
 
 ### Phase 4: NLP Extras & Quality Gate
-**Goal**: The full v1 feature set — heavy NLP insights gated behind the `[nlp]` extra, friendly errors with export instructions, tests that exercise the real code, a README a friend can follow, plus the Phase 3 leftovers absorbed here (OUT-04 `--output` path flag, OUT-05 `--no-report` semantics).
+**Goal**: The full v1 feature set — heavy NLP insights gated behind the `[nlp]` extra, friendly errors with export instructions, tests that exercise the real code, a README a friend can follow. Phase 3 leftovers absorbed here as NO-FLAG resolutions (OUT-04/OUT-05: report always generated to the current working directory, no `--output`/`--no-report` flags).
 **Mode:** mvp
 **Depends on**: Phase 2, Phase 3
 **Requirements**: ANAL-06, ANAL-07, ANAL-08, ANAL-09, CLI-04, QUAL-02, QUAL-03, OUT-04, OUT-05
 **Success Criteria** (what must be TRUE):
-  1. User who installed the `[nlp]` extra gets 6-class emotion classification, relationship health score, conversation summarization, and network graph analysis
+  1. User who installed the `[nlp]` extra gets 6-class emotion classification, relationship health score, conversation summarization, and network graph analysis (emotion/summarization gated; health/network always-on per ANAL-07/09)
   2. User without the `[nlp]` extra gets an actionable hint (e.g., `pip install chat-analyzer-pro[nlp]`) instead of a traceback, and model downloads are announced with name and size before they start
   3. User who runs the tool on a missing, wrong-format, empty, or unparseable file gets a friendly, actionable error with WhatsApp/Telegram export instructions and a correct exit code
-  4. User can specify the output path with `--output` (report written there, absolute path printed) — deferred OUT-04 from Phase 3
-  5. User can skip the report (`--no-report`) and still get full terminal output — OUT-05 semantics revisit (from Phase 3)
+  4. User's report is always saved to the current working directory as `<chat_name>_report.html` and auto-opens (no `--output` flag — OUT-04 resolved no-flag per D-08/D-09)
+  5. The report is always generated — there is no skip flag (OUT-05 resolved no-flag per D-08); terminal output still runs as before
   6. Tests exercise the real `chat_analyzer.*` real modules (parser fixtures, parse → analyze → render pipeline, HTML/encoding) and pass in a clean environment
   7. A friend can follow the README quickstart (export → pip install → one command) and get results
-**Plans**: TBD (absorbs Phase 3 leftovers OUT-04 `--output`, OUT-05 `--no-report`)
+**Plans**: 5 plans
+Plans:
+- [ ] 04-01-PLAN.md — Always-on health/network slice (contracts, pipeline, cwd report, Phase 2 test reconciliation)
+- [ ] 04-02-PLAN.md — Gated emotion/summarization slice (emotion fix, nlp_gate, progress, report tabs)
+- [ ] 04-03-PLAN.md — CLI UX slice (NLP menu + installer, hint line, friendly errors)
+- [ ] 04-04-PLAN.md — Legacy test rewiring (test_analysis/test_parser → real chat_analyzer modules)
+- [ ] 04-05-PLAN.md — README quickstart + planning-doc reconciliation (QUAL-03, no-flag/always-on fixes)
 
 ## Progress
 
@@ -88,4 +94,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | 1. Package Foundation | 2/2 | Complete | 2026-08-01 |
 | 2. One-Command Terminal Insights | 1/1 | Complete | 2026-08-03 |
 | 3. Shareable HTML Report | - | Absorbed into Phase 4 | 2026-08-03 |
-| 4. NLP Extras & Quality Gate | TBD | Not started | - |
+| 4. NLP Extras & Quality Gate | 0/5 | Not started | - |
