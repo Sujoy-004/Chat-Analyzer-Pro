@@ -94,24 +94,25 @@ Which phases cover which requirements. Updated during roadmap creation.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | CLI-01 | Phase 1 | Complete |
-| CLI-02 | Phase 2 | Pending |
-| CLI-03 | Phase 2 | Pending |
+| CLI-02 | Phase 2 | Complete |
+| CLI-03 | Phase 2 | Complete |
 | CLI-04 | Phase 4 | Pending |
 | CLI-05 | Phase 1 | Complete |
-| ANAL-01 | Phase 2 | Pending |
-| ANAL-02 | Phase 2 | Pending |
-| ANAL-03 | Phase 2 | Pending |
-| ANAL-04 | Phase 2 | Pending |
-| ANAL-05 | Phase 2 | Pending |
+| ANAL-01 | Phase 2 | Complete |
+| ANAL-02 | Phase 2 | Complete |
+| ANAL-03 | Phase 2 | Complete |
+| ANAL-04 | Phase 2 | Complete |
+| ANAL-05 | Phase 2 | Complete |
 | ANAL-06 | Phase 4 | Pending |
 | ANAL-07 | Phase 4 | Pending |
 | ANAL-08 | Phase 4 | Pending |
 | ANAL-09 | Phase 4 | Pending |
-| OUT-01 | Phase 2 | Pending |
-| OUT-02 | Phase 2 | Pending |
-| OUT-03 | Phase 3 | Pending |
-| OUT-04 | Phase 3 | Pending |
-| OUT-05 | Phase 3 | Pending |
+| OUT-01 | Phase 2 | Complete (terminal shows compact summary panel + path; insights live in HTML report) |
+| OUT-02 | Phase 2 | Dropped (plotext never ships; charts exist only in the HTML report) |
+| OUT-03 | Phase 2 | Complete (pulled forward from Phase 3) |
+| OUT-04 | Phase 2 | Complete (default-path behavior ships; `--output` flag deferred) |
+| OUT-05 | Phase 2 | Not applicable (report is the deliverable; `--no-report` revisit lands in Phase 4) |
+| CLI-08 | Phase 2 | Complete (auto-open pulled forward; degrades to printed path) |
 | PKG-01 | Phase 1 | Complete |
 | PKG-02 | Phase 1 | Complete |
 | PKG-03 | Phase 1 | Complete |
