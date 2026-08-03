@@ -16,8 +16,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Package Foundation** - Repackage `src/` → `src/chat_analyzer/`, pyproject with `[nlp]` extra, working `analyze` command; existing analysis core survives intact
 - [x] **Phase 2: One-Command Terminal Insights** - Parser hardening + pipeline + self-contained HTML report card: correct insights in one command
-- [ ] **Phase 3: Shareable HTML Report** - Re-scope pending (OUT-03/04/05 pulled forward into Phase 2)
-- [ ] **Phase 4: NLP Extras & Quality Gate** - `[nlp]`-gated features (emotion, health, summary, network), friendly errors with export instructions, tests, README quickstart
+- [x] **Phase 3: Shareable HTML Report** - ABSORBED into Phase 4 (OUT-03/04/05 pulled forward into Phase 2; no remaining work)
+- [ ] **Phase 4: NLP Extras & Quality Gate** - `[nlp]`-gated features (emotion, health, summary, network), friendly errors with export instructions, tests, README quickstart, plus Phase 3 leftovers (OUT-04 `--output`, OUT-05 `--no-report`)
 
 ## Phase Details
 
@@ -54,29 +54,29 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 1 plan (02-PLAN.md)
 
 ### Phase 3: Shareable HTML Report
-**Goal**: Re-scope pending — OUT-03/04/05 were pulled forward into Phase 2; the single-file report card already ships with default-path behavior (no `--output`/`--no-report` flags in v1). This phase is flagged for re-scope or absorption into Phase 4 during the next planning pass.
-**Mode:** mvp
+**Goal**: ABSORBED — OUT-03/04/05 were pulled forward into Phase 2 (Complete). No remaining deliverable in this phase. The only leftovers — OUT-04 (`--output` path flag, deferred by D-03) and OUT-05 (`--no-report` semantics revisit) — fold into Phase 4.
+**Mode:** mvp (absorbed — no plans)
 **Depends on**: Phase 2
-**Requirements**: OUT-03, OUT-04, OUT-05 (moved to Phase 2 — see traceability)
+**Requirements**: (none — OUT-03/04/05 moved to Phase 2; see traceability)
+**Status**: ABSORBED (2026-08-03)
 **Success Criteria** (what must be TRUE):
-  1. User can generate a self-contained single-file HTML report (charts/images base64-embedded, no external assets, opens offline by double-click) — DELIVERED in Phase 2
-  2. User can specify the output path with `--output` and the report is written there, with the absolute path printed — flag deferred (D-03); default-path behavior ships
-  3. User can skip the report (`--no-report`) and still get full terminal output — not applicable in Phase 2; revisit in Phase 4
-  4. All chat-derived content in the report is escaped — a message containing markup cannot inject script into a shared report — DELIVERED in Phase 2
-**Plans**: TBD (re-scope)
+  1. (all out-of-scope criteria satisfied in Phase 2; none remaining for Phase 3)
+**Plans**: none (absorbed)
 
 ### Phase 4: NLP Extras & Quality Gate
-**Goal**: The full v1 feature set — heavy NLP insights gated behind the `[nlp]` extra, friendly errors with export instructions, tests that exercise the real code, and a README a friend can follow.
+**Goal**: The full v1 feature set — heavy NLP insights gated behind the `[nlp]` extra, friendly errors with export instructions, tests that exercise the real code, a README a friend can follow, plus the Phase 3 leftovers absorbed here (OUT-04 `--output` path flag, OUT-05 `--no-report` semantics).
 **Mode:** mvp
 **Depends on**: Phase 2, Phase 3
-**Requirements**: ANAL-06, ANAL-07, ANAL-08, ANAL-09, CLI-04, QUAL-02, QUAL-03
+**Requirements**: ANAL-06, ANAL-07, ANAL-08, ANAL-09, CLI-04, QUAL-02, QUAL-03, OUT-04, OUT-05
 **Success Criteria** (what must be TRUE):
   1. User who installed the `[nlp]` extra gets 6-class emotion classification, relationship health score, conversation summarization, and network graph analysis
   2. User without the `[nlp]` extra gets an actionable hint (e.g., `pip install chat-analyzer-pro[nlp]`) instead of a traceback, and model downloads are announced with name and size before they start
   3. User who runs the tool on a missing, wrong-format, empty, or unparseable file gets a friendly, actionable error with WhatsApp/Telegram export instructions and a correct exit code
-  4. Tests exercise the real `chat_analyzer.*` modules (parser fixtures, parse → analyze → render pipeline, HTML/encoding) and pass in a clean environment
-  5. A friend can follow the README quickstart (export → pip install → one command) and get results
-**Plans**: TBD (add note: OUT-05 `--no-report` semantics revisit lands here)
+  4. User can specify the output path with `--output` (report written there, absolute path printed) — deferred OUT-04 from Phase 3
+  5. User can skip the report (`--no-report`) and still get full terminal output — OUT-05 semantics revisit (from Phase 3)
+  6. Tests exercise the real `chat_analyzer.*` real modules (parser fixtures, parse → analyze → render pipeline, HTML/encoding) and pass in a clean environment
+  7. A friend can follow the README quickstart (export → pip install → one command) and get results
+**Plans**: TBD (absorbs Phase 3 leftovers OUT-04 `--output`, OUT-05 `--no-report`)
 
 ## Progress
 
@@ -87,5 +87,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 1. Package Foundation | 2/2 | Complete | 2026-08-01 |
 | 2. One-Command Terminal Insights | 1/1 | Complete | 2026-08-03 |
-| 3. Shareable HTML Report | TBD | Not started | - |
+| 3. Shareable HTML Report | - | Absorbed into Phase 4 | 2026-08-03 |
 | 4. NLP Extras & Quality Gate | TBD | Not started | - |
