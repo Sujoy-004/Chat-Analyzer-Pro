@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-08-01)
 ## Current Position
 
 Phase: 2 of 4 (One-Command Terminal Insights) — EXECUTING
-Plan: 1 of 1
+Plan: 1 of 1 (02-PLAN) — COMPLETE, awaiting verification
 Status: Executing Phase 2
-Last activity: 2026-08-02 -- Phase 2 execution started
+Last activity: 2026-08-03 -- Phase 2 plan 02 executed (48 phase-2 tests + 10 smoke tests pass)
 
 Progress: [██████████] 100%
 
@@ -77,6 +77,10 @@ Recent decisions affecting current work:
 - [Phase 1]: typer.prompt on EOF raises typer Abort → app exits 1 "Aborted." with no traceback — accepted as re-prompt-loop EOF behavior
 - [Phase 1]: BLE001 # noqa on main.py `except Exception` — plan-mandated degrade-not-crash convention overrides ruff blanket-ban
 - [Phase 1]: plotly 6.7.0 pre-exists in local base env (old app era) — not pulled by `pip install -e .`; QUAL-04 proven structurally + via package-tree scan
+- [Phase 2]: OUT-02 (plotext inline terminal charts) DROPPED — plotext never ships; charts exist only in the HTML report (pyproject updated)
+- [Phase 2]: OUT-03/04/05 + CLI-08 pulled forward from Phase 3 into Phase 2 — report is the deliverable; default-path behavior ships (`<stem>_report.html` next to input), no `--output`/`--no-report` flags in v1
+- [Phase 2]: Phase 3 (Shareable HTML Report) OUT-03/04/05 now empty — flagged for re-scope or absorption into Phase 4 during the next planning pass
+- [Phase 2]: `Messages: N` smoke-contract token owned by main.py `_analyze_path` (printed ONCE, both positional + interactive) — keeps Phase 1 `test_phase1_smoke::message_count()` regex green (CRITICAL #1)
 
 ### Pending Todos
 
@@ -91,6 +95,7 @@ None yet.
 - [Phase 1]: `analyze` command name collides with existing PyPI tools — RESOLVED in Phase 1 context (D-01: `chat-analyzer`)
 - [Phase 1]: `_init_.py` → `__init__.py` rename must clean stale re-exports — RESOLVED in plan 01-01 Task 1 (markers rewritten, broken symbols stripped, all imports verified)
 - [Phase 2]: Parser silently fabricates timestamps via `datetime.now()` fallback on unknown date formats — must never ship (strict parse + skip counter)
+- [Phase 2]: RESOLVED — `datetime.now()` fabrication deleted; strict parse + skip counter ships; 0 matches verified in parser/*.py
 
 ## Deferred Items
 
