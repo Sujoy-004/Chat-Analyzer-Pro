@@ -86,6 +86,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Package Foundation | 2/2 | Complete | 2026-08-01 |
-| 2. One-Command Terminal Insights | 1/1 | In Progress | - |
+| 2. One-Command Terminal Insights | 1/1 | Complete | 2026-08-03 |
 | 3. Shareable HTML Report | TBD | Not started | - |
 | 4. NLP Extras & Quality Gate | TBD | Not started | - |
