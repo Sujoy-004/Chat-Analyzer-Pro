@@ -5,13 +5,13 @@ milestone_name: milestone
 status: executing
 stopped_at: Phase 2 context gathered
 last_updated: "2026-08-03T00:00:00.000Z"
-last_activity: 2026-08-03 -- Phase 2 complete (verification 7/7, 2 human UAT items)
+last_activity: 2026-08-03 -- Phase 3 absorbed into Phase 4; next up Phase 4
 progress:
   total_phases: 4
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 3
   completed_plans: 2
-  percent: 67
+  percent: 78
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-01)
 
 **Core value:** One command turns a raw chat export into real insights about the conversation — locally, fast, no accounts, no hosting.
-**Current focus:** Phase 2 — One-Command Terminal Insights
+**Current focus:** Phase 4 — NLP Extras & Quality Gate
 
 ## Current Position
 
-Phase: 2 of 4 (One-Command Terminal Insights) — COMPLETE
-Plan: 1 of 1 — done
-Status: Phase 2 complete; next up Phase 3 (re-scope)
-Last activity: 2026-08-03 -- Phase 2 complete (verification 7/7, 2 human UAT items)
+Phase: 4 of 4 (NLP Extras & Quality Gate)
+Plan: 0 of TBD — planning next
+Status: Phase 3 absorbed; next up Phase 4 (planning)
+Last activity: 2026-08-03 -- Phase 3 absorbed into Phase 4
 
 Progress: [██████████] 100%
 
@@ -79,7 +79,7 @@ Recent decisions affecting current work:
 - [Phase 1]: plotly 6.7.0 pre-exists in local base env (old app era) — not pulled by `pip install -e .`; QUAL-04 proven structurally + via package-tree scan
 - [Phase 2]: OUT-02 (plotext inline terminal charts) DROPPED — plotext never ships; charts exist only in the HTML report (pyproject updated)
 - [Phase 2]: OUT-03/04/05 + CLI-08 pulled forward from Phase 3 into Phase 2 — report is the deliverable; default-path behavior ships (`<stem>_report.html` next to input), no `--output`/`--no-report` flags in v1
-- [Phase 2]: Phase 3 (Shareable HTML Report) OUT-03/04/05 now empty — flagged for re-scope or absorption into Phase 4 during the next planning pass
+- [Phase 3]: ABSORBED into Phase 4 — OUT-03 complete in Phase 2; only leftovers are OUT-04 (`--output` path flag, deferred by D-03) and OUT-05 (`--no-report` semantics) which now fold into Phase 4's requirements and planning; Phase 3 has no remaining deliverables
 - [Phase 2]: `Messages: N` smoke-contract token owned by main.py `_analyze_path` (printed ONCE, both positional + interactive) — keeps Phase 1 `test_phase1_smoke::message_count()` regex green (CRITICAL #1)
 
 ### Pending Todos
@@ -110,6 +110,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-01T07:10:00Z
-Stopped at: Phase 2 context gathered
-Resume file: .planning/phases/02-one-command-terminal-insights/02-CONTEXT.md
+Last session: 2026-08-03T00:00:00Z
+Stopped at: Phase 3 absorbed into Phase 4; Phase 4 ready to plan
+Resume file: .planning/phases/04-nlp-extras-and-quality-gate/04-CONTEXT.md (to be created during Phase 4 planning)

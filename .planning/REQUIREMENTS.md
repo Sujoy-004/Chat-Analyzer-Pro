@@ -29,11 +29,11 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Output
 
-- [ ] **OUT-01**: User sees analysis results in the terminal with tables, panels, and color
-- [ ] **OUT-02**: User sees inline charts in the terminal (bar/line via plotext)
-- [ ] **OUT-03**: User gets a self-contained single-file HTML report (charts/images base64-embedded)
-- [ ] **OUT-04**: User can specify an output path for the HTML report
-- [ ] **OUT-05**: User can skip the HTML report (`--no-report`) or keep it minimal
+- [x] **OUT-01**: User sees analysis results in the terminal with tables, panels, and color
+- [x] **OUT-02**: User sees inline charts in the terminal (bar/line via plotext) — DROPPED (plotext never ships; charts live in HTML report)
+- [x] **OUT-03**: User gets a self-contained single-file HTML report (charts/images base64-embedded) — Phase 2
+- [ ] **OUT-04**: User can specify an output path for the HTML report — Phase 4 (`--output`, absorbed from Phase 3)
+- [ ] **OUT-05**: User can skip the HTML report (`--no-report`) or keep it minimal — Phase 4 (revisit, absorbed from Phase 3)
 
 ### Packaging
 
@@ -110,8 +110,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | OUT-01 | Phase 2 | Complete (terminal shows compact summary panel + path; insights live in HTML report) |
 | OUT-02 | Phase 2 | Dropped (plotext never ships; charts exist only in the HTML report) |
 | OUT-03 | Phase 2 | Complete (pulled forward from Phase 3) |
-| OUT-04 | Phase 2 | Complete (default-path behavior ships; `--output` flag deferred) |
-| OUT-05 | Phase 2 | Not applicable (report is the deliverable; `--no-report` revisit lands in Phase 4) |
+| OUT-04 | Phase 2 / Phase 4 | Phase 2 partial (default-path behavior ships); `--output` flag absorbed into Phase 4 from Phase 3 |
+| OUT-05 | Phase 4 | Not applicable in Phase 2 (report is the deliverable); `--no-report` semantics revisit lands in Phase 4 (absorbed from Phase 3) |
 | CLI-08 | Phase 2 | Complete (auto-open pulled forward; degrades to printed path) |
 | PKG-01 | Phase 1 | Complete |
 | PKG-02 | Phase 1 | Complete |
