@@ -2,10 +2,10 @@
 
 research Pattern 4 — one self-contained HTML file: jinja2 autoescape
 template (inline constant, no external assets, no CDN), base64 PNG chart
-URIs, sanitized filename in the current working directory (D-09), utf-8
-write, best-effort auto-open. Chat content is UNTRUSTED input: autoescape
-is set explicitly (plain jinja2 defaults to False) and chart URIs are
-validated at the boundary before they reach the template.
+URIs, sanitized filename next to the input, utf-8 write, best-effort
+auto-open. Chat content is UNTRUSTED input: autoescape is set explicitly
+(plain jinja2 defaults to False) and chart URIs are validated at the
+boundary before they reach the template.
 """
 
 from __future__ import annotations
@@ -65,8 +65,6 @@ TEMPLATE = """<!DOCTYPE html>
   <button class="tab" data-tab="flow" onclick="showTab('flow')">Flow</button>
   <button class="tab" data-tab="words" onclick="showTab('words')">Words</button>
   <button class="tab" data-tab="sentiment" onclick="showTab('sentiment')">Sentiment</button>
-  <button class="tab" data-tab="health" onclick="showTab('health')">Relationship Health</button>
-  <button class="tab" data-tab="network" onclick="showTab('network')">Network</button>
 </nav>
 <main>
   <div class="panel active" id="tab-overview">
@@ -132,36 +130,6 @@ TEMPLATE = """<!DOCTYPE html>
       </table>
     </div>
   </div>
-  <div class="panel" id="tab-health">
-    <div class="card">
-      <p class="lead">{{ insights[5] }}</p>
-      {% if charts.health %}<img class="chart" alt="Relationship health trend" src="{{ charts.health }}">{% endif %}
-      {% if health %}
-      <table>
-        <tr><th>Overall health score</th><td>{{ health.overall_score }}</td></tr>
-        <tr><th>Grade</th><td>{{ health.grade }}</td></tr>
-        <tr><th>Initiator balance</th><td>{{ health.initiator_balance }}</td></tr>
-        <tr><th>Avg response minutes</th><td>{{ health.avg_response_minutes }}</td></tr>
-      </table>
-      {% endif %}
-    </div>
-  </div>
-  <div class="panel" id="tab-network">
-    <div class="card">
-      <p class="lead">{{ insights[6] }}</p>
-      {% if charts.network %}<img class="chart" alt="Conversation network" src="{{ charts.network }}">{% endif %}
-      {% if network %}
-      <table>
-        <tr><th>Nodes</th><td>{{ network.node_count }}</td></tr>
-        <tr><th>Edges</th><td>{{ network.edge_count }}</td></tr>
-        <tr><th>Density</th><td>{{ network.density }}</td></tr>
-        {% if network.strongest_connections %}
-        <tr><th>Strongest connection</th><td>{{ network.strongest_connections[0]['from'] }} &rarr; {{ network.strongest_connections[0]['to'] }}</td></tr>
-        {% endif %}
-      </table>
-      {% endif %}
-    </div>
-  </div>
 </main>
 <script>
 function showTab(id) {
@@ -192,11 +160,7 @@ def sanitize_filename(name: str) -> str:
 
 
 def write_report(results: AnalysisResults, input_path: Path) -> Path:
-    """Render the single-file HTML report to the cwd (D-09/D-14).
-
-    The report is ALWAYS generated — no flags (D-08) — and lands in the
-    current working directory as <sanitized-stem>_report.html.
-    """
+    """Render the single-file HTML report next to the input (D-08/D-14)."""
     # Validate chart URIs at the boundary — only internally generated PNG
     # data URIs reach the template (no |safe needed; T-02-01).
     charts = {
@@ -222,11 +186,9 @@ def write_report(results: AnalysisResults, input_path: Path) -> Path:
         sentiment=results["sentiment"],
         charts=charts,
         insights=results["insights"],
-        health=results.get("health", {}),
-        network=results.get("network", {}),
     )
 
-    report_path = Path.cwd() / f"{stem}_report.html"  # D-09: cwd, not input dir
+    report_path = input_path.parent / f"{stem}_report.html"
     report_path.write_text(html, encoding="utf-8")  # Pitfall 11: never platform-default
     return report_path
 
