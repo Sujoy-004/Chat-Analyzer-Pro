@@ -13,6 +13,7 @@ Designed for group chats with 3+ participants, but works with any size.
 
 import pandas as pd
 import numpy as np
+import matplotlib
 import matplotlib.pyplot as plt
 import seaborn as sns
 import networkx as nx
@@ -503,6 +504,23 @@ def analyze_network(df: pd.DataFrame, weight_threshold: int = 0) -> Dict[str, An
         'patterns': patterns,
         'subgroups': subgroups
     }
+
+
+def network_figure(df: pd.DataFrame) -> "matplotlib.figure.Figure":
+    """Render the conversation network as a figure (Pattern 2, Pitfall 6).
+
+    The analyze_network plot helpers end in plt.show() and return None, so
+    they cannot be base64-embedded into the HTML report. This thin wrapper
+    builds the Axes without showing them and returns the figure for
+    pipeline.fig_to_data_uri — no analysis rewrite, just a figure-returning
+    integration helper.
+    """
+    graph = analyze_network(df)["graph"]
+    fig, ax = plt.subplots(figsize=(10, 8))
+    pos = nx.spring_layout(graph, seed=42)
+    nx.draw_networkx(graph, pos, ax=ax)
+    ax.set_title("Conversation Network")
+    return fig  # NO plt.show() -> base64 via pipeline.fig_to_data_uri
 
 
 # Example usage
