@@ -20,8 +20,8 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Tuple, Any, Optional
 import logging
 
-# Configure logging (Anti-Pattern 4: never hijack global log config at import)
-logging.getLogger(__name__).addHandler(logging.NullHandler())
+# Configure logging
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
