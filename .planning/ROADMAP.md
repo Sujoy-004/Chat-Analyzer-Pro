@@ -89,7 +89,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   6. Tests exercise the real `chat_analyzer.*` real modules (parser fixtures, parse → analyze → render pipeline, HTML/encoding) and pass in a clean environment
   7. A friend can follow the README quickstart (export → pip install → one command) and get results
 
-**Plans**: 5 plans
+**Plans**: 4/5 plans executed
 Plans:
 **Wave 1**
 
@@ -102,7 +102,7 @@ Plans:
 **Wave 3** *(blocked on Wave 2 completion)*
 
 - [x] 04-03-PLAN.md — CLI UX slice (NLP menu + installer, hint line, friendly errors)
-- [ ] 04-05-PLAN.md — README quickstart + planning-doc reconciliation (QUAL-03, no-flag/always-on fixes)
+- [x] 04-05-PLAN.md — README quickstart + planning-doc reconciliation (QUAL-03, no-flag/always-on fixes)
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
@@ -118,4 +118,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | 1. Package Foundation | 2/2 | Complete | 2026-08-01 |
 | 2. One-Command Terminal Insights | 1/1 | Complete | 2026-08-03 |
 | 3. Shareable HTML Report | - | Absorbed into Phase 4 | 2026-08-03 |
-| 4. NLP Extras & Quality Gate | 1/5 | In Progress|  |
+| 4. NLP Extras & Quality Gate | 4/5 | In Progress |  |

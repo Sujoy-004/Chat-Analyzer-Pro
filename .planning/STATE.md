@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Plan 04-03 complete; next: 04-04
-last_updated: "2026-08-04T09:11:02.000Z"
-last_activity: 2026-08-04 -- Plan 04-03 done (interactive NLP menu + friendly errors)
+stopped_at: "Plan 04-05 complete; next: 04-04"
+last_updated: "2026-08-04T09:57:27.805Z"
+last_activity: 2026-08-04 -- Plan 04-05 done (README quickstart + doc reconciliation)
 progress:
   total_phases: 4
   completed_phases: 2
   total_plans: 8
-  completed_plans: 6
-  percent: 75
+  completed_plans: 7
+  percent: 88
 ---
 
 # Project State
@@ -26,33 +26,39 @@ See: .planning/PROJECT.md (updated 2026-08-01)
 ## Current Position
 
 Phase: 4 (NLP Extras & Quality Gate) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Executing Phase 4
-Last activity: 2026-08-04 -- Plan 04-03 complete (D-04 menu + D-06 hint + CLI-04 friendly errors)
+Last activity: 2026-08-04 -- Plan 04-05 complete (README quickstart + doc reconciliation)
 
-Progress: [███████░░░] 75%
+Progress: [█████████░] 88%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 6
-- Average duration: 23min
-- Total execution time: 2.2 hours
+- Total plans completed: 7
+- Average duration: 19min
+- Total execution time: 2.3 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 1. Package Foundation | 2 / 2 | 45min | 22.5min |
-| 4. NLP Extras & Quality Gate | 4 / 5 | 82min | 20.5min |
+| 4. NLP Extras & Quality Gate | 4 / 5 | 85min | 21.3min |
 
 **Recent Trend:**
 
-- Last 5 plans: 01-01 Package Foundation (20min), 01-02 CLI Interactive Slice (25min), 04-01 Always-On Health + Network Slice (17min), 04-02 Gated Emotion + Summary Slice (45min), 04-03 Interactive NLP Menu + Friendly Errors (20min)
+- Last 5 plans: 01-02 CLI Interactive Slice (25min), 04-01 Always-On Health + Network Slice (17min), 04-02 Gated Emotion + Summary Slice (45min), 04-03 Interactive NLP Menu + Friendly Errors (20min), 04-05 README Quickstart + Doc Reconciliation (3min)
 - Trend: —
 
 *Updated after each plan completion*
+
+**Per-Plan Metrics:**
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase 04 P05 | 3min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -95,6 +101,8 @@ Recent decisions affecting current work:
 - [Phase 4]: rich markup silently drops unknown bracket tags — `console.print("...chat-analyzer-pro[nlp]")` renders without the `[nlp]` text on rich 14.3.3; every message containing the package name uses typer.echo (no markup) or `\[nlp]` escape; D-06 hint lines also use `soft_wrap=True` so they stay ONE physical line on narrow non-tty consoles (the "exactly one hint line" contract)
 - [Phase 4]: `install_nlp(cpu_only)` = subprocess pip re-install of the declared [nlp] extras (torch + transformers, `transformers>=4.30,<6`, CPU wheel index for cpu_only) with `check=False` + returncode check, no shell=True (T-04-10); raises RuntimeError → menu degrades to basic + continue hint (Pitfall 4)
 - [Phase 4]: CLI-04 error taxonomy = `_EXPORT_WHATSAPP`/`_EXPORT_TELEGRAM` constants + `_friendly_error(chat_file, exc)` classifier (file-not-found via isinstance / unsupported-type / empty-parse by substring / defensive catch-all); every positional failure ends `typer.Exit(code=1) from None`, interactive keeps `continue` (D-15); Phase 2 test substrings ("expected a WhatsApp .txt or Telegram .json", "File not found", "No messages could be parsed") preserved inside the composed messages
+- [Phase 04]: README quickstart-first per D-18 with neutral D-19 options block; REQUIREMENTS/ROADMAP reconciled: ANAL-07/09 always-on (D-07/D-07b), OUT-04/05 NO FLAG (D-08), zero --output/--no-report strings in ROADMAP.md — QUAL-03 + reconciliation notes #1/#2 from the orchestrator; plan must_haves artifact pins not_contains --output on ROADMAP.md
+- [Phase 04]: Phase 3 ROADMAP historical note reworded flag-free (OUT-04 output path / OUT-05 report opt-out semantics) despite Task-2 'don't touch Phase 1/2/3' scoping — Plan must_haves artifact ROADMAP.md not_contains --output + success criterion 'no flag wording anywhere in the docs' take precedence
 
 ### Pending Todos
 
@@ -125,6 +133,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-04T09:11:02Z
-Stopped at: Plan 04-03 complete; next: 04-04
+Last session: 2026-08-04T09:57:27.772Z
+Stopped at: Plan 04-05 complete; next: 04-04
 Resume file: .planning/phases/04-nlp-extras-quality-gate/04-04-PLAN.md

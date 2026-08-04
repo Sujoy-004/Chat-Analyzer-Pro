@@ -47,7 +47,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [x] **QUAL-01**: Existing analysis modules still work (parsers, sentiment, analysis functions)
 - [x] **QUAL-02**: Tests pass for the new CLI (parse → analyze → render pipeline) — Phase 2 + 04-01 + 04-02 suites green (26 Phase 2 + 10 smoke + 2 always-on e2e + 3 nlp-gate)
-- [ ] **QUAL-03**: README documents the "how a friend uses it" quickstart (export → pip install → one command)
+- [x] **QUAL-03**: README documents the "how a friend uses it" quickstart (export → pip install → one command)
 - [x] **QUAL-04**: Web-app-only code (streamlit_app.py, unsafe_allow_html, exec-of-remote-code) is removed or excluded from the package
 
 ## v2 Requirements
@@ -120,7 +120,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PKG-05 | Phase 1 | Complete |
 | QUAL-01 | Phase 1 | Complete |
 | QUAL-02 | Phase 4 | Complete (Phase 2 + 04-01 + 04-02 suites green) |
-| QUAL-03 | Phase 4 | Pending |
+| QUAL-03 | Phase 4 | Complete |
 | QUAL-04 | Phase 1 | Complete |
 
 **Coverage:**
