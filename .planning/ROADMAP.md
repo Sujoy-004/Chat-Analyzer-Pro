@@ -101,7 +101,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 04-03-PLAN.md — CLI UX slice (NLP menu + installer, hint line, friendly errors)
+- [x] 04-03-PLAN.md — CLI UX slice (NLP menu + installer, hint line, friendly errors)
 - [ ] 04-05-PLAN.md — README quickstart + planning-doc reconciliation (QUAL-03, no-flag/always-on fixes)
 
 **Wave 4** *(blocked on Wave 3 completion)*

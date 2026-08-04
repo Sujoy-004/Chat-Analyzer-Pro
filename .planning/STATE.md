@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Plan 04-02 complete; next: 04-03
-last_updated: "2026-08-04T08:22:00.000Z"
-last_activity: 2026-08-04 -- Plan 04-02 done (gated emotion + summary slice)
+stopped_at: Plan 04-03 complete; next: 04-04
+last_updated: "2026-08-04T09:11:02.000Z"
+last_activity: 2026-08-04 -- Plan 04-03 done (interactive NLP menu + friendly errors)
 progress:
   total_phases: 4
   completed_phases: 2
   total_plans: 8
-  completed_plans: 5
-  percent: 62
+  completed_plans: 6
+  percent: 75
 ---
 
 # Project State
@@ -26,30 +26,30 @@ See: .planning/PROJECT.md (updated 2026-08-01)
 ## Current Position
 
 Phase: 4 (NLP Extras & Quality Gate) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 Status: Executing Phase 4
-Last activity: 2026-08-04 -- Plan 04-02 complete (gated emotion + summary, nlp_gate, progress bar)
+Last activity: 2026-08-04 -- Plan 04-03 complete (D-04 menu + D-06 hint + CLI-04 friendly errors)
 
-Progress: [██████░░░░] 62%
+Progress: [███████░░░] 75%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 5
-- Average duration: 24min
-- Total execution time: 1.8 hours
+- Total plans completed: 6
+- Average duration: 23min
+- Total execution time: 2.2 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 1. Package Foundation | 2 / 2 | 45min | 22.5min |
-| 4. NLP Extras & Quality Gate | 3 / 5 | 62min | 20.7min |
+| 4. NLP Extras & Quality Gate | 4 / 5 | 82min | 20.5min |
 
 **Recent Trend:**
 
-- Last 5 plans: 01-01 Package Foundation (20min), 01-02 CLI Interactive Slice (25min), 04-01 Always-On Health + Network Slice (17min), 04-02 Gated Emotion + Summary Slice (45min)
+- Last 5 plans: 01-01 Package Foundation (20min), 01-02 CLI Interactive Slice (25min), 04-01 Always-On Health + Network Slice (17min), 04-02 Gated Emotion + Summary Slice (45min), 04-03 Interactive NLP Menu + Friendly Errors (20min)
 - Trend: —
 
 *Updated after each plan completion*
@@ -91,6 +91,10 @@ Recent decisions affecting current work:
 - [Phase 4]: `[nlp]` extra += `sentencepiece>=0.1.99` (transformers does NOT auto-install it; T5Tokenizer needs it — without it ANAL-08 silently degrades forever). Heavy dep stays behind the extra (PKG-03); `test_phase1_smoke` nlp pin updated
 - [Phase 4]: `AnalysisResults` gains `emotion`/`summary` slots (None when gate OFF); dominant emotion derived in the adapter (argmax of distribution — `get_emotion_summary` has no dominant key)
 - [Phase 4]: D-12 narration = rich Progress bar on tty (determinate, total 4/3 by gate), shared `stage()` helper falls back to `stage_status` `[OK] <label>` off-tty (Pitfall 8); labels verbatim: "Parsing chat"/"Computing insights"/"Analyzing emotions"/"Summarizing conversation" (pinned by test_stage_narration_and_order)
+- [Phase 4]: D-04 download menu rendered with rich console.print option lines + typer.prompt(default="2") — option 2 (CPU-only ~0.6GB) is the default (T-04-13), option 3 always available; `_nlp_menu(console)` is a module-level function so it is unit-testable (in-process test 7 — subprocess cannot fake a tty)
+- [Phase 4]: rich markup silently drops unknown bracket tags — `console.print("...chat-analyzer-pro[nlp]")` renders without the `[nlp]` text on rich 14.3.3; every message containing the package name uses typer.echo (no markup) or `\[nlp]` escape; D-06 hint lines also use `soft_wrap=True` so they stay ONE physical line on narrow non-tty consoles (the "exactly one hint line" contract)
+- [Phase 4]: `install_nlp(cpu_only)` = subprocess pip re-install of the declared [nlp] extras (torch + transformers, `transformers>=4.30,<6`, CPU wheel index for cpu_only) with `check=False` + returncode check, no shell=True (T-04-10); raises RuntimeError → menu degrades to basic + continue hint (Pitfall 4)
+- [Phase 4]: CLI-04 error taxonomy = `_EXPORT_WHATSAPP`/`_EXPORT_TELEGRAM` constants + `_friendly_error(chat_file, exc)` classifier (file-not-found via isinstance / unsupported-type / empty-parse by substring / defensive catch-all); every positional failure ends `typer.Exit(code=1) from None`, interactive keeps `continue` (D-15); Phase 2 test substrings ("expected a WhatsApp .txt or Telegram .json", "File not found", "No messages could be parsed") preserved inside the composed messages
 
 ### Pending Todos
 
@@ -121,6 +125,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-04T08:22:00Z
-Stopped at: Plan 04-02 complete; next: 04-03
-Resume file: .planning/phases/04-nlp-extras-quality-gate/04-03-PLAN.md
+Last session: 2026-08-04T09:11:02Z
+Stopped at: Plan 04-03 complete; next: 04-04
+Resume file: .planning/phases/04-nlp-extras-quality-gate/04-04-PLAN.md

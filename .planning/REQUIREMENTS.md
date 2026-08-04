@@ -12,7 +12,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **CLI-01**: User installs the tool with `pip install chat-analyzer-pro` and gets an `analyze` command
 - [ ] **CLI-02**: User runs `analyze <chat_file>` on a WhatsApp `.txt` or Telegram `.json` export and the full pipeline runs automatically
 - [ ] **CLI-03**: User sees a progress indicator while the pipeline runs
-- [ ] **CLI-04**: User gets a friendly, actionable error with export instructions when a file can't be parsed
+- [x] **CLI-04**: User gets a friendly, actionable error with export instructions when a file can't be parsed
 - [x] **CLI-05**: User can see CLI help (`analyze --help`) with clear usage
 
 ### Analysis
@@ -96,7 +96,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CLI-01 | Phase 1 | Complete |
 | CLI-02 | Phase 2 | Complete |
 | CLI-03 | Phase 2 | Complete |
-| CLI-04 | Phase 4 | Pending |
+| CLI-04 | Phase 4 | Complete (04-03: friendly-error taxonomy with inline WhatsApp/Telegram export steps) |
 | CLI-05 | Phase 1 | Complete |
 | ANAL-01 | Phase 2 | Complete |
 | ANAL-02 | Phase 2 | Complete |
@@ -130,4 +130,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-07-31*
-*Last updated: 2026-08-04 (plan 04-02: ANAL-06/ANAL-08 complete — NLP gate + tabs; QUAL-02 extended)*
+*Last updated: 2026-08-04 (plan 04-03: CLI-04 complete — friendly errors with export instructions; QUAL-02 extended)*
