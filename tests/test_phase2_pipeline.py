@@ -39,7 +39,14 @@ def test_whatsapp_e2e():
     assert len(results["participants"]) == 2
     assert results["content"]["top_words"]
     assert results["sentiment"]["distribution"]
-    assert set(results["charts"]) == {"timeline", "activity", "participants", "sentiment"}
+    assert set(results["charts"]) == {
+        "timeline",
+        "activity",
+        "participants",
+        "sentiment",
+        "health",
+        "network",
+    }  # 04-02 drops health/network from charts into the results root
     for uri in results["charts"].values():
         assert uri.startswith("data:image/png;base64,")
     assert results["insights"] and all(isinstance(i, str) and i for i in results["insights"])

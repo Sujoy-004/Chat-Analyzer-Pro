@@ -110,15 +110,15 @@ def test_stage_narration_and_order(tmp_path):
 
 
 def test_report_written_next_to_input(tmp_path):
-    """Test 3 (D-08/LOW #8): report next to the tmp copy; no NEW repo writes.
+    """Test 3 (D-08/LOW #8): report in cwd (tmp_path); no NEW repo writes.
 
     Phase 1's smoke suite feeds the repo sample to the interactive CLI, which
-    writes the report next to the input — so snapshot the repo's existing
+    writes the report to the cwd — so snapshot the repo's existing
     *_report.html files first and assert this CLI run added nothing new.
     """
     before = set(REPO_ROOT.rglob("*_report.html"))
     dst = _copy_sample(tmp_path, "whatsapp_sample.txt")
-    res = _run(_cli_cmd(str(dst), console=True))
+    res = _run(_cli_cmd(str(dst), console=True), cwd=tmp_path)
 
     assert res.returncode == 0, res.stdout + res.stderr
     report = tmp_path / "whatsapp_sample_report.html"
@@ -130,7 +130,7 @@ def test_report_written_next_to_input(tmp_path):
 def test_report_card_wellformed(tmp_path):
     """Test 4 (ROADMAP crit 2+3): 5 tabs, >= 4 charts, utf-8 declaration."""
     dst = _copy_sample(tmp_path, "whatsapp_sample.txt")
-    res = _run(_cli_cmd(str(dst), console=True))
+    res = _run(_cli_cmd(str(dst), console=True), cwd=tmp_path)
 
     assert res.returncode == 0, res.stdout + res.stderr
     html = (tmp_path / "whatsapp_sample_report.html").read_text(encoding="utf-8")
@@ -143,7 +143,7 @@ def test_report_card_wellformed(tmp_path):
 def test_interactive_path(tmp_path):
     """Test 5 (D-01): no-arg interactive prompt analyzes a piped path."""
     dst = _copy_sample(tmp_path, "whatsapp_sample.txt")
-    res = _run(_cli_cmd(console=False), stdin_text=f"{dst}\n")
+    res = _run(_cli_cmd(console=False), stdin_text=f"{dst}\n", cwd=tmp_path)
 
     assert res.returncode == 0, res.stdout + res.stderr
     assert "Messages: 27" in res.stdout + res.stderr
@@ -191,7 +191,7 @@ def test_unsupported_and_error_paths(tmp_path):
 def test_telegram_roundtrip(tmp_path):
     """Test 8 (D-19/D-20): telegram export parses end-to-end."""
     dst = _copy_sample(tmp_path, "telegram_sample.json")
-    res = _run(_cli_cmd(str(dst), console=False))
+    res = _run(_cli_cmd(str(dst), console=False), cwd=tmp_path)
 
     assert res.returncode == 0, res.stdout + res.stderr
     out = res.stdout + res.stderr
@@ -207,7 +207,7 @@ def test_skip_surfacing(tmp_path):
         "13/40/2024, 10:00:00 AM - Bob: this date cannot exist\n",
         encoding="utf-8",
     )
-    res = _run(_cli_cmd(str(src), console=False))
+    res = _run(_cli_cmd(str(src), console=False), cwd=tmp_path)
 
     assert res.returncode == 0, res.stdout + res.stderr
     assert "Skipped 1 lines that couldn't be parsed" in res.stdout + res.stderr
