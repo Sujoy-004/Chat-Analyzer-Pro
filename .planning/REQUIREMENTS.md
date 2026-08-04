@@ -22,9 +22,9 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **ANAL-03**: User gets timeline/activity trends (messages per day/week/hour, busiest times)
 - [ ] **ANAL-04**: User gets top words and emojis with frequency
 - [ ] **ANAL-05**: User gets sentiment analysis breakdown (VADER-based, per-message and per-participant)
-- [ ] **ANAL-06**: User gets emotion classification (6-class) — requires `[nlp]` extra
+- [x] **ANAL-06**: User gets emotion classification (6-class) — requires `[nlp]` extra (plan 04-02: parse bug fixed, gate + tabs)
 - [x] **ANAL-07**: User gets relationship health score — always-on in base install (D-07, plan 04-01)
-- [ ] **ANAL-08**: User gets conversation summarization — requires `[nlp]` extra
+- [x] **ANAL-08**: User gets conversation summarization — requires `[nlp]` extra (plan 04-02: gated T5 path + report tab)
 - [x] **ANAL-09**: User gets network graph analysis — always-on in base install (D-07b, plan 04-01)
 
 ### Output
@@ -46,7 +46,7 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Quality
 
 - [x] **QUAL-01**: Existing analysis modules still work (parsers, sentiment, analysis functions)
-- [x] **QUAL-02**: Tests pass for the new CLI (parse → analyze → render pipeline) — Phase 2 + 04-01 suites green (26 Phase 2 + 10 smoke + 2 always-on e2e)
+- [x] **QUAL-02**: Tests pass for the new CLI (parse → analyze → render pipeline) — Phase 2 + 04-01 + 04-02 suites green (26 Phase 2 + 10 smoke + 2 always-on e2e + 3 nlp-gate)
 - [ ] **QUAL-03**: README documents the "how a friend uses it" quickstart (export → pip install → one command)
 - [x] **QUAL-04**: Web-app-only code (streamlit_app.py, unsafe_allow_html, exec-of-remote-code) is removed or excluded from the package
 
@@ -103,9 +103,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ANAL-03 | Phase 2 | Complete |
 | ANAL-04 | Phase 2 | Complete |
 | ANAL-05 | Phase 2 | Complete |
-| ANAL-06 | Phase 4 | Pending |
+| ANAL-06 | Phase 4 | Complete (plan 04-02: [0] parse bug fixed, locked D-07c model, gate + tabs) |
 | ANAL-07 | Phase 4 | Complete (always-on, D-07 — plan 04-01) |
-| ANAL-08 | Phase 4 | Pending |
+| ANAL-08 | Phase 4 | Complete (plan 04-02: gated T5 summarizer + report tab) |
 | ANAL-09 | Phase 4 | Complete (always-on, D-07b — plan 04-01) |
 | OUT-01 | Phase 2 | Complete (terminal shows compact summary panel + path; insights live in HTML report) |
 | OUT-02 | Phase 2 | Dropped (plotext never ships; charts exist only in the HTML report) |
@@ -119,7 +119,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PKG-04 | Phase 1 | Complete |
 | PKG-05 | Phase 1 | Complete |
 | QUAL-01 | Phase 1 | Complete |
-| QUAL-02 | Phase 4 | Complete (Phase 2 + 04-01 suites green) |
+| QUAL-02 | Phase 4 | Complete (Phase 2 + 04-01 + 04-02 suites green) |
 | QUAL-03 | Phase 4 | Pending |
 | QUAL-04 | Phase 1 | Complete |
 
@@ -130,4 +130,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-07-31*
-*Last updated: 2026-08-04 (plan 04-01: ANAL-07/ANAL-09/OUT-04/OUT-05/QUAL-02 complete)*
+*Last updated: 2026-08-04 (plan 04-02: ANAL-06/ANAL-08 complete — NLP gate + tabs; QUAL-02 extended)*

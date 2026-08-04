@@ -97,7 +97,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 04-02-PLAN.md — Gated emotion/summarization slice (emotion fix, nlp_gate, progress, report tabs)
+- [x] 04-02-PLAN.md — Gated emotion/summarization slice (emotion fix, nlp_gate, progress, report tabs)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 

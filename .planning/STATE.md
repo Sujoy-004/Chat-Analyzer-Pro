@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Plan 04-01 complete; next: 04-02
-last_updated: "2026-08-04T07:03:34.785Z"
-last_activity: 2026-08-04 -- Plan 04-01 done (always-on health + network slice)
+stopped_at: Plan 04-02 complete; next: 04-03
+last_updated: "2026-08-04T08:22:00.000Z"
+last_activity: 2026-08-04 -- Plan 04-02 done (gated emotion + summary slice)
 progress:
   total_phases: 4
   completed_phases: 2
   total_plans: 8
-  completed_plans: 4
-  percent: 50
+  completed_plans: 5
+  percent: 62
 ---
 
 # Project State
@@ -26,30 +26,30 @@ See: .planning/PROJECT.md (updated 2026-08-01)
 ## Current Position
 
 Phase: 4 (NLP Extras & Quality Gate) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Executing Phase 4
-Last activity: 2026-08-04 -- Plan 04-01 complete (always-on health + network)
+Last activity: 2026-08-04 -- Plan 04-02 complete (gated emotion + summary, nlp_gate, progress bar)
 
-Progress: [█████░░░░░] 50%
+Progress: [██████░░░░] 62%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 3
-- Average duration: 21min
-- Total execution time: 1.0 hours
+- Total plans completed: 5
+- Average duration: 24min
+- Total execution time: 1.8 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 1. Package Foundation | 2 / 2 | 45min | 22.5min |
-| 4. NLP Extras & Quality Gate | 1 / 5 | 17min | 17min |
+| 4. NLP Extras & Quality Gate | 3 / 5 | 62min | 20.7min |
 
 **Recent Trend:**
 
-- Last 5 plans: 01-01 Package Foundation (20min), 01-02 CLI Interactive Slice (25min), 04-01 Always-On Health + Network Slice (17min)
+- Last 5 plans: 01-01 Package Foundation (20min), 01-02 CLI Interactive Slice (25min), 04-01 Always-On Health + Network Slice (17min), 04-02 Gated Emotion + Summary Slice (45min)
 - Trend: —
 
 *Updated after each plan completion*
@@ -86,6 +86,11 @@ Recent decisions affecting current work:
 - [Phase 4]: Health + Network are ALWAYS-ON (D-07/D-07b) — pandas/numpy/networkx/matplotlib only, so gating behind `[nlp]` adds friction with zero benefit; emotion/summary stay gated for 04-02
 - [Phase 4]: `adapt()` gains keyword-only `health/network/emotion/summary=None` (reconciliation #2) — Phase 2 direct-call tests stay green; positional EDA param renamed `eda_summary` so the keyword-only `summary` slot can exist for 04-02's contract
 - [Phase 4]: `network_figure` wrapper returns a Figure (no `plt.show`) so the graph is base64-embeddable (Pattern 2/Pitfall 6)
+- [Phase 4]: Emotion/summary gate is SILENT (D-02/D-06) — `nlp_gate.nlp_available()` never raises/prompts; probe = transformers+torch importable AND emotion model cached (HF_HUB_CACHE, fallback ~/.cache/huggingface/hub); `CHAT_ANALYZER_FORCE_NLP=0|1` env override makes tests deterministic (Pitfall 5: dev machine has transformers but no cached emotion model)
+- [Phase 4]: 04-02 fixed the emotion `[0]` parse bug (RESEARCH Pitfall 1): transformers 4.x top_k=None returns a FLAT list of dicts; regression-trapped by the faithful `_fake_emotion_classifier` mock asserting non-uniform scores (T-04-08). Locked model = `bhadresh-savani/distilbert-base-uncased-emotion` (D-07c), announced with size before from_pretrained (D-05/Pitfall 4)
+- [Phase 4]: `[nlp]` extra += `sentencepiece>=0.1.99` (transformers does NOT auto-install it; T5Tokenizer needs it — without it ANAL-08 silently degrades forever). Heavy dep stays behind the extra (PKG-03); `test_phase1_smoke` nlp pin updated
+- [Phase 4]: `AnalysisResults` gains `emotion`/`summary` slots (None when gate OFF); dominant emotion derived in the adapter (argmax of distribution — `get_emotion_summary` has no dominant key)
+- [Phase 4]: D-12 narration = rich Progress bar on tty (determinate, total 4/3 by gate), shared `stage()` helper falls back to `stage_status` `[OK] <label>` off-tty (Pitfall 8); labels verbatim: "Parsing chat"/"Computing insights"/"Analyzing emotions"/"Summarizing conversation" (pinned by test_stage_narration_and_order)
 
 ### Pending Todos
 
@@ -116,6 +121,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-04T06:07:48Z
-Stopped at: Plan 04-01 complete; next: 04-02
-Resume file: .planning/phases/04-nlp-extras-quality-gate/04-02-PLAN.md
+Last session: 2026-08-04T08:22:00Z
+Stopped at: Plan 04-02 complete; next: 04-03
+Resume file: .planning/phases/04-nlp-extras-quality-gate/04-03-PLAN.md
