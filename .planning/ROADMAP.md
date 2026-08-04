@@ -18,7 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Package Foundation** - Repackage `src/` → `src/chat_analyzer/`, pyproject with `[nlp]` extra, working `analyze` command; existing analysis core survives intact
 - [x] **Phase 2: One-Command Terminal Insights** - Parser hardening + pipeline + self-contained HTML report card: correct insights in one command
 - [x] **Phase 3: Shareable HTML Report** - ABSORBED into Phase 4 (OUT-03/04/05 pulled forward into Phase 2; no remaining work)
-- [ ] **Phase 4: NLP Extras & Quality Gate** - `[nlp]`-gated features (emotion, health, summary, network), friendly errors with export instructions, tests, README quickstart, plus Phase 3 leftovers (OUT-04 `--output`, OUT-05 `--no-report`)
+- [ ] **Phase 4: NLP Extras & Quality Gate** - `[nlp]`-gated features (emotion, health, summary, network), friendly errors with export instructions, tests, README quickstart, plus Phase 3 leftovers resolved as no-flag (OUT-04/OUT-05: report always generated to the current working directory)
 
 ## Phase Details
 
@@ -62,7 +62,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 ### Phase 3: Shareable HTML Report
 
-**Goal**: ABSORBED — OUT-03/04/05 were pulled forward into Phase 2 (Complete). No remaining deliverable in this phase. The only leftovers — OUT-04 (`--output` path flag, deferred by D-03) and OUT-05 (`--no-report` semantics revisit) — fold into Phase 4.
+**Goal**: ABSORBED — OUT-03/04/05 were pulled forward into Phase 2 (Complete). No remaining deliverable in this phase. The only leftovers — OUT-04 (output path, deferred by D-03) and OUT-05 (report opt-out semantics) — fold into Phase 4 and resolve as no-flag.
 **Mode:** mvp (absorbed — no plans)
 **Depends on**: Phase 2
 **Requirements**: (none — OUT-03/04/05 moved to Phase 2; see traceability)
@@ -75,7 +75,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 ### Phase 4: NLP Extras & Quality Gate
 
-**Goal**: The full v1 feature set — heavy NLP insights gated behind the `[nlp]` extra, friendly errors with export instructions, tests that exercise the real code, a README a friend can follow. Phase 3 leftovers absorbed here as NO-FLAG resolutions (OUT-04/OUT-05: report always generated to the current working directory, no `--output`/`--no-report` flags).
+**Goal**: The full v1 feature set — heavy NLP insights gated behind the `[nlp]` extra, friendly errors with export instructions, tests that exercise the real code, a README a friend can follow. Phase 3 leftovers absorbed here as no-flag resolutions (OUT-04/OUT-05 resolved as no-flag: report always generated to the current working directory).
 **Mode:** mvp
 **Depends on**: Phase 2, Phase 3
 **Requirements**: ANAL-06, ANAL-07, ANAL-08, ANAL-09, CLI-04, QUAL-02, QUAL-03, OUT-04, OUT-05
@@ -84,8 +84,8 @@ Decimal phases appear between their surrounding integers in numeric order.
   1. User who installed the `[nlp]` extra gets 6-class emotion classification, relationship health score, conversation summarization, and network graph analysis (emotion/summarization gated; health/network always-on per ANAL-07/09)
   2. User without the `[nlp]` extra gets an actionable hint (e.g., `pip install chat-analyzer-pro[nlp]`) instead of a traceback, and model downloads are announced with name and size before they start
   3. User who runs the tool on a missing, wrong-format, empty, or unparseable file gets a friendly, actionable error with WhatsApp/Telegram export instructions and a correct exit code
-  4. User's report is always saved to the current working directory as `<chat_name>_report.html` and auto-opens (no `--output` flag — OUT-04 resolved no-flag per D-08/D-09)
-  5. The report is always generated — there is no skip flag (OUT-05 resolved no-flag per D-08); terminal output still runs as before
+  4. User's report is always saved to the current working directory as `<chat_name>_report.html` and auto-opens (no flags — D-08/D-09)
+  5. The report is the deliverable and is always generated — there is no skip flag (D-08)
   6. Tests exercise the real `chat_analyzer.*` real modules (parser fixtures, parse → analyze → render pipeline, HTML/encoding) and pass in a clean environment
   7. A friend can follow the README quickstart (export → pip install → one command) and get results
 

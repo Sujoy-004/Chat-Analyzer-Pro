@@ -35,6 +35,12 @@ There are no flags — one command does everything. The terminal shows progress 
 
 ## What does the NLP download question mean?
 
-The first time you run the tool on an interactive terminal and the NLP models aren't installed, it asks one question about downloading them. It's only asked once. If you answer 3 (no download), the tool runs basic analysis — every other feature still works, and you can install the extras any time with `pip install chat-analyzer-pro[nlp]`.
+The first time you run the tool on an interactive terminal and the NLP models aren't installed, it asks one question about downloading them — it's only asked once. The options are:
+
+1. **Full torch (~3 GB)** — best quality
+2. **CPU-only torch + model (~0.6 GB)**
+3. **No download** — run basic analysis
+
+If you choose no download, the tool runs basic analysis — every other feature still works, and you can install the extras any time with `pip install chat-analyzer-pro[nlp]`.
 
 If the tool can't ask (for example, when output is piped), it never prompts — it just prints a single hint line instead.
