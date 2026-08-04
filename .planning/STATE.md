@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 4 context gathered
-last_updated: "2026-08-03T10:19:38.270Z"
-last_activity: 2026-08-03 -- Phase 4 planning complete
+stopped_at: Plan 04-01 complete; next: 04-02
+last_updated: "2026-08-04T07:03:34.785Z"
+last_activity: 2026-08-04 -- Plan 04-01 done (always-on health + network slice)
 progress:
   total_phases: 4
   completed_phases: 2
   total_plans: 8
-  completed_plans: 3
-  percent: 38
+  completed_plans: 4
+  percent: 50
 ---
 
 # Project State
@@ -25,30 +25,31 @@ See: .planning/PROJECT.md (updated 2026-08-01)
 
 ## Current Position
 
-Phase: 4 of 4 (NLP Extras & Quality Gate)
-Plan: 0 of TBD — planning next
-Status: Ready to execute
-Last activity: 2026-08-03 -- Phase 4 planning complete
+Phase: 4 (NLP Extras & Quality Gate) — EXECUTING
+Plan: 2 of 5
+Status: Executing Phase 4
+Last activity: 2026-08-04 -- Plan 04-01 complete (always-on health + network)
 
-Progress: [██████████] 100%
+Progress: [█████░░░░░] 50%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 2
-- Average duration: 22.5min
-- Total execution time: 0.8 hours
+- Total plans completed: 3
+- Average duration: 21min
+- Total execution time: 1.0 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 1. Package Foundation | 2 / 2 | 45min | 22.5min |
+| 4. NLP Extras & Quality Gate | 1 / 5 | 17min | 17min |
 
 **Recent Trend:**
 
-- Last 5 plans: 01-01 Package Foundation (20min), 01-02 CLI Interactive Slice (25min)
+- Last 5 plans: 01-01 Package Foundation (20min), 01-02 CLI Interactive Slice (25min), 04-01 Always-On Health + Network Slice (17min)
 - Trend: —
 
 *Updated after each plan completion*
@@ -81,6 +82,10 @@ Recent decisions affecting current work:
 - [Phase 2]: OUT-03/04/05 + CLI-08 pulled forward from Phase 3 into Phase 2 — report is the deliverable; default-path behavior ships (`<stem>_report.html` next to input), no `--output`/`--no-report` flags in v1
 - [Phase 3]: ABSORBED into Phase 4 — OUT-03 complete in Phase 2; only leftovers are OUT-04 (`--output` path flag, deferred by D-03) and OUT-05 (`--no-report` semantics) which now fold into Phase 4's requirements and planning; Phase 3 has no remaining deliverables
 - [Phase 2]: `Messages: N` smoke-contract token owned by main.py `_analyze_path` (printed ONCE, both positional + interactive) — keeps Phase 1 `test_phase1_smoke::message_count()` regex green (CRITICAL #1)
+- [Phase 4]: Report location resolved D-09: `Path.cwd()/<stem>_report.html` (cwd, not next-to-input) — OUT-04/OUT-05 resolution is NO flags, always generate
+- [Phase 4]: Health + Network are ALWAYS-ON (D-07/D-07b) — pandas/numpy/networkx/matplotlib only, so gating behind `[nlp]` adds friction with zero benefit; emotion/summary stay gated for 04-02
+- [Phase 4]: `adapt()` gains keyword-only `health/network/emotion/summary=None` (reconciliation #2) — Phase 2 direct-call tests stay green; positional EDA param renamed `eda_summary` so the keyword-only `summary` slot can exist for 04-02's contract
+- [Phase 4]: `network_figure` wrapper returns a Figure (no `plt.show`) so the graph is base64-embeddable (Pattern 2/Pitfall 6)
 
 ### Pending Todos
 
@@ -96,6 +101,7 @@ None yet.
 - [Phase 1]: `_init_.py` → `__init__.py` rename must clean stale re-exports — RESOLVED in plan 01-01 Task 1 (markers rewritten, broken symbols stripped, all imports verified)
 - [Phase 2]: Parser silently fabricates timestamps via `datetime.now()` fallback on unknown date formats — must never ship (strict parse + skip counter)
 - [Phase 2]: RESOLVED — `datetime.now()` fabrication deleted; strict parse + skip counter ships; 0 matches verified in parser/*.py
+- [Phase 4]: 382 pre-existing ruff errors in legacy analysis modules (`relationship_health.py` 50, `network_graph.py` 30, ~302 elsewhere) — 04-01's Task 3 "0 errors" criterion is unsatisfiable at BASELINE (verified via stash); plan 04-01 adds 0 new errors. Needs a legacy-lint cleanup plan before any phase gates on a clean `ruff check` (see deferred-items.md #1)
 
 ## Deferred Items
 
@@ -110,6 +116,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-03T08:32:01.361Z
-Stopped at: Phase 4 context gathered
-Resume file: .planning/phases/04-nlp-extras-quality-gate/04-CONTEXT.md
+Last session: 2026-08-04T06:07:48Z
+Stopped at: Plan 04-01 complete; next: 04-02
+Resume file: .planning/phases/04-nlp-extras-quality-gate/04-02-PLAN.md

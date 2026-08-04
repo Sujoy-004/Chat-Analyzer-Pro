@@ -23,17 +23,17 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **ANAL-04**: User gets top words and emojis with frequency
 - [ ] **ANAL-05**: User gets sentiment analysis breakdown (VADER-based, per-message and per-participant)
 - [ ] **ANAL-06**: User gets emotion classification (6-class) — requires `[nlp]` extra
-- [ ] **ANAL-07**: User gets relationship health score — requires `[nlp]` extra
+- [x] **ANAL-07**: User gets relationship health score — always-on in base install (D-07, plan 04-01)
 - [ ] **ANAL-08**: User gets conversation summarization — requires `[nlp]` extra
-- [ ] **ANAL-09**: User gets network graph analysis — requires `[nlp]` extra
+- [x] **ANAL-09**: User gets network graph analysis — always-on in base install (D-07b, plan 04-01)
 
 ### Output
 
 - [x] **OUT-01**: User sees analysis results in the terminal with tables, panels, and color
 - [x] **OUT-02**: User sees inline charts in the terminal (bar/line via plotext) — DROPPED (plotext never ships; charts live in HTML report)
 - [x] **OUT-03**: User gets a self-contained single-file HTML report (charts/images base64-embedded) — Phase 2
-- [ ] **OUT-04**: User can specify an output path for the HTML report — Phase 4 (`--output`, absorbed from Phase 3)
-- [ ] **OUT-05**: User can skip the HTML report (`--no-report`) or keep it minimal — Phase 4 (revisit, absorbed from Phase 3)
+- [x] **OUT-04**: User can specify an output path for the HTML report — RESOLVED (D-08/D-09, plan 04-01): no `--output` flag; report always lands at `cwd/<stem>_report.html`
+- [x] **OUT-05**: User can skip the HTML report (`--no-report`) or keep it minimal — RESOLVED (D-08, plan 04-01): report is always generated; no skip flag in v1
 
 ### Packaging
 
@@ -46,7 +46,7 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Quality
 
 - [x] **QUAL-01**: Existing analysis modules still work (parsers, sentiment, analysis functions)
-- [ ] **QUAL-02**: Tests pass for the new CLI (parse → analyze → render pipeline)
+- [x] **QUAL-02**: Tests pass for the new CLI (parse → analyze → render pipeline) — Phase 2 + 04-01 suites green (26 Phase 2 + 10 smoke + 2 always-on e2e)
 - [ ] **QUAL-03**: README documents the "how a friend uses it" quickstart (export → pip install → one command)
 - [x] **QUAL-04**: Web-app-only code (streamlit_app.py, unsafe_allow_html, exec-of-remote-code) is removed or excluded from the package
 
@@ -104,14 +104,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ANAL-04 | Phase 2 | Complete |
 | ANAL-05 | Phase 2 | Complete |
 | ANAL-06 | Phase 4 | Pending |
-| ANAL-07 | Phase 4 | Pending |
+| ANAL-07 | Phase 4 | Complete (always-on, D-07 — plan 04-01) |
 | ANAL-08 | Phase 4 | Pending |
-| ANAL-09 | Phase 4 | Pending |
+| ANAL-09 | Phase 4 | Complete (always-on, D-07b — plan 04-01) |
 | OUT-01 | Phase 2 | Complete (terminal shows compact summary panel + path; insights live in HTML report) |
 | OUT-02 | Phase 2 | Dropped (plotext never ships; charts exist only in the HTML report) |
 | OUT-03 | Phase 2 | Complete (pulled forward from Phase 3) |
-| OUT-04 | Phase 2 / Phase 4 | Phase 2 partial (default-path behavior ships); `--output` flag absorbed into Phase 4 from Phase 3 |
-| OUT-05 | Phase 4 | Not applicable in Phase 2 (report is the deliverable); `--no-report` semantics revisit lands in Phase 4 (absorbed from Phase 3) |
+| OUT-04 | Phase 2 / Phase 4 | Complete (resolved D-08/D-09 — plan 04-01: no `--output` flag; report always lands in cwd) |
+| OUT-05 | Phase 4 | Complete (resolved D-08 — plan 04-01: report always generated; no `--no-report` in v1) |
 | CLI-08 | Phase 2 | Complete (auto-open pulled forward; degrades to printed path) |
 | PKG-01 | Phase 1 | Complete |
 | PKG-02 | Phase 1 | Complete |
@@ -119,7 +119,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PKG-04 | Phase 1 | Complete |
 | PKG-05 | Phase 1 | Complete |
 | QUAL-01 | Phase 1 | Complete |
-| QUAL-02 | Phase 4 | Pending |
+| QUAL-02 | Phase 4 | Complete (Phase 2 + 04-01 suites green) |
 | QUAL-03 | Phase 4 | Pending |
 | QUAL-04 | Phase 1 | Complete |
 
@@ -130,4 +130,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-07-31*
-*Last updated: 2026-07-31 after initial definition*
+*Last updated: 2026-08-04 (plan 04-01: ANAL-07/ANAL-09/OUT-04/OUT-05/QUAL-02 complete)*
