@@ -26,8 +26,16 @@ def _console() -> Console:
     return Console(file=io.StringIO(), force_terminal=False)
 
 
-def test_whatsapp_e2e():
+def test_whatsapp_e2e(monkeypatch):
     """The WhatsApp sample produces a complete AnalysisResults."""
+    # Pin the NLP gate OFF deterministically (Pitfall 5): a cached emotion
+    # model on the dev machine would otherwise add an "emotion" chart key
+    # and change the charts set. The gate-ON 7-key set is covered by
+    # test_phase4_nlp.py::test_emotion_summary_with_mocked_nlp.
+    from chat_analyzer.cli import nlp_gate
+
+    monkeypatch.setattr(nlp_gate, "nlp_available", lambda *a, **k: False)
+
     results = run_pipeline(DATA / "whatsapp_sample.txt", _console())
     assert results["source"] == "whatsapp"
     assert results["parse"]["parsed_messages"] == 27
@@ -46,7 +54,8 @@ def test_whatsapp_e2e():
         "sentiment",
         "health",
         "network",
-    }  # 04-02 drops health/network from charts into the results root
+    }  # emotion is gated OFF here (pinned above); 04-02 adds it only when
+    # the gate is ON — covered by test_phase4_nlp.py (7-key set)
     for uri in results["charts"].values():
         assert uri.startswith("data:image/png;base64,")
     assert results["insights"] and all(isinstance(i, str) and i for i in results["insights"])

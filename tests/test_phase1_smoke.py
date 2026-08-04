@@ -219,7 +219,9 @@ def test_lean_base_structural():
         assert heavy not in base_names, f"{heavy} must not be a base dependency"
 
     nlp_names = _dependency_names(project["optional-dependencies"]["nlp"])
-    assert nlp_names == ["torch", "transformers"]
+    # sentencepiece is required by transformers' T5Tokenizer (the ANAL-08
+    # summarizer); transformers does not auto-install it (04-02 Rule 2 fix).
+    assert nlp_names == ["torch", "transformers", "sentencepiece"]
 
     # Environment half: confirm torch is absent from the current base env.
     # Non-fatal if a pre-existing torch happens to be installed (old app era).
