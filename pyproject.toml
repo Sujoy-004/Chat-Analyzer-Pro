@@ -24,7 +24,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-nlp = ["torch>=2.0", "transformers>=4.30,<6"]
+# sentencepiece is required by transformers' T5Tokenizer — transformers does
+# NOT auto-install it, so the ANAL-08 summarizer would silently degrade
+# without it (04-02 Rule 2 fix).
+nlp = ["torch>=2.0", "transformers>=4.30,<6", "sentencepiece>=0.1.99"]
 dev = ["pytest>=7.4", "pytest-cov>=4.1", "ruff>=0.16.1"]
 
 [project.scripts]

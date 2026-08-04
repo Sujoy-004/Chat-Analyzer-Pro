@@ -24,6 +24,7 @@ import numpy as np
 from typing import Dict, List, Optional, Tuple
 import warnings
 warnings.filterwarnings('ignore')
+import matplotlib  # binds the name for the emotion_figure return annotation
 
 # Global analyzer instance for reuse
 _emotion_analyzer = None
@@ -36,10 +37,10 @@ class EmotionAnalyzer:
     Optimized for batch processing and cloud deployment.
     """
     
-    def __init__(self, model_name: str = "j-hartmann/emotion-english-distilroberta-base"):
+    def __init__(self, model_name: str = "bhadresh-savani/distilbert-base-uncased-emotion"):
         """
         Initialize the emotion analyzer.
-        
+
         Args:
             model_name: HuggingFace model identifier for emotion classification
         """
@@ -102,17 +103,21 @@ class EmotionAnalyzer:
         
         try:
             if self.pipeline is not None:
-                # Use transformer model
-                result = self.pipeline(text[:512])[0]  # Limit to 512 chars for efficiency
-                
+                # transformers 4.x with top_k=None returns a FLAT list of
+                # {"label":.., "score":..} dicts for every class (RESEARCH
+                # Pitfall 1). Indexing [0] grabbed one dict and then iterated
+                # its keys — a TypeError swallowed by the except below that
+                # silently degraded every message to uniform 1/6 neutral
+                # scores. Consume the whole list so real scores surface.
+                res = self.pipeline(text[:512])  # Limit to 512 chars for efficiency
+
                 # Convert to our standard format
-                emotion_scores = {item['label']: item['score'] for item in result}
-                
+                emotion_scores = {item['label']: float(item['score']) for item in res}
+
                 # Ensure all 6 emotions are present
                 for emotion in self.emotions:
-                    if emotion not in emotion_scores:
-                        emotion_scores[emotion] = 0.0
-                
+                    emotion_scores.setdefault(emotion, 0.0)
+
                 return emotion_scores
             else:
                 # Fallback to rule-based detection
@@ -445,6 +450,32 @@ def plot_emotion_analysis(df: pd.DataFrame, summary: Dict):
     
     plt.tight_layout()
     plt.show()
+
+
+def emotion_figure(summary: dict) -> "matplotlib.figure.Figure":
+    """Build a bar chart of the average emotion scores (figure-returning).
+
+    Thin wrapper for the base64-embedded report chart (Pattern 2): builds the
+    Axes and returns the Figure — NO plt.show(), so the pipeline's _safe_chart
+    can encode it. Legacy plot_emotion_analysis (which calls plt.show) is
+    untouched.
+    """
+    import matplotlib.pyplot as plt
+
+    scores = summary.get("average_emotion_scores") or {}
+    if not scores:
+        scores = {e: 0.0 for e in ("joy", "sadness", "anger", "fear", "surprise", "love")}
+
+    labels = list(scores.keys())
+    values = [float(v) for v in scores.values()]
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.bar(labels, values, color=plt.cm.Set3(range(len(labels))))
+    ax.set_title("Emotion Scores")
+    ax.set_ylabel("Average Score")
+    plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha="right")
+    fig.tight_layout()
+    return fig
 
 
 def combine_sentiment_emotion(df_sentiment: pd.DataFrame, 
