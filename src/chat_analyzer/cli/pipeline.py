@@ -134,9 +134,35 @@ def run_pipeline(path: Path, console) -> AnalysisResults:
             df_sent = add_sentiment_analysis(df)
             sent_summary = get_sentiment_summary(df_sent)
 
+            # Always-on analysis (D-07/D-07b): relationship health and the
+            # network graph are pandas/numpy/networkx/matplotlib only — no
+            # torch, no [nlp] extra. Both are computed inside the
+            # redirect_stdout capture so module prints never reach the user.
+            from chat_analyzer.analysis.network_graph import (
+                analyze_network,
+                network_figure,
+            )
+            from chat_analyzer.analysis.relationship_health import (
+                analyze_relationship_health,
+            )
+
+            health_res = analyze_relationship_health(df)
+            network_res = analyze_network(df)
+
             from chat_analyzer.utils.visualization import ChatVisualizer
 
             viz = ChatVisualizer()
+
+            # The health trend chart needs a 'health_score' column — the
+            # rolling-health gamification output provides exactly that
+            # (date -> timestamp rename). Fall back to the raw df (blank
+            # figure) when the rolling series is empty.
+            rolling = health_res.get("rolling_health")
+            if rolling is not None and not rolling.empty:
+                health_trend_df = rolling.rename(columns={"date": "timestamp"})
+            else:
+                health_trend_df = df
+
             charts = {
                 "timeline": _safe_chart(viz.plot_message_timeline(df, resample_freq="D")),
                 "activity": _safe_chart(viz.plot_activity_heatmap(df)),
@@ -146,6 +172,8 @@ def run_pipeline(path: Path, console) -> AnalysisResults:
                         df_sent, sentiment_score_col="vader_compound"
                     )
                 ),
+                "health": _safe_chart(viz.plot_relationship_health_trend(health_trend_df)),
+                "network": _safe_chart(network_figure(df)),
             }
         if captured.getvalue():
             logger.debug("Captured analysis-stage output:\n%s", captured.getvalue())
@@ -153,5 +181,15 @@ def run_pipeline(path: Path, console) -> AnalysisResults:
     from chat_analyzer.cli.adapters import adapt
 
     return adapt(
-        source, parse_report, df, summary, volume, dynamics, content, sent_summary, charts
+        source,
+        parse_report,
+        df,
+        summary,
+        volume,
+        dynamics,
+        content,
+        sent_summary,
+        charts,
+        health=health_res,
+        network=network_res,
     )
