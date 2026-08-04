@@ -93,7 +93,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 Plans:
 **Wave 1**
 
-- [ ] 04-01-PLAN.md — Always-on health/network slice (contracts, pipeline, cwd report, Phase 2 test reconciliation)
+- [x] 04-01-PLAN.md — Always-on health/network slice (contracts, pipeline, cwd report, Phase 2 test reconciliation)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -118,4 +118,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | 1. Package Foundation | 2/2 | Complete | 2026-08-01 |
 | 2. One-Command Terminal Insights | 1/1 | Complete | 2026-08-03 |
 | 3. Shareable HTML Report | - | Absorbed into Phase 4 | 2026-08-03 |
-| 4. NLP Extras & Quality Gate | 0/5 | Not started | - |
+| 4. NLP Extras & Quality Gate | 1/5 | In Progress|  |

@@ -143,6 +143,7 @@ Each task was committed atomically:
 
 - **Ruff acceptance criterion is unsatisfiable at baseline (deferred, not a deviation):** Task 3 requires `python -m ruff check src/chat_analyzer tests` = 0 errors, but the baseline already reports **382 errors** (262 auto-fixable) in legacy analysis modules — verified by stashing all changes and re-running: identical 382/262. Plan 04-01 introduces **zero** new errors (touched-file 80→80, full-tree 382→382). This legacy lint debt is out of scope for this plan's changes and is logged in `deferred-items.md`; a dedicated legacy-lint cleanup plan is needed before any future phase gates on a clean `ruff check`.
 - Pre-existing (unrelated) pytest warning during the smoke run (`torch` importable in this env) — unchanged by this plan.
+- D-09 relocates `test_phase1_smoke.py`'s generated report from `data/sample_chats/` (next-to-input) to the repo root (its `run_cli` helpers pass no `cwd`). Smoke tests never assert on report location and still pass 10/10; the artifact is deleted after each run and the fix is logged in `deferred-items.md` #3 (per instruction, the smoke test file was not modified).
 
 ## Known Stubs
 
