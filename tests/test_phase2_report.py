@@ -3,10 +3,11 @@
 Exercises chat_analyzer.cli.report_html with a crafted AnalysisResults that
 carries untrusted content (a `<script>alert(1)</script>` payload and a
 sender named "Alice <3 Bob"): single-file self-containment, utf-8 + emoji
-integrity, autoescape, filename sanitization, report location next to the
-input, auto-open degrade, skip-note surfacing, and the 5-tab structure.
+integrity, autoescape, filename sanitization, report location in the cwd
+(D-09), auto-open degrade, skip-note surfacing, and the tab structure.
 """
 
+import os
 from pathlib import Path
 
 from chat_analyzer.cli.report_html import (
@@ -53,11 +54,32 @@ def _results() -> dict:
             "by_sender": {"Alice <3 Bob": {"message_count": 1}},
             "daily_avg": {"2025-09-15": 0.5},
         },
+        "health": {
+            "overall_score": 0.82,
+            "grade": "Good",
+            "components": {},
+            "initiator_balance": 0.6,
+            "avg_response_minutes": 12,
+            "response_balance": 0.7,
+            "composite_dominance": 0.5,
+            "total_conversations": 3,
+        },
+        "network": {
+            "node_count": 2,
+            "edge_count": 1,
+            "density": 0.5,
+            "reciprocity": 0.0,
+            "strongest_connections": None,
+            "key_participants": {},
+            "subgroup_count": 1,
+        },
         "charts": {
             "timeline": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg=",
             "activity": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg=",
             "participants": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg=",
             "sentiment": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg=",
+            "health": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg=",
+            "network": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg=",
         },
         "insights": [
             "Most messages land on Monday.",
@@ -73,7 +95,14 @@ def _results() -> dict:
 def _write(tmp_path: Path) -> Path:
     src = tmp_path / "chat_analysis_test.txt"
     src.write_text("x\n", encoding="utf-8")
-    return write_report(_results(), src)
+    # D-09: the report resolves against the cwd, so chdir into tmp_path to
+    # keep LOW #8 ("the repo tree is never written to") intact.
+    cwd = Path.cwd()
+    try:
+        os.chdir(tmp_path)
+        return write_report(_results(), src)
+    finally:
+        os.chdir(cwd)
 
 
 def test_single_file_no_external_refs(tmp_path):
@@ -119,7 +148,8 @@ def test_sanitize_filename():
     assert s4 == "chat_analysis"  # empty-after-strip fallback
 
 
-def test_report_location_next_to_input(tmp_path):
+def test_report_location_next_to_input(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)  # D-09: report lands in the cwd, not next to src
     p = _write(tmp_path)
     assert p == tmp_path / "chat_analysis_test_report.html"
     assert p.exists()
@@ -152,9 +182,10 @@ def test_open_report_success(monkeypatch, tmp_path):
     assert str(p.resolve()) in calls[0]
 
 
-def test_skip_note_surfacing(tmp_path):
+def test_skip_note_surfacing(tmp_path, monkeypatch):
     src = tmp_path / "a.txt"
     src.write_text("x\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)  # D-09: keep the report out of the repo tree
 
     res = _results()
     out1 = write_report(res, src).read_text(encoding="utf-8")
