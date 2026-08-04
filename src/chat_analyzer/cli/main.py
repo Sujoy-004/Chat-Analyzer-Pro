@@ -28,6 +28,49 @@ app = typer.Typer(
     help="Analyze WhatsApp and Telegram chat exports from the terminal.",
 )
 
+# D-14: inline export instructions composed into every failure message —
+# what went wrong, why (1 line), and the exact how-to-export steps. Not a
+# README pointer, not auto-open.
+_EXPORT_WHATSAPP = (
+    "To export a chat: open the chat in WhatsApp, tap the \u22ee menu, "
+    "More -> Export chat, and save the .txt file."
+)
+_EXPORT_TELEGRAM = (
+    "To export a chat: in Telegram Desktop open Settings -> Advanced -> "
+    "Export Telegram data, select only Messages, choose JSON format, and "
+    "save the folder export."
+)
+
+
+def _friendly_error(chat_file: Path, exc: Exception) -> str:
+    """Compose a distinct, instructive message for one failure class (D-13).
+
+    Classifies by the exception type/text: file-not-found, unsupported file
+    type, empty/unparseable export, and a defensive catch-all — each with
+    inline WhatsApp/Telegram export instructions (D-14). Every failure path
+    in main() ends in `typer.Exit(code=1) from None` so no traceback ever
+    reaches the user (T-04-11).
+    """
+    if isinstance(exc, FileNotFoundError) or not chat_file.is_file():
+        return (
+            f"File not found: {chat_file}. The file must exist before running. "
+            f"{_EXPORT_WHATSAPP} {_EXPORT_TELEGRAM}"
+        )
+    text = str(exc)
+    if "Unsupported file type" in text:
+        return (
+            "Unsupported file type: expected a WhatsApp .txt or Telegram .json "
+            f"export. {_EXPORT_WHATSAPP} {_EXPORT_TELEGRAM}"
+        )
+    if "No messages could be parsed" in text:
+        return (
+            "No messages could be parsed from this file — the export may be "
+            f"empty or a system-only export. {_EXPORT_WHATSAPP} {_EXPORT_TELEGRAM}"
+        )
+    return (
+        f"Could not process this file. {text} {_EXPORT_WHATSAPP} {_EXPORT_TELEGRAM}"
+    )
+
 
 def _version_callback(value: bool) -> None:
     if value:
@@ -112,11 +155,11 @@ def main(
 
     if chat_file is not None:
         if not chat_file.is_file():
-            typer.echo(f"File not found: {chat_file}", err=True)
+            typer.echo(_friendly_error(chat_file, FileNotFoundError()), err=True)
             raise typer.Exit(code=1)
         if chat_file.suffix.lower() not in {".txt", ".json"}:
             typer.echo(
-                "Unsupported file type: expected a WhatsApp .txt or Telegram .json export",
+                _friendly_error(chat_file, ValueError("Unsupported file type")),
                 err=True,
             )
             raise typer.Exit(code=1)
@@ -124,9 +167,9 @@ def main(
             _analyze_path(chat_file)
         except ValueError as exc:
             # MEDIUM #4 — a malformed file (zero parsed rows, bad export,
-            # unsupported format) exits 1 with a friendly line, never a
-            # traceback (D-06).
-            typer.echo(str(exc), err=True)
+            # unsupported format) exits 1 with a friendly, instructive line,
+            # never a traceback (D-13/D-14, T-04-11).
+            typer.echo(_friendly_error(chat_file, exc), err=True)
             raise typer.Exit(code=1) from None
         # D-06: single hint line after the report path, never before the
         # "Messages: N" smoke token (ASCII only, no emoji). soft_wrap keeps
@@ -142,11 +185,11 @@ def main(
     while True:
         path = Path(typer.prompt("Enter path to chat export").strip().strip('"').strip("'"))
         if not path.is_file():
-            typer.echo(f"File not found: {path}", err=True)
+            typer.echo(_friendly_error(path, FileNotFoundError()), err=True)
             continue
         if path.suffix.lower() not in {".txt", ".json"}:
             typer.echo(
-                "Unsupported file type: expected a WhatsApp .txt or Telegram .json export",
+                _friendly_error(path, ValueError("Unsupported file type")),
                 err=True,
             )
             continue
@@ -173,8 +216,9 @@ def main(
                         console.print("[INFO] Continuing with basic analysis.")
             _analyze_path(path)
         except ValueError as exc:
-            # D-06 — friendly message, loop back to re-prompt.
-            typer.echo(str(exc), err=True)
+            # D-15 — friendly message with export instructions, then loop
+            # back to re-prompt (never exits on a bad file).
+            typer.echo(_friendly_error(path, exc), err=True)
             continue
         # D-06 hint for the piped/no-menu path: the user never saw the menu.
         if (not nlp_on) and (not menu_shown):
