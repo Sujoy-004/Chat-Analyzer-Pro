@@ -119,6 +119,13 @@ def adapt(
     health_block = _build_health_block(health) if health is not None else None
     network_block = _build_network_block(network) if network is not None else None
 
+    # --- emotion + summary (gated, D-07c / ANAL-06 / ANAL-08) -------------
+    # None when the silent availability probe says the NLP models are not
+    # usable (D-02/D-06); the report then renders its unavailable note
+    # instead of the tabs' content.
+    emotion_block = _build_emotion_block(emotion) if emotion is not None else None
+    summary_block = _build_summary_block(summary) if summary is not None else None
+
     return AnalysisResults(
         source=parse.source,
         parse={
@@ -133,6 +140,8 @@ def adapt(
         sentiment=sentiment_block,
         health=health_block,
         network=network_block,
+        emotion=emotion_block,
+        summary=summary_block,
         charts=dict(charts),
         insights=build_insights(
             stats,
@@ -141,6 +150,8 @@ def adapt(
             sentiment_block,
             health_block,
             network_block,
+            emotion_block,
+            summary_block,
         ),
         report_path="",
     )
@@ -191,16 +202,49 @@ def _build_network_block(network: dict) -> dict:
     }
 
 
+def _build_emotion_block(emotion: dict) -> dict:
+    """Extract serializable scalars from get_emotion_summary (Pattern 3).
+
+    The module's summary dict has no dominant_emotion key — the dominant
+    label is derived here from the distribution (the adapter is the only
+    place that knows the module's dict shape).
+    """
+    dist = emotion.get("emotion_distribution") or {}
+    dominant = emotion.get("dominant_emotion")
+    if not dominant and dist:
+        dominant = max(dist, key=dist.get)
+    return {
+        "distribution": dist,
+        "dominant": dominant,
+        "average_scores": emotion.get("average_emotion_scores") or {},
+    }
+
+
+def _build_summary_block(summary: dict) -> dict:
+    """Extract the summary text + message count from summarize_conversation."""
+    return {
+        "text": summary.get("summary") or "",
+        "messages_summarized": summary.get("messages_summarized") or 0,
+    }
+
+
 def build_insights(
-    stats, participants, content, sentiment, health=None, network=None
+    stats,
+    participants,
+    content,
+    sentiment,
+    health=None,
+    network=None,
+    emotion=None,
+    summary=None,
 ) -> list[str]:
     """Narrative lead-ins, one per report tab (D-11).
 
     Natural-language sentences driven entirely by stats values — no hardcoded
     numbers, and never the string "None" (LOW #9: avg_response_time may be
     None on single-message chats). Health and network lead-ins slot in at tab
-    indices 5 and 6 (after the five Phase-2 tabs); the duration and
-    busiest-hour sentences follow them.
+    indices 5 and 6 (after the five Phase-2 tabs); emotion and summary at
+    indices 7 and 8; the duration and busiest-hour sentences follow them.
     """
     insights: list[str] = []
 
@@ -249,6 +293,23 @@ def build_insights(
             )
         else:
             insights.append(f"The conversation network has density {density:.2f}.")
+
+    # --- emotion + summary lead-ins (D-11) — tab indices 7 and 8 ----------
+    # Gated: never emitted when the probe reported the models unavailable.
+    emotion_dist = (emotion or {}).get("distribution") or {}
+    dominant = (emotion or {}).get("dominant")
+    if emotion_dist and dominant:
+        pct = float(emotion_dist.get(dominant, 0)) / max(
+            sum(emotion_dist.values()), 1
+        ) * 100
+        insights.append(
+            f"The dominant emotion is {dominant} "
+            f"(appearing in {pct:.0f}% of messages)."
+        )
+
+    summary_text = (summary or {}).get("text") or ""
+    if summary_text:
+        insights.append(f"Key takeaway: {summary_text[:120]}")
 
     insights.append(
         f"This conversation spans {stats.get('duration_days', 0)} days "

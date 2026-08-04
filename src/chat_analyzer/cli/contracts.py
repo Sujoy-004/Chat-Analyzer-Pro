@@ -28,7 +28,9 @@ class AnalysisResults(TypedDict):
     main.py after report_html.write_report succeeds. health and network hold
     serializable scalars extracted by adapters.py from the always-on analysis
     modules (D-07/D-07b) — never the raw prepared_data DataFrame or the
-    networkx DiGraph (Pattern 3).
+    networkx DiGraph (Pattern 3). emotion and summary hold the gated NLP
+    blocks (D-07c, ANAL-06/ANAL-08) — None when the silent availability probe
+    (nlp_gate.nlp_available) reports the models unavailable (D-02/D-06).
     """
 
     source: str
@@ -39,6 +41,8 @@ class AnalysisResults(TypedDict):
     sentiment: dict[str, Any]
     health: dict[str, Any]
     network: dict[str, Any]
+    emotion: dict[str, Any] | None
+    summary: dict[str, Any] | None
     charts: dict[str, str]
     insights: list[str]
     report_path: str

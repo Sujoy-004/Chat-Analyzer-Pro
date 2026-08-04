@@ -67,6 +67,8 @@ TEMPLATE = """<!DOCTYPE html>
   <button class="tab" data-tab="sentiment" onclick="showTab('sentiment')">Sentiment</button>
   <button class="tab" data-tab="health" onclick="showTab('health')">Relationship Health</button>
   <button class="tab" data-tab="network" onclick="showTab('network')">Network</button>
+  <button class="tab" data-tab="emotion" onclick="showTab('emotion')">Emotion</button>
+  <button class="tab" data-tab="summary" onclick="showTab('summary')">Summary</button>
 </nav>
 <main>
   <div class="panel active" id="tab-overview">
@@ -162,6 +164,34 @@ TEMPLATE = """<!DOCTYPE html>
       {% endif %}
     </div>
   </div>
+  <div class="panel" id="tab-emotion">
+    <div class="card">
+      {% if emotion %}
+      <p class="lead">{{ insights[7] }}</p>
+      {% if charts.emotion %}<img class="chart" alt="Emotion distribution" src="{{ charts.emotion }}">{% endif %}
+      <table>
+        <tr><th>Emotion</th><th>Messages</th></tr>
+        {% for label, count in emotion.distribution.items() %}
+        <tr><td>{{ label }}</td><td>{{ count }}</td></tr>
+        {% endfor %}
+      </table>
+      {% if emotion.dominant %}<p>Dominant emotion: {{ emotion.dominant }}</p>{% endif %}
+      {% else %}
+      <p>Emotion analysis unavailable. Install the optional NLP extras: <code>pip install chat-analyzer-pro[nlp]</code>.</p>
+      {% endif %}
+    </div>
+  </div>
+  <div class="panel" id="tab-summary">
+    <div class="card">
+      {% if summary %}
+      <p class="lead">{{ insights[8] }}</p>
+      <p>{{ summary.text }}</p>
+      {% if summary.messages_summarized %}<p>Summarized {{ summary.messages_summarized }} messages.</p>{% endif %}
+      {% else %}
+      <p>Conversation summary unavailable. Install the optional NLP extras: <code>pip install chat-analyzer-pro[nlp]</code>.</p>
+      {% endif %}
+    </div>
+  </div>
 </main>
 <script>
 function showTab(id) {
@@ -224,6 +254,8 @@ def write_report(results: AnalysisResults, input_path: Path) -> Path:
         insights=results["insights"],
         health=results.get("health", {}),
         network=results.get("network", {}),
+        emotion=results.get("emotion", {}),
+        summary=results.get("summary", {}),
     )
 
     report_path = Path.cwd() / f"{stem}_report.html"  # D-09: cwd, not input dir

@@ -107,6 +107,14 @@ def run_pipeline(path: Path, console) -> AnalysisResults:
         raise ValueError("No messages could be parsed from this file")
 
     with stage_status(console, "Computing insights"):
+        # Silent availability gate BEFORE any heavy import (D-02/D-05): the
+        # probe never raises and never prompts (no hint — that is main.py's
+        # job in 04-03); it only decides whether the emotion/summary stages
+        # below run at all (D-06 silent degrade).
+        from chat_analyzer.cli import nlp_gate
+
+        nlp_on = nlp_gate.nlp_available(nlp_gate.MODEL_ID)
+
         with contextlib.redirect_stdout(io.StringIO()) as captured:
             from chat_analyzer.analysis import sentiment as _sentiment
 
@@ -178,6 +186,59 @@ def run_pipeline(path: Path, console) -> AnalysisResults:
         if captured.getvalue():
             logger.debug("Captured analysis-stage output:\n%s", captured.getvalue())
 
+    # Gated NLP stages (ANAL-06 emotion / ANAL-08 summary, D-07c). When the
+    # gate is OFF they are skipped silently — no error, no prompt, no hint
+    # (D-02/D-06): the pipeline always prepares for NLP, availability decides.
+    emotion_summary = None
+    conv_summary = None
+    if nlp_on:
+        with stage_status(console, "Analyzing emotions"):
+            # D-05/Pitfall 4: announce model name + size BEFORE any
+            # construction that triggers from_pretrained — and outside the
+            # redirect capture so the message reaches piped output too
+            # (Pitfall 8). ASCII only, no emoji.
+            console.print(
+                f"Emotion model: {nlp_gate.MODEL_ID} (~{nlp_gate.EMOTION_MODEL_SIZE_MB} MB)"
+            )
+            with contextlib.redirect_stdout(io.StringIO()) as captured_nlp:
+                try:
+                    from chat_analyzer.analysis.emotion import (
+                        EmotionAnalyzer,
+                        emotion_figure,
+                    )
+
+                    emo_analyzer = EmotionAnalyzer()
+                    df_emo = emo_analyzer.analyze_emotions(df)
+                    emotion_summary = emo_analyzer.get_emotion_summary(df_emo)
+                except Exception:
+                    logger.exception("emotion analysis failed; degrading to None")
+                    emotion_summary = None
+            if captured_nlp.getvalue():
+                logger.debug("Captured emotion-stage output:\n%s", captured_nlp.getvalue())
+            if emotion_summary is not None:
+                charts["emotion"] = _safe_chart(emotion_figure(emotion_summary))
+
+        with stage_status(console, "Summarizing conversation"):
+            console.print(
+                f"Summary model: {nlp_gate.SUMMARY_MODEL_ID} "
+                f"(~{nlp_gate.SUMMARY_MODEL_SIZE_MB} MB)"
+            )
+            with contextlib.redirect_stdout(io.StringIO()) as captured_nlp:
+                try:
+                    # Pitfall 7: construct ONLY now — the ctor downloads
+                    # t5-small (~231 MB); degrade instead of failing the run.
+                    from chat_analyzer.analysis.summarizer import ConversationSummarizer
+
+                    conv_summary = ConversationSummarizer().summarize_conversation(df)
+                except Exception:
+                    logger.exception("summarization failed; degrading to unavailable")
+                    conv_summary = {
+                        "summary": "Summary unavailable.",
+                        "messages_summarized": 0,
+                    }
+            if captured_nlp.getvalue():
+                logger.debug("Captured summary-stage output:\n%s", captured_nlp.getvalue())
+
     from chat_analyzer.cli.adapters import adapt
 
     return adapt(
@@ -192,4 +253,6 @@ def run_pipeline(path: Path, console) -> AnalysisResults:
         charts,
         health=health_res,
         network=network_res,
+        emotion=emotion_summary,
+        summary=conv_summary,
     )
