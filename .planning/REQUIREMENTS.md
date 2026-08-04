@@ -23,17 +23,17 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **ANAL-04**: User gets top words and emojis with frequency
 - [ ] **ANAL-05**: User gets sentiment analysis breakdown (VADER-based, per-message and per-participant)
 - [x] **ANAL-06**: User gets emotion classification (6-class) — requires `[nlp]` extra (plan 04-02: parse bug fixed, gate + tabs)
-- [x] **ANAL-07**: User gets relationship health score — always-on in base install (D-07, plan 04-01)
+- [x] **ANAL-07**: User gets relationship health score — always-on (no torch/transformers needed — D-07, plan 04-01)
 - [x] **ANAL-08**: User gets conversation summarization — requires `[nlp]` extra (plan 04-02: gated T5 path + report tab)
-- [x] **ANAL-09**: User gets network graph analysis — always-on in base install (D-07b, plan 04-01)
+- [x] **ANAL-09**: User gets network graph analysis — always-on (networkx/matplotlib only — D-07b, plan 04-01)
 
 ### Output
 
 - [x] **OUT-01**: User sees analysis results in the terminal with tables, panels, and color
 - [x] **OUT-02**: User sees inline charts in the terminal (bar/line via plotext) — DROPPED (plotext never ships; charts live in HTML report)
 - [x] **OUT-03**: User gets a self-contained single-file HTML report (charts/images base64-embedded) — Phase 2
-- [x] **OUT-04**: User can specify an output path for the HTML report — RESOLVED (D-08/D-09, plan 04-01): no `--output` flag; report always lands at `cwd/<stem>_report.html`
-- [x] **OUT-05**: User can skip the HTML report (`--no-report`) or keep it minimal — RESOLVED (D-08, plan 04-01): report is always generated; no skip flag in v1
+- [x] **OUT-04**: User can specify an output path for the HTML report — Resolved as NO FLAG (D-08): report always saved to the current working directory
+- [x] **OUT-05**: User can skip the HTML report (`--no-report`) or keep it minimal — Resolved as NO FLAG (D-08): report always generated; no opt-out
 
 ### Packaging
 
@@ -104,14 +104,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ANAL-04 | Phase 2 | Complete |
 | ANAL-05 | Phase 2 | Complete |
 | ANAL-06 | Phase 4 | Complete (plan 04-02: [0] parse bug fixed, locked D-07c model, gate + tabs) |
-| ANAL-07 | Phase 4 | Complete (always-on, D-07 — plan 04-01) |
+| ANAL-07 | Phase 4 | Complete (Phase 4, no-flag/always-on resolution) |
 | ANAL-08 | Phase 4 | Complete (plan 04-02: gated T5 summarizer + report tab) |
-| ANAL-09 | Phase 4 | Complete (always-on, D-07b — plan 04-01) |
+| ANAL-09 | Phase 4 | Complete (Phase 4, no-flag/always-on resolution) |
 | OUT-01 | Phase 2 | Complete (terminal shows compact summary panel + path; insights live in HTML report) |
 | OUT-02 | Phase 2 | Dropped (plotext never ships; charts exist only in the HTML report) |
 | OUT-03 | Phase 2 | Complete (pulled forward from Phase 3) |
-| OUT-04 | Phase 2 / Phase 4 | Complete (resolved D-08/D-09 — plan 04-01: no `--output` flag; report always lands in cwd) |
-| OUT-05 | Phase 4 | Complete (resolved D-08 — plan 04-01: report always generated; no `--no-report` in v1) |
+| OUT-04 | Phase 2 / Phase 4 | Complete (Phase 4, no-flag/always-on resolution) |
+| OUT-05 | Phase 4 | Complete (Phase 4, no-flag/always-on resolution) |
 | CLI-08 | Phase 2 | Complete (auto-open pulled forward; degrades to printed path) |
 | PKG-01 | Phase 1 | Complete |
 | PKG-02 | Phase 1 | Complete |
@@ -130,4 +130,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-07-31*
-*Last updated: 2026-08-04 (plan 04-03: CLI-04 complete — friendly errors with export instructions; QUAL-02 extended)*
+*Last updated: 2026-08-04 (plan 04-05: QUAL-03 complete — quickstart README; ANAL-07/09 always-on + OUT-04/05 no-flag traceability reconciled)*
