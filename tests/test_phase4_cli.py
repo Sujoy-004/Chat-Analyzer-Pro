@@ -155,7 +155,7 @@ def test_menu_renders_three_options_on_tty():
     from rich.console import Console
 
     import chat_analyzer.cli.main as cli_main
-    import chat_analyzer.cli.nlp_gate as nlp_gate
+    from chat_analyzer.cli import nlp_gate
 
     out = StringIO()
     console = Console(file=out, width=120)

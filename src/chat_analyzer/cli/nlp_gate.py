@@ -9,12 +9,19 @@ caches all resolve to False so the caller silently runs basic analysis
 The CHAT_ANALYZER_FORCE_NLP env override makes either branch deterministic
 in tests (RESEARCH Pitfall 5: the dev machine has transformers but no cached
 emotion model, so the probe alone would always report "unavailable").
+
+install_nlp is the guarded runtime installer for the D-04 download menu: a
+subprocess pip re-install of the already-declared [nlp] extras (torch +
+transformers), CPU-only or full torch, that raises RuntimeError on failure so
+the caller degrades to basic analysis + hint (never a frozen terminal).
 """
 
 from __future__ import annotations
 
 import logging
 import os
+import subprocess
+import sys
 from pathlib import Path
 
 try:
@@ -70,3 +77,35 @@ def nlp_available(model_id: str = MODEL_ID) -> bool:
         return False
 
     return model_cached(model_id)
+
+
+def install_nlp(cpu_only: bool = False) -> None:
+    """Runtime install of the already-declared [nlp] extras (D-05).
+
+    Guarded subprocess pip — never shell=True, never os.system (T-04-10).
+    Installs torch + transformers at runtime when the user picks the download
+    option from the interactive menu. CPU-only torch pulls PyTorch's CPU wheel
+    index (~0.6 GB install); the default is the full torch build (~3 GB). No
+    new package names enter the dependency graph — these are the already
+    audited [nlp] extras (T-04-SC).
+
+    Output is captured, never echoed raw. Raises RuntimeError on any failure
+    (offline, no pip) so the caller degrades to basic analysis plus the hint
+    line — never a frozen terminal (Pitfall 4).
+    """
+    cmd = [
+        sys.executable,
+        "-m",
+        "pip",
+        "install",
+        "torch",
+        "transformers>=4.30,<6",
+    ]
+    if cpu_only:
+        cmd += ["--index-url", "https://download.pytorch.org/whl/cpu"]
+    proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    if proc.returncode != 0:
+        raise RuntimeError(
+            "Model install failed — run basic analysis, or install: "
+            "pip install chat-analyzer-pro[nlp]"
+        )
