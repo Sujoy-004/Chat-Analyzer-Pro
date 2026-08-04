@@ -147,3 +147,13 @@ None - no placeholder values or unwired data sources introduced by this plan.
 ---
 *Phase: 04-nlp-extras-quality-gate*
 *Completed: 2026-08-04*
+
+## Self-Check: PASSED
+
+- FOUND: `tests/test_phase4_cli.py`
+- FOUND: `.planning/phases/04-nlp-extras-quality-gate/04-03-SUMMARY.md`
+- FOUND: commit `6f2dcbf` (TDD RED)
+- FOUND: commit `e639101` (Task 2 GREEN)
+- FOUND: commit `f9a381d` (Task 3 GREEN)
+- FOUND: commit `57e690b` (plan metadata)
+- Verified: `python -m pytest tests/test_phase4_cli.py` 7/7 pass; `python -m pytest tests/test_phase2_cli.py tests/test_phase1_smoke.py` 20/20 pass; ruff 0 errors on all touched files
