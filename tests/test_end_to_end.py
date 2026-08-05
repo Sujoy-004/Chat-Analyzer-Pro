@@ -146,7 +146,7 @@ class TestDataFlow(unittest.TestCase):
         """Test data flow from parser to EDA module."""
         # Mock parsed data
         df = pd.DataFrame({
-            'datetime': pd.date_range('2023-12-01', periods=50, freq='6H'),
+            'datetime': pd.date_range('2023-12-01', periods=50, freq='6h'),
             'sender': ['Alice', 'Bob'] * 25,
             'message': ['Test'] * 50,
             'message_length': np.random.randint(10, 100, 50)
@@ -166,7 +166,7 @@ class TestDataFlow(unittest.TestCase):
         """Test data flow from EDA to sentiment analysis."""
         # Mock EDA output
         df = pd.DataFrame({
-            'datetime': pd.date_range('2023-12-01', periods=30, freq='12H'),
+            'datetime': pd.date_range('2023-12-01', periods=30, freq='12h'),
             'sender': ['Alice'] * 30,
             'message': ['Happy day!', 'Terrible news', 'Okay'] * 10,
             'message_length': [10] * 30
@@ -329,7 +329,7 @@ class TestModuleIntegration(unittest.TestCase):
     def test_parser_visualization_integration(self):
         """Test integration between parser and visualization."""
         df = pd.DataFrame({
-            'datetime': pd.date_range('2023-12-01', periods=50, freq='6H'),
+            'datetime': pd.date_range('2023-12-01', periods=50, freq='6h'),
             'sender': ['Alice', 'Bob'] * 25,
             'message': ['Test'] * 50
         })
@@ -391,7 +391,7 @@ class TestOutputFormats(unittest.TestCase):
     def test_csv_export(self):
         """Test CSV export functionality."""
         df = pd.DataFrame({
-            'datetime': pd.date_range('2023-12-01', periods=10, freq='1H'),
+            'datetime': pd.date_range('2023-12-01', periods=10, freq='1h'),
             'sender': ['Alice', 'Bob'] * 5,
             'message': ['Test'] * 10,
             'sentiment': ['positive'] * 10
@@ -481,7 +481,7 @@ class TestRobustness(unittest.TestCase):
     def test_single_sender_handling(self):
         """Test handling of single sender (monologue)."""
         df = pd.DataFrame({
-            'datetime': pd.date_range('2023-12-01', periods=50, freq='1H'),
+            'datetime': pd.date_range('2023-12-01', periods=50, freq='1h'),
             'sender': ['Alice'] * 50,
             'message': ['Test'] * 50
         })
@@ -563,7 +563,7 @@ class TestPerformance(unittest.TestCase):
         """Test that memory is properly managed."""
         # Create temporary data
         temp_df = pd.DataFrame({
-            'datetime': pd.date_range('2023-01-01', periods=1000, freq='1H'),
+            'datetime': pd.date_range('2023-01-01', periods=1000, freq='1h'),
             'sender': ['Alice'] * 1000,
             'message': ['Test'] * 1000
         })
@@ -585,7 +585,7 @@ class TestDataValidation(unittest.TestCase):
             '2023-12-01',
             '2023-12-01 10:30:00',
             '12/01/2023'
-        ], errors='coerce')
+        ], format='mixed', errors='coerce')
         
         # All should parse successfully
         self.assertEqual(valid_dates.notna().sum(), 3)
