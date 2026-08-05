@@ -34,11 +34,10 @@ class TestWhatsAppParser(unittest.TestCase):
 and line 2 continues
 12/26/23, 8:00 AM - Alice: Going to the park!"""
 
-        self.temp_file = tempfile.NamedTemporaryFile(
+        with tempfile.NamedTemporaryFile(
             mode='w', encoding='utf-8', delete=False, suffix='.txt'
-        )
-        self.temp_file.write(self.sample_whatsapp_text)
-        self.temp_file.close()
+        ) as self.temp_file:
+            self.temp_file.write(self.sample_whatsapp_text)
 
     def tearDown(self):
         """Clean up test files."""
@@ -139,11 +138,11 @@ and line 2 continues
 
         eu_row = parser.parse_line_strict('25/12/2023, 21:07 - Bob: EU 24h')
         self.assertIsNotNone(eu_row)
-        self.assertEqual(eu_row['datetime'], datetime(2023, 12, 25, 21, 7))
+        self.assertEqual(eu_row['datetime'], datetime(2023, 12, 25, 21, 7))  # noqa: DTZ001 - naive constant compared against parser output, naive by design
 
         ios_row = parser.parse_line_strict('[14/06/2024, 2:30:45 PM] Maria: iOS bracket')
         self.assertIsNotNone(ios_row)
-        self.assertEqual(ios_row['datetime'], datetime(2024, 6, 14, 14, 30, 45))
+        self.assertEqual(ios_row['datetime'], datetime(2024, 6, 14, 14, 30, 45))  # noqa: DTZ001 - naive constant compared against parser output, naive by design
 
 
 class TestTelegramParser(unittest.TestCase):
@@ -176,11 +175,10 @@ class TestTelegramParser(unittest.TestCase):
             ]
         }
 
-        self.temp_file = tempfile.NamedTemporaryFile(
+        with tempfile.NamedTemporaryFile(
             mode='w', encoding='utf-8', delete=False, suffix='.json'
-        )
-        json.dump(self.sample_telegram_json, self.temp_file)
-        self.temp_file.close()
+        ) as self.temp_file:
+            json.dump(self.sample_telegram_json, self.temp_file)
 
     def tearDown(self):
         """Clean up test files."""
@@ -224,7 +222,7 @@ class TestTelegramParser(unittest.TestCase):
         for row in rows:
             self.assertIsNotNone(row['datetime'])
             self.assertIsNone(row['datetime'].tzinfo, "datetimes normalized to naive UTC (D-20)")
-        self.assertEqual(rows[0]['datetime'], datetime(2023, 12, 25, 9, 30))
+        self.assertEqual(rows[0]['datetime'], datetime(2023, 12, 25, 9, 30))  # noqa: DTZ001 - naive constant compared against parser output, naive by design
 
     def test_sender_extraction(self):
         """Test sender name extraction via the real parser."""
@@ -248,12 +246,11 @@ class TestParserEdgeCases(unittest.TestCase):
 
     def _parse_whatsapp(self, text):
         """Write an inline WhatsApp fixture and parse it with the real parser."""
-        temp = tempfile.NamedTemporaryFile(
+        with tempfile.NamedTemporaryFile(
             mode='w', encoding='utf-8', delete=False, suffix='.txt'
-        )
-        try:
+        ) as temp:
             temp.write(text)
-            temp.close()
+        try:
             return WhatsAppParser().parse_file_with_report(temp.name)
         finally:
             if os.path.exists(temp.name):
@@ -301,12 +298,11 @@ class TestParserEdgeCases(unittest.TestCase):
 
     def test_empty_telegram_export(self):
         """An empty Telegram export raises the friendly ValueError (MEDIUM #3)."""
-        temp = tempfile.NamedTemporaryFile(
+        with tempfile.NamedTemporaryFile(
             mode='w', encoding='utf-8', delete=False, suffix='.json'
-        )
-        try:
+        ) as temp:
             json.dump({"messages": []}, temp)
-            temp.close()
+        try:
             with self.assertRaises(ValueError) as ctx:
                 parse_telegram_chat_with_report(temp.name)
             self.assertIn("Not a Telegram chat export", str(ctx.exception))

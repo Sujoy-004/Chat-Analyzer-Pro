@@ -12,13 +12,13 @@ This module analyzes relationship health through conversation patterns including
 
 """
 
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
-from datetime import datetime, timedelta
-from typing import Dict, List, Tuple, Any, Optional
 import logging
+from datetime import datetime, timedelta
+from typing import Any
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 
 # Configure logging (Anti-Pattern 4: never hijack global log config at import)
 logging.getLogger(__name__).addHandler(logging.NullHandler())
@@ -62,7 +62,7 @@ def identify_conversation_starters(df: pd.DataFrame, gap_threshold_minutes: int 
     return df
 
 
-def calculate_initiator_ratio(df: pd.DataFrame) -> Dict[str, Any]:
+def calculate_initiator_ratio(df: pd.DataFrame) -> dict[str, Any]:
     """
     Calculate who initiates conversations more often.
     
@@ -108,7 +108,7 @@ def calculate_initiator_ratio(df: pd.DataFrame) -> Dict[str, Any]:
     }
 
 
-def analyze_response_patterns(df: pd.DataFrame) -> Dict[str, Any]:
+def analyze_response_patterns(df: pd.DataFrame) -> dict[str, Any]:
     """
     Analyze response lag patterns and responsiveness.
     
@@ -176,7 +176,7 @@ def analyze_response_patterns(df: pd.DataFrame) -> Dict[str, Any]:
     }
 
 
-def calculate_dominance_scores(df: pd.DataFrame) -> Dict[str, Any]:
+def calculate_dominance_scores(df: pd.DataFrame) -> dict[str, Any]:
     """
     Calculate conversation dominance patterns.
     
@@ -276,11 +276,11 @@ def calculate_dominance_scores(df: pd.DataFrame) -> Dict[str, Any]:
 
 
 def calculate_relationship_health_score(
-    initiator_metrics: Dict[str, Any],
-    response_metrics: Dict[str, Any], 
-    dominance_metrics: Dict[str, Any],
-    weights: Dict[str, float] = None
-) -> Dict[str, Any]:
+    initiator_metrics: dict[str, Any],
+    response_metrics: dict[str, Any], 
+    dominance_metrics: dict[str, Any],
+    weights: dict[str, float] | None = None
+) -> dict[str, Any]:
     """
     Calculate overall relationship health score from component metrics.
     
@@ -425,8 +425,8 @@ def calculate_rolling_health_score(
                 'grade': health_score['grade'],
                 'message_count': len(window_df)
             })
-        except Exception as e:
-            logger.warning(f"Failed to calculate health score for {current_date}: {str(e)}")
+        except Exception as e:  # noqa: BLE001 - a failing window is skipped, never allowed to crash the series
+            logger.warning(f"Failed to calculate health score for {current_date}: {e!s}")
             continue
     
     return pd.DataFrame(health_scores)
@@ -436,7 +436,7 @@ def calculate_rolling_health_score(
 # DAY 14: GAMIFICATION FEATURES - FRIENDSHIP INDEX & EXTRAS
 # ============================================================================
 
-def calculate_friendship_index(df: pd.DataFrame) -> Dict[str, Any]:
+def calculate_friendship_index(df: pd.DataFrame) -> dict[str, Any]:
     """
     Calculate comprehensive Friendship Index combining multiple metrics.
     
@@ -517,7 +517,7 @@ def calculate_friendship_index(df: pd.DataFrame) -> Dict[str, Any]:
     }
 
 
-def detect_conversation_streaks(df: pd.DataFrame) -> Dict[str, Any]:
+def detect_conversation_streaks(df: pd.DataFrame) -> dict[str, Any]:
     """
     Detect conversation streaks (consecutive days with messages).
     
@@ -564,7 +564,7 @@ def detect_conversation_streaks(df: pd.DataFrame) -> Dict[str, Any]:
     
     # Check if current streak is active (last message within 24 hours)
     last_message_date = conversation_days[-1]
-    today = datetime.now().date()
+    today = datetime.now().date()  # noqa: DTZ005 - streak "today" is local-calendar semantics, deliberately naive
     days_since_last = (today - last_message_date).days
     
     active_streak = current_streak if days_since_last <= 1 else 0
@@ -578,7 +578,7 @@ def detect_conversation_streaks(df: pd.DataFrame) -> Dict[str, Any]:
     }
 
 
-def analyze_emoji_personality(df: pd.DataFrame, message_col: str = 'message') -> Dict[str, Any]:
+def analyze_emoji_personality(df: pd.DataFrame, message_col: str = 'message') -> dict[str, Any]:
     """
     Analyze emoji usage patterns to determine communication personality.
     
@@ -592,12 +592,12 @@ def analyze_emoji_personality(df: pd.DataFrame, message_col: str = 'message') ->
     import re
     
     emoji_pattern = re.compile("["
-        u"\U0001F600-\U0001F64F"  # emoticons
-        u"\U0001F300-\U0001F5FF"  # symbols & pictographs
-        u"\U0001F680-\U0001F6FF"  # transport & map symbols
-        u"\U0001F1E0-\U0001F1FF"  # flags
-        u"\U00002702-\U000027B0"
-        u"\U000024C2-\U0001F251"
+        "\U0001F600-\U0001F64F"  # emoticons
+        "\U0001F300-\U0001F5FF"  # symbols & pictographs
+        "\U0001F680-\U0001F6FF"  # transport & map symbols
+        "\U0001F1E0-\U0001F1FF"  # flags
+        "\U00002702-\U000027B0"
+        "\U000024C2-\U0001F251"
         "]+", flags=re.UNICODE)
     
     emoji_categories = {
@@ -676,7 +676,7 @@ def analyze_emoji_personality(df: pd.DataFrame, message_col: str = 'message') ->
     return personality_analysis
 
 
-def detect_milestones(df: pd.DataFrame) -> Dict[str, Any]:
+def detect_milestones(df: pd.DataFrame) -> dict[str, Any]:
     """
     Detect conversation milestones and achievements.
     
@@ -782,8 +782,8 @@ def detect_milestones(df: pd.DataFrame) -> Dict[str, Any]:
 # ============================================================================
 
 def plot_relationship_health_dashboard_enhanced(
-    analysis_results: Dict[str, Any],
-    figsize: Tuple[int, int] = (20, 14),
+    analysis_results: dict[str, Any],
+    figsize: tuple[int, int] = (20, 14),
     use_viz_module: bool = True
 ) -> None:
     """
@@ -797,9 +797,6 @@ def plot_relationship_health_dashboard_enhanced(
     """
     if use_viz_module:
         try:
-            from chat_analyzer.utils.visualization import ChatVisualizer
-            viz = ChatVisualizer(figsize=(12, 6))
-            
             # Use prepared data from analysis
             df = analysis_results.get('prepared_data')
             if df is not None:
@@ -864,12 +861,11 @@ def plot_relationship_health_dashboard_enhanced(
     _plot_original_dashboard(analysis_results, figsize)
 
 
-def _plot_friendship_gauge(ax, friendship_data: Dict[str, Any]) -> None:
+def _plot_friendship_gauge(ax, friendship_data: dict[str, Any]) -> None:
     """Plot friendship index as a gauge."""
     score = friendship_data['friendship_index']
     
     # Create gauge
-    theta = np.linspace(0, np.pi, 100)
     colors = ['#E74C3C', '#F39C12', '#F1C40F', '#2ECC71', '#27AE60']
     ranges = [0, 45, 60, 75, 90, 100]
     
@@ -896,7 +892,7 @@ def _plot_friendship_gauge(ax, friendship_data: Dict[str, Any]) -> None:
     ax.text(0, -0.15, f'{score:.0f}/100', ha='center', fontsize=16, fontweight='bold')
 
 
-def _plot_streak_display(ax, streak_data: Dict[str, Any]) -> None:
+def _plot_streak_display(ax, streak_data: dict[str, Any]) -> None:
     """Plot streak information."""
     ax.axis('off')
     
@@ -909,11 +905,11 @@ def _plot_streak_display(ax, streak_data: Dict[str, Any]) -> None:
     
     ax.text(0.5, 0.5, info_text, transform=ax.transAxes,
            fontsize=12, ha='center', va='center',
-           bbox=dict(boxstyle='round', facecolor='#fff3cd', alpha=0.8))
+           bbox={'boxstyle': 'round', 'facecolor': '#fff3cd', 'alpha': 0.8})
     ax.set_title('Conversation Streaks', fontweight='bold', fontsize=11)
 
 
-def _plot_emoji_personality(ax, emoji_data: Dict[str, Any]) -> None:
+def _plot_emoji_personality(ax, emoji_data: dict[str, Any]) -> None:
     """Plot emoji personality analysis."""
     ax.axis('off')
     
@@ -927,11 +923,11 @@ def _plot_emoji_personality(ax, emoji_data: Dict[str, Any]) -> None:
     text = '\n'.join(text_parts)
     ax.text(0.5, 0.5, text, transform=ax.transAxes,
            fontsize=10, ha='center', va='center',
-           bbox=dict(boxstyle='round', facecolor='#e7f3ff', alpha=0.8))
+           bbox={'boxstyle': 'round', 'facecolor': '#e7f3ff', 'alpha': 0.8})
     ax.set_title('Emoji Personalities', fontweight='bold', fontsize=11)
 
 
-def _plot_health_components(ax, health_score: Dict[str, Any]) -> None:
+def _plot_health_components(ax, health_score: dict[str, Any]) -> None:
     """Plot health score components as bar chart."""
     components = health_score['component_scores']
     names = ['Initiation', 'Responsiveness', 'Balance', 'Dominance']
@@ -950,7 +946,7 @@ def _plot_health_components(ax, health_score: Dict[str, Any]) -> None:
     ax.grid(True, alpha=0.3, axis='x')
 
 
-def _plot_achievements(ax, milestones: Dict[str, Any]) -> None:
+def _plot_achievements(ax, milestones: dict[str, Any]) -> None:
     """Plot achievement badges."""
     ax.axis('off')
     
@@ -963,11 +959,11 @@ def _plot_achievements(ax, milestones: Dict[str, Any]) -> None:
     
     ax.text(0.5, 0.5, text, transform=ax.transAxes,
            fontsize=10, ha='center', va='center',
-           bbox=dict(boxstyle='round', facecolor='#d4edda', alpha=0.8))
+           bbox={'boxstyle': 'round', 'facecolor': '#d4edda', 'alpha': 0.8})
     ax.set_title('Latest Achievements', fontweight='bold', fontsize=11)
 
 
-def _plot_original_dashboard(analysis_results: Dict[str, Any], figsize: Tuple[int, int]) -> None:
+def _plot_original_dashboard(analysis_results: dict[str, Any], figsize: tuple[int, int]) -> None:
     """Original dashboard implementation (fallback)."""
     health_score = analysis_results['health_score']
     
@@ -978,7 +974,6 @@ def _plot_original_dashboard(analysis_results: Dict[str, Any], figsize: Tuple[in
     ax1 = axes[0, 0]
     overall_score = health_score['overall_health_score']
     
-    theta = np.linspace(0, np.pi, 100)
     colors = ['#E74C3C', '#F39C12', '#F1C40F', '#2ECC71', '#27AE60']
     ranges = [0.0, 0.4, 0.6, 0.8, 0.9, 1.0]
     
@@ -1034,7 +1029,7 @@ def _plot_original_dashboard(analysis_results: Dict[str, Any], figsize: Tuple[in
         if 'mean' in response_stats:
             names = list(response_stats['mean'].keys())
             values = list(response_stats['mean'].values())
-            bars = ax4.bar(names, values, color=['#FF6B6B', '#4ECDC4'], alpha=0.8)
+            ax4.bar(names, values, color=['#FF6B6B', '#4ECDC4'], alpha=0.8)
             ax4.set_ylabel('Avg Response Time (min)')
             ax4.set_title('Response Speed', fontweight='bold')
             ax4.grid(True, alpha=0.3, axis='y')
@@ -1043,7 +1038,7 @@ def _plot_original_dashboard(analysis_results: Dict[str, Any], figsize: Tuple[in
     ax5 = axes[1, 1]
     if 'initiator_counts' in analysis_results['initiator_analysis']:
         init_counts = analysis_results['initiator_analysis']['initiator_counts']
-        bars = ax5.bar(init_counts.keys(), init_counts.values(),
+        ax5.bar(init_counts.keys(), init_counts.values(),
                       color=['#E74C3C', '#3498DB'], alpha=0.8)
         ax5.set_ylabel('Conversations Started')
         ax5.set_title('Initiation', fontweight='bold')
@@ -1057,7 +1052,7 @@ def _plot_original_dashboard(analysis_results: Dict[str, Any], figsize: Tuple[in
     for s in health_score['strengths'][:2]:
         summary += f"{s}\n"
     ax6.text(0.05, 0.95, summary, transform=ax6.transAxes, fontsize=9,
-            verticalalignment='top', bbox=dict(boxstyle='round', facecolor='lightgray', alpha=0.8))
+            verticalalignment='top', bbox={'boxstyle': 'round', 'facecolor': 'lightgray', 'alpha': 0.8})
     ax6.set_title('Summary', fontweight='bold')
     
     plt.tight_layout()
@@ -1072,7 +1067,7 @@ def analyze_relationship_health(
     df: pd.DataFrame,
     gap_threshold_minutes: int = 60,
     include_gamification: bool = True
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Complete relationship health analysis pipeline with gamification features.
     
@@ -1154,15 +1149,15 @@ def example_usage():
     print(f"\nOverall Score: {results['health_score']['overall_health_score']:.2f}")
     print(f"Grade: {results['health_score']['grade']}")
     
-    print(f"\n=== FRIENDSHIP INDEX ===")
+    print("\n=== FRIENDSHIP INDEX ===")
     print(f"Score: {results['friendship_index']['friendship_index']:.2f}/100")
     print(f"Tier: {results['friendship_index']['tier']}")
     
-    print(f"\n=== STREAKS ===")
+    print("\n=== STREAKS ===")
     print(f"Current: {results['streaks']['current_streak']} days")
     print(f"Longest: {results['streaks']['longest_streak']} days")
     
-    print(f"\n=== ACHIEVEMENTS ===")
+    print("\n=== ACHIEVEMENTS ===")
     print(f"Total: {results['milestones']['total_achievements']}")
     
     # Create enhanced visualization

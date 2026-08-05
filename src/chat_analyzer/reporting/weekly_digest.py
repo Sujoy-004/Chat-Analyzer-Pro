@@ -6,18 +6,16 @@ This module integrates all analysis components to generate and send
 automated weekly digests containing key metrics, insights, and visualizations.
 """
 
+import logging
 import os
 import smtplib
-import logging
+from collections.abc import Callable
+from datetime import datetime, timedelta
+from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from email.mime.application import MIMEApplication
-from email.mime.image import MIMEImage
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple
+
 import pandas as pd
-import io
-import base64
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -32,8 +30,8 @@ class WeeklyDigestBot:
     
     def __init__(
         self,
-        email_config: Optional[Dict[str, str]] = None,
-        telegram_config: Optional[Dict[str, str]] = None
+        email_config: dict[str, str] | None = None,
+        telegram_config: dict[str, str] | None = None
     ):
         """
         Initialize the Weekly Digest Bot.
@@ -48,9 +46,9 @@ class WeeklyDigestBot:
     def generate_weekly_summary(
         self,
         df: pd.DataFrame,
-        start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None
-    ) -> Dict[str, any]:
+        start_date: datetime | None = None,
+        end_date: datetime | None = None
+    ) -> dict[str, any]:
         """
         Generate weekly summary statistics from chat data.
         
@@ -64,7 +62,7 @@ class WeeklyDigestBot:
         """
         # Set default date range
         if end_date is None:
-            end_date = datetime.now()
+            end_date = datetime.now()  # noqa: DTZ005 - digest default range uses local time, deliberately naive
         if start_date is None:
             start_date = end_date - timedelta(days=7)
             
@@ -100,7 +98,7 @@ class WeeklyDigestBot:
         
         return summary
     
-    def _get_empty_summary(self, start_date: datetime, end_date: datetime) -> Dict:
+    def _get_empty_summary(self, start_date: datetime, end_date: datetime) -> dict:
         """Return empty summary structure when no data is available."""
         return {
             'period': {
@@ -125,7 +123,7 @@ class WeeklyDigestBot:
         day_counts = df['timestamp'].dt.day_name().value_counts()
         return day_counts.idxmax() if not day_counts.empty else 'N/A'
     
-    def _get_top_contributors(self, df: pd.DataFrame, top_n: int = 5) -> List[Dict]:
+    def _get_top_contributors(self, df: pd.DataFrame, top_n: int = 5) -> list[dict]:
         """Get top message contributors."""
         if 'sender' not in df.columns or df.empty:
             return []
@@ -136,7 +134,7 @@ class WeeklyDigestBot:
             for name, count in contributor_counts.items()
         ]
     
-    def _get_message_distribution(self, df: pd.DataFrame) -> Dict[str, int]:
+    def _get_message_distribution(self, df: pd.DataFrame) -> dict[str, int]:
         """Calculate daily message distribution."""
         if 'timestamp' not in df.columns or df.empty:
             return {}
@@ -147,7 +145,7 @@ class WeeklyDigestBot:
             for date, count in daily_counts.items()
         }
     
-    def _get_sentiment_summary(self, df: pd.DataFrame) -> Dict[str, any]:
+    def _get_sentiment_summary(self, df: pd.DataFrame) -> dict[str, any]:
         """Calculate sentiment distribution and trends."""
         if 'sentiment' not in df.columns or df.empty:
             return {
@@ -172,7 +170,7 @@ class WeeklyDigestBot:
             'average_score': float(avg_score)
         }
     
-    def _get_activity_patterns(self, df: pd.DataFrame) -> Dict[str, any]:
+    def _get_activity_patterns(self, df: pd.DataFrame) -> dict[str, any]:
         """Analyze activity patterns by hour and day."""
         if 'timestamp' not in df.columns or df.empty:
             return {'peak_hour': 'N/A', 'peak_day': 'N/A'}
@@ -186,7 +184,7 @@ class WeeklyDigestBot:
             'hourly_distribution': hourly_activity.to_dict()
         }
     
-    def _get_engagement_metrics(self, df: pd.DataFrame) -> Dict[str, any]:
+    def _get_engagement_metrics(self, df: pd.DataFrame) -> dict[str, any]:
         """Calculate engagement and interaction metrics."""
         if df.empty:
             return {
@@ -209,7 +207,7 @@ class WeeklyDigestBot:
             'avg_response_time': 'N/A'  # Can be calculated if response lag data is available
         }
     
-    def format_digest_email(self, summary: Dict) -> str:
+    def format_digest_email(self, summary: dict) -> str:
         """
         Format the weekly summary into an HTML email template.
         
@@ -219,6 +217,7 @@ class WeeklyDigestBot:
         Returns:
             HTML string for email body
         """
+        digest_timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')  # noqa: DTZ005 - local-time display text, deliberately naive
         html = f"""
         <html>
         <head>
@@ -333,7 +332,7 @@ class WeeklyDigestBot:
             
             <div class="footer">
                 <p>Generated by Chat Analyzer Pro 🚀</p>
-                <p style="font-size: 12px;">Automated Weekly Digest | {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+                <p style="font-size: 12px;">Automated Weekly Digest | {digest_timestamp}</p>
             </div>
         </body>
         </html>
@@ -346,10 +345,10 @@ class WeeklyDigestBot:
     
     def send_email_digest(
         self,
-        summary: Dict,
+        summary: dict,
         recipient_email: str,
-        pdf_path: Optional[str] = None,
-        attachments: Optional[List[str]] = None
+        pdf_path: str | None = None,
+        attachments: list[str] | None = None
     ) -> bool:
         """
         Send weekly digest via email.
@@ -413,14 +412,14 @@ class WeeklyDigestBot:
             logger.info(f"Email digest sent successfully to {recipient_email}")
             return True
             
-        except Exception as e:
-            logger.error(f"Failed to send email digest: {str(e)}")
+        except Exception as e:  # noqa: BLE001 - email delivery failure degrades to a logged error, never crashes
+            logger.error(f"Failed to send email digest: {e!s}")
             return False
     
     def send_telegram_digest(
         self,
-        summary: Dict,
-        chat_id: Optional[str] = None
+        summary: dict,
+        chat_id: str | None = None
     ) -> bool:
         """
         Send weekly digest via Telegram bot.
@@ -463,11 +462,11 @@ class WeeklyDigestBot:
             logger.info(f"Telegram digest sent successfully to chat {target_chat_id}")
             return True
             
-        except Exception as e:
-            logger.error(f"Failed to send Telegram digest: {str(e)}")
+        except Exception as e:  # noqa: BLE001 - Telegram delivery failure degrades to a logged error, never crashes
+            logger.error(f"Failed to send Telegram digest: {e!s}")
             return False
     
-    def _format_telegram_message(self, summary: Dict) -> str:
+    def _format_telegram_message(self, summary: dict) -> str:
         """Format summary as Telegram message with Markdown."""
         sentiment = summary['sentiment_summary']
         activity = summary['activity_patterns']
@@ -510,9 +509,9 @@ _Generated by Chat Analyzer Pro 🚀_
     def schedule_weekly_digest(
         self,
         df: pd.DataFrame,
-        recipients: Dict[str, List[str]],
-        pdf_generator_func: Optional[callable] = None
-    ) -> Dict[str, bool]:
+        recipients: dict[str, list[str]],
+        pdf_generator_func: Callable | None = None
+    ) -> dict[str, bool]:
         """
         Generate and send weekly digests to all configured recipients.
         
@@ -534,8 +533,8 @@ _Generated by Chat Analyzer Pro 🚀_
         if pdf_generator_func:
             try:
                 pdf_path = pdf_generator_func(df, summary)
-            except Exception as e:
-                logger.error(f"Failed to generate PDF: {str(e)}")
+            except Exception as e:  # noqa: BLE001 - PDF generation failure degrades to a logged error, never crashes
+                logger.error(f"Failed to generate PDF: {e!s}")
         
         # Send email digests
         if 'email' in recipients:
@@ -555,10 +554,10 @@ _Generated by Chat Analyzer Pro 🚀_
 # Utility functions for easy integration
 
 def create_digest_bot(
-    email_sender: Optional[str] = None,
-    email_password: Optional[str] = None,
-    telegram_bot_token: Optional[str] = None,
-    telegram_chat_id: Optional[str] = None,
+    email_sender: str | None = None,
+    email_password: str | None = None,
+    telegram_bot_token: str | None = None,
+    telegram_chat_id: str | None = None,
     smtp_server: str = 'smtp.gmail.com',
     smtp_port: int = 587
 ) -> WeeklyDigestBot:
@@ -598,10 +597,10 @@ def create_digest_bot(
 
 def send_quick_digest(
     df: pd.DataFrame,
-    recipient_email: Optional[str] = None,
-    telegram_chat_id: Optional[str] = None,
+    recipient_email: str | None = None,
+    telegram_chat_id: str | None = None,
     **bot_kwargs
-) -> Dict[str, bool]:
+) -> dict[str, bool]:
     """
     Quick function to generate and send digest without explicit bot setup.
     

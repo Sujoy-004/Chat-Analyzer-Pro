@@ -3,12 +3,13 @@ End-to-End Integration Tests
 Tests complete pipeline from parsing to reporting.
 """
 
-import unittest
-import pandas as pd
-import numpy as np
-from datetime import datetime, timedelta
-import tempfile
 import os
+import tempfile
+import unittest
+from datetime import datetime
+
+import numpy as np
+import pandas as pd
 
 
 class TestCompletePipeline(unittest.TestCase):
@@ -25,9 +26,11 @@ class TestCompletePipeline(unittest.TestCase):
 12/02/23, 8:05 AM - Bob: Morning! Ready for today?
 12/02/23, 8:10 AM - Alice: Absolutely! 💪"""
         
-        self.temp_file = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt')
-        self.temp_file.write(self.sample_chat)
-        self.temp_file.close()
+        # cp1252 console (Pitfall 5): the emoji fixture (😊 / 💪) cannot be encoded
+        # by the locale default — write UTF-8 explicitly so this file works on any
+        # platform/locale.
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt', encoding='utf-8') as self.temp_file:
+            self.temp_file.write(self.sample_chat)
     
     def tearDown(self):
         """Clean up test files."""
@@ -104,7 +107,7 @@ class TestCompletePipeline(unittest.TestCase):
         
         # Generate report metadata
         report_data = {
-            'generated_at': datetime.now(),
+            'generated_at': datetime.now(),  # noqa: DTZ005 - fixture value; naive matches production's deliberate naive handling
             'summary': summary,
             'charts': ['timeline', 'sentiment', 'activity']
         }
@@ -232,9 +235,8 @@ class TestErrorHandling(unittest.TestCase):
     
     def test_empty_file_handling(self):
         """Test handling of empty input file."""
-        empty_file = tempfile.NamedTemporaryFile(mode='w', delete=False)
-        empty_file.write("")
-        empty_file.close()
+        with tempfile.NamedTemporaryFile(mode='w', delete=False) as empty_file:
+            empty_file.write("")
         
         # Should handle gracefully
         df = pd.DataFrame()  # Empty result
@@ -245,20 +247,14 @@ class TestErrorHandling(unittest.TestCase):
     
     def test_malformed_data_handling(self):
         """Test handling of malformed data."""
-        malformed_data = "This is not a valid chat format"
-        
         # Should not crash, return empty or raise specific error
-        try:
-            result = []  # Mock: no valid messages found
-            self.assertEqual(len(result), 0)
-        except Exception as e:
-            # Specific error handling
-            self.assertIsInstance(e, (ValueError, KeyError))
+        result = []  # Mock: no valid messages found
+        self.assertEqual(len(result), 0)
     
     def test_missing_columns_handling(self):
         """Test handling of missing expected columns."""
         incomplete_df = pd.DataFrame({
-            'datetime': [datetime.now()],
+            'datetime': [datetime.now()],  # noqa: DTZ005 - fixture value; naive matches production's deliberate naive handling
             'sender': ['Alice']
             # Missing 'message' column
         })
@@ -398,8 +394,8 @@ class TestOutputFormats(unittest.TestCase):
         })
         
         # Export to CSV
-        temp_csv = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.csv')
-        temp_csv.close()
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.csv') as temp_csv:
+            pass
         
         df.to_csv(temp_csv.name, index=False)
         
@@ -421,8 +417,8 @@ class TestOutputFormats(unittest.TestCase):
         
         import json
         
-        temp_json = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json')
-        json.dump(results, temp_json)
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as temp_json:
+            json.dump(results, temp_json)
         temp_json.close()
         
         # Verify
@@ -445,8 +441,8 @@ class TestOutputFormats(unittest.TestCase):
         </html>
         """
         
-        temp_html = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.html')
-        temp_html.write(html_content)
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.html') as temp_html:
+            temp_html.write(html_content)
         temp_html.close()
         
         # Verify
@@ -465,7 +461,7 @@ class TestRobustness(unittest.TestCase):
     def test_single_message_handling(self):
         """Test handling of single message."""
         df = pd.DataFrame({
-            'datetime': [datetime.now()],
+            'datetime': [datetime.now()],  # noqa: DTZ005 - fixture value; naive matches production's deliberate naive handling
             'sender': ['Alice'],
             'message': ['Single message'],
             'message_length': [14]
@@ -497,10 +493,10 @@ class TestRobustness(unittest.TestCase):
     def test_extreme_time_gaps(self):
         """Test handling of extreme time gaps."""
         dates = [
-            datetime(2023, 1, 1),
-            datetime(2023, 6, 1),  # 5-month gap
-            datetime(2023, 6, 2),
-            datetime(2024, 1, 1)   # 6-month gap
+            datetime(2023, 1, 1),  # noqa: DTZ001 - naive constants; fixture only, no tz semantics needed
+            datetime(2023, 6, 1),  # 5-month gap  # noqa: DTZ001 - naive constants; fixture only, no tz semantics needed
+            datetime(2023, 6, 2),  # noqa: DTZ001 - naive constants; fixture only, no tz semantics needed
+            datetime(2024, 1, 1)   # 6-month gap  # noqa: DTZ001 - naive constants; fixture only, no tz semantics needed
         ]
         
         df = pd.DataFrame({
@@ -515,7 +511,7 @@ class TestRobustness(unittest.TestCase):
     
     def test_identical_timestamps_handling(self):
         """Test handling of messages with identical timestamps."""
-        same_time = datetime(2023, 12, 1, 10, 30, 0)
+        same_time = datetime(2023, 12, 1, 10, 30, 0)  # noqa: DTZ001 - naive constant; fixture only, no tz semantics needed
         
         df = pd.DataFrame({
             'datetime': [same_time, same_time, same_time],
@@ -550,9 +546,9 @@ class TestPerformance(unittest.TestCase):
         start = time.time()
         
         # Simulate analysis
-        total = len(df)
-        avg_length = df['message_length'].mean()
-        hourly = df.groupby(pd.to_datetime(df['datetime']).dt.hour).size()
+        _ = len(df)
+        _ = df['message_length'].mean()
+        _ = df.groupby(pd.to_datetime(df['datetime']).dt.hour).size()
         
         end = time.time()
         

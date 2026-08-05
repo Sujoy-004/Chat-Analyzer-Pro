@@ -9,14 +9,11 @@ Usage:
     from chat_analyzer.reporting.pdf_report import generate_chat_analysis_pdf
 """
 
-from .pdf_report import (
-    generate_chat_analysis_pdf,
-    ChatAnalysisPDFGenerator
-)
+from .pdf_report import ChatAnalysisPDFGenerator, generate_chat_analysis_pdf
 
 __all__ = [
-    'generate_chat_analysis_pdf',
-    'ChatAnalysisPDFGenerator'
+    'ChatAnalysisPDFGenerator',
+    'generate_chat_analysis_pdf'
 ]
 
 __version__ = '1.0.0' 

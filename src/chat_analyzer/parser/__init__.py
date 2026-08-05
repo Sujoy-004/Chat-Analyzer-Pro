@@ -10,12 +10,12 @@ Usage:
     from chat_analyzer.parser.telegram_parser import parse_telegram_chat
 """
 
-from .whatsapp_parser import parse_whatsapp_chat
 from .telegram_parser import parse_telegram_chat
+from .whatsapp_parser import parse_whatsapp_chat
 
 __all__ = [
-    'parse_whatsapp_chat',
-    'parse_telegram_chat'
+    'parse_telegram_chat',
+    'parse_whatsapp_chat'
 ]
 
 __version__ = '1.0.0'

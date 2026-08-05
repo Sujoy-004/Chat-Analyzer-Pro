@@ -16,7 +16,7 @@ Usage:
 from .relationship_health import (
     analyze_relationship_health,
     calculate_relationship_health_score,
-    plot_relationship_health_dashboard_enhanced
+    plot_relationship_health_dashboard_enhanced,
 )
 
 __all__ = [

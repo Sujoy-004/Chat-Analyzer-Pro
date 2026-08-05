@@ -3,12 +3,12 @@ Utility Functions Package
 Contains visualization, preprocessing, and helper functions.
 """
 
+from .preprocessing import clean_messages, extract_emojis, preprocess_text
 from .visualization import ChatVisualizer
-from .preprocessing import preprocess_text, clean_messages, extract_emojis
 
 __all__ = [
     'ChatVisualizer',
-    'preprocess_text',
     'clean_messages',
-    'extract_emojis'
+    'extract_emojis',
+    'preprocess_text'
 ]
