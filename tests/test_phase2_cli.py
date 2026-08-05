@@ -169,14 +169,14 @@ def test_unsupported_and_error_paths(tmp_path):
         cwd=tmp_path,
     )
     out = res.stdout + res.stderr
-    assert "expected a WhatsApp .txt or Telegram .json" in out
+    assert "expected a WhatsApp .txt, Telegram .json, or a .zip export archive" in out
     assert "Traceback" not in out
     assert res.returncode in (0, 1)
 
     # Positional: existing file with an unsupported extension -> exit 1.
     res2 = _run(_cli_cmd(str(bad), console=True))
     assert res2.returncode == 1, res2.stdout + res2.stderr
-    assert "expected a WhatsApp .txt or Telegram .json" in res2.stdout + res2.stderr
+    assert "expected a WhatsApp .txt, Telegram .json, or a .zip export archive" in res2.stdout + res2.stderr
     assert "Traceback" not in res2.stdout + res2.stderr
 
     # Positional: every line fails to parse -> friendly ValueError, exit 1.
