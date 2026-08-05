@@ -79,6 +79,37 @@ def nlp_available(model_id: str = MODEL_ID) -> bool:
     return model_cached(model_id)
 
 
+_CPU_INDEX = "https://download.pytorch.org/whl/cpu"
+_INSTALL_TIMEOUT = 900
+
+
+def _pip_install(args: list[str]) -> None:
+    """Run a guarded pip install, raising RuntimeError on failure/timeout.
+
+    Output is captured, never echoed raw (WR-02: a multi-GB download must not
+    hang the terminal forever — timeout expires to the same friendly error as
+    a pip failure).
+    """
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-m", "pip", "install", *args],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=_INSTALL_TIMEOUT,
+        )
+    except subprocess.TimeoutExpired as exc:  # pragma: no cover - slow path
+        raise RuntimeError(
+            "Model install timed out — run basic analysis, or install: "
+            "pip install chat-analyzer-pro[nlp]"
+        ) from exc
+    if proc.returncode != 0:
+        raise RuntimeError(
+            "Model install failed — run basic analysis, or install: "
+            "pip install chat-analyzer-pro[nlp]"
+        )
+
+
 def install_nlp(cpu_only: bool = False) -> None:
     """Runtime install of the already-declared [nlp] extras (D-05).
 
@@ -89,23 +120,15 @@ def install_nlp(cpu_only: bool = False) -> None:
     new package names enter the dependency graph — these are the already
     audited [nlp] extras (T-04-SC).
 
-    Output is captured, never echoed raw. Raises RuntimeError on any failure
-    (offline, no pip) so the caller degrades to basic analysis plus the hint
-    line — never a frozen terminal (Pitfall 4).
+    Raises RuntimeError on any failure (offline, no pip, timeout) so the caller
+    degrades to basic analysis plus the hint line — never a frozen terminal
+    (Pitfall 4).
     """
-    cmd = [
-        sys.executable,
-        "-m",
-        "pip",
-        "install",
-        "torch",
-        "transformers>=4.30,<6",
-    ]
     if cpu_only:
-        cmd += ["--index-url", "https://download.pytorch.org/whl/cpu"]
-    proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
-    if proc.returncode != 0:
-        raise RuntimeError(
-            "Model install failed — run basic analysis, or install: "
-            "pip install chat-analyzer-pro[nlp]"
-        )
+        # WR-01: --index-url REPLACES PyPI, so transformers would never
+        # resolve from the PyTorch CPU wheel index. Install torch from the
+        # CPU index first, then transformers from PyPI separately.
+        _pip_install(["torch", "--index-url", _CPU_INDEX])
+        _pip_install(["transformers>=4.30,<6"])
+    else:
+        _pip_install(["torch", "transformers>=4.30,<6"])
