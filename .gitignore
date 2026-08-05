@@ -208,6 +208,9 @@ user_data/
 generated_reports/
 *_report.html
 
+# Personal deferred-notes scratchpad (never committed, never pushed)
+DEFERRED.md
+
 # Database files
 *.db
 *.sqlite
