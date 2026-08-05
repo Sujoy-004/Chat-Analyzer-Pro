@@ -206,6 +206,7 @@ user_data/
 
 # Generated reports
 generated_reports/
+*_report.html
 
 # Database files
 *.db
