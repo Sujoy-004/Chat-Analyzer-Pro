@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: "All Phase 4 plans complete (04-04 QUAL-02 gate closed); verification pending"
+status: complete
+stopped_at: "Milestone v1.0 COMPLETE — all 4 phases, 8/8 plans; QUAL-02 gate closed; phase 4 verification PASS"
 last_updated: "2026-08-05T00:00:00.000Z"
-last_activity: 2026-08-05 -- Plan 04-04 complete (legacy test rewire + full-suite green + ruff 0 errors)
+last_activity: 2026-08-05 -- Phase 4 verified PASS (175/175 pytest, ruff 0 errors, 04-VERIFICATION.md); milestone v1.0 complete
 progress:
   total_phases: 4
-  completed_phases: 2
+  completed_phases: 4
   total_plans: 8
   completed_plans: 8
   percent: 100
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-01)
 
 **Core value:** One command turns a raw chat export into real insights about the conversation — locally, fast, no accounts, no hosting.
-**Current focus:** Phase 4 — NLP Extras & Quality Gate
+**Current focus:** Milestone v1.0 COMPLETE — Phase 4 verified PASS
 
 ## Current Position
 
-Phase: 4 (NLP Extras & Quality Gate) — EXECUTING (all plans done, verification pending)
+Phase: 4 (NLP Extras & Quality Gate) — COMPLETE
 Plan: 5 of 5
-Status: Executing Phase 4
-Last activity: 2026-08-05 -- Plan 04-04 complete (legacy test rewire, full suite green, ruff 0 errors)
+Status: Milestone v1.0 Complete
+Last activity: 2026-08-05 -- Phase 4 verified PASS (175/175 pytest, ruff 0 errors, 04-VERIFICATION.md)
 
 Progress: [██████████] 100%
 
