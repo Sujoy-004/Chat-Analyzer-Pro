@@ -12,7 +12,7 @@ One command turns a WhatsApp `.txt` or Telegram `.json` chat export into real in
 ### 2. Get the code
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/Sujoy-004/Chat-Analyzer-Pro.git
 cd Chat-Analyzer-Pro
 ```
 
