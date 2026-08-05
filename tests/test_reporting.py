@@ -16,7 +16,7 @@ class TestPDFReportGeneration(unittest.TestCase):
     
     def setUp(self):
         """Set up test data."""
-        dates = pd.date_range('2023-12-01', periods=100, freq='6H')
+        dates = pd.date_range('2023-12-01', periods=100, freq='6h')
         self.test_df = pd.DataFrame({
             'datetime': dates,
             'sender': ['Alice', 'Bob'] * 50,
@@ -91,11 +91,11 @@ class TestWeeklyDigest(unittest.TestCase):
         """Set up test data for weekly digest."""
         end_date = datetime.now()
         start_date = end_date - timedelta(days=7)
-        dates = pd.date_range(start_date, end_date, freq='3H')
+        dates = pd.date_range(start_date, end_date, freq='3h')
         
         self.test_df = pd.DataFrame({
             'datetime': dates,
-            'sender': ['Alice', 'Bob'] * (len(dates) // 2),
+            'sender': ['Alice' if i % 2 == 0 else 'Bob' for i in range(len(dates))],
             'message': ['Test'] * len(dates),
             'message_length': np.random.randint(10, 100, len(dates)),
             'sentiment': np.random.choice(['positive', 'neutral', 'negative'], len(dates)),
@@ -378,7 +378,7 @@ class TestReportingIntegration(unittest.TestCase):
         """Test complete digest generation flow."""
         # Create sample data
         df = pd.DataFrame({
-            'datetime': pd.date_range('2023-12-01', periods=50, freq='6H'),
+            'datetime': pd.date_range('2023-12-01', periods=50, freq='6h'),
             'sender': ['Alice', 'Bob'] * 25,
             'message': ['Test'] * 50,
             'sentiment': ['positive'] * 50
