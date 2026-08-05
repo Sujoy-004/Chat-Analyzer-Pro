@@ -207,14 +207,25 @@ class TestEmotionClassification(unittest.TestCase):
         ])
 
     def _make_analyzer(self):
-        """Build a real EmotionAnalyzer with the transformers pipeline mocked (D-17)."""
+        """Build a real EmotionAnalyzer with the transformers pipeline mocked (D-17).
+
+        Patches the module-level model cache (`_emotion_analyzer` /
+        `_emotion_model_loaded`) instead of `transformers.pipeline`. This keeps
+        the tests runnable in a clean LEAN install where `transformers` is NOT
+        importable (it is an optional `[nlp]`-extra dependency): `_initialize_model`
+        short-circuits to the cached fake pipeline and never executes its lazy
+        `from transformers import pipeline`.
+        """
 
         def _classifier(text):
             return self.LOVE_SCORES if 'love' in str(text).lower() else self.JOY_SCORES
 
+        from chat_analyzer.analysis import emotion as _emotion_module
+
         with (
             redirect_stdout(StringIO()),
-            mock.patch('transformers.pipeline', side_effect=lambda task, *a, **k: _classifier),
+            mock.patch.object(_emotion_module, "_emotion_analyzer", _classifier),
+            mock.patch.object(_emotion_module, "_emotion_model_loaded", True),
         ):
             return EmotionAnalyzer()
 
