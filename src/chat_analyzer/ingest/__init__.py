@@ -6,13 +6,13 @@ for chat data (txt/json/pdf with optional OCR).
 """
 
 from .ingestion import (
-    process_uploaded_file,
     get_dependency_status,
-    get_supported_formats
+    get_supported_formats,
+    process_uploaded_file,
 )
 
 __all__ = [
-    'process_uploaded_file',
     'get_dependency_status',
-    'get_supported_formats'
+    'get_supported_formats',
+    'process_uploaded_file'
 ]

@@ -19,10 +19,11 @@ Usage:
     summary = analyzer.get_emotion_summary(df_with_emotions)
 """
 
-import pandas as pd
-import numpy as np
-from typing import Dict, List, Optional, Tuple
 import warnings
+
+import numpy as np
+import pandas as pd
+
 warnings.filterwarnings('ignore')
 import matplotlib  # binds the name for the emotion_figure return annotation
 
@@ -74,12 +75,12 @@ class EmotionAnalyzer:
             _emotion_model_loaded = True
             print("✅ Emotion model loaded successfully!")
             
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - model-load failure must degrade to rule-based fallback, never crash (D-17)
             print(f"❌ Error loading emotion model: {e}")
             print("   Falling back to rule-based emotion detection...")
             self.pipeline = None
     
-    def analyze_single_message(self, text: str) -> Dict[str, float]:
+    def analyze_single_message(self, text: str) -> dict[str, float]:
         """
         Analyze emotion in a single message.
         
@@ -123,15 +124,15 @@ class EmotionAnalyzer:
                 # Fallback to rule-based detection
                 return self._rule_based_emotion(text)
                 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - per-message scoring failure degrades to neutral scores, never crashes the batch
             print(f"⚠️ Error analyzing message: {e}")
             return self._get_neutral_emotions()
     
-    def _get_neutral_emotions(self) -> Dict[str, float]:
+    def _get_neutral_emotions(self) -> dict[str, float]:
         """Return neutral emotion scores."""
         return {emotion: 1/len(self.emotions) for emotion in self.emotions}
     
-    def _rule_based_emotion(self, text: str) -> Dict[str, float]:
+    def _rule_based_emotion(self, text: str) -> dict[str, float]:
         """
         Simple rule-based emotion detection as fallback.
         Uses keyword matching.
@@ -217,7 +218,7 @@ class EmotionAnalyzer:
         print("✅ Emotion analysis complete!")
         return df_copy
     
-    def get_emotion_summary(self, df: pd.DataFrame) -> Dict:
+    def get_emotion_summary(self, df: pd.DataFrame) -> dict:
         """
         Generate comprehensive emotion summary statistics.
         
@@ -227,8 +228,6 @@ class EmotionAnalyzer:
         Returns:
             Dictionary containing emotion statistics
         """
-        emotion_cols = [f'emotion_{e}' for e in self.emotions]
-        
         summary = {
             'total_messages': len(df),
             'emotion_distribution': df['dominant_emotion'].value_counts().to_dict(),
@@ -277,7 +276,7 @@ class EmotionAnalyzer:
     
     def find_most_emotional_messages(self, 
                                      df: pd.DataFrame, 
-                                     emotion: str = None,
+                                     emotion: str | None = None,
                                      n: int = 5) -> pd.DataFrame:
         """
         Find messages with highest scores for specific emotion(s).
@@ -331,7 +330,7 @@ class EmotionAnalyzer:
 # Convenience functions for quick analysis
 def quick_emotion_analysis(df: pd.DataFrame, 
                            text_column: str = 'message',
-                           plot: bool = True) -> Tuple[pd.DataFrame, Dict]:
+                           plot: bool = True) -> tuple[pd.DataFrame, dict]:
     """
     Perform complete emotion analysis with visualization.
     
@@ -350,13 +349,13 @@ def quick_emotion_analysis(df: pd.DataFrame,
     if plot:
         try:
             plot_emotion_analysis(df_analyzed, summary)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - plotting is best-effort; failure must never break the analysis
             print(f"⚠️ Could not generate plots: {e}")
     
     return df_analyzed, summary
 
 
-def plot_emotion_analysis(df: pd.DataFrame, summary: Dict):
+def plot_emotion_analysis(df: pd.DataFrame, summary: dict):
     """
     Create comprehensive emotion visualizations.
     

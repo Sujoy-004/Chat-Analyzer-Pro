@@ -3,12 +3,13 @@ Unit Tests for Reporting Modules
 Tests PDF report generation and weekly digest functionality.
 """
 
-import unittest
-import pandas as pd
-import numpy as np
-from datetime import datetime, timedelta
-import tempfile
 import os
+import tempfile
+import unittest
+from datetime import datetime, timedelta
+
+import numpy as np
+import pandas as pd
 
 
 class TestPDFReportGeneration(unittest.TestCase):
@@ -30,7 +31,7 @@ class TestPDFReportGeneration(unittest.TestCase):
         """Test report metadata creation."""
         metadata = {
             'title': 'Chat Analysis Report',
-            'generated_date': datetime.now(),
+            'generated_date': datetime.now(),  # noqa: DTZ005 - fixture value; naive matches production's deliberate naive handling
             'total_messages': len(self.test_df),
             'date_range': f"{self.test_df['datetime'].min()} to {self.test_df['datetime'].max()}"
         }
@@ -61,8 +62,8 @@ class TestPDFReportGeneration(unittest.TestCase):
     
     def test_report_file_creation(self):
         """Test that report file can be created."""
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
-        temp_file.close()
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
+            pass
         
         # Simulate report creation
         report_path = temp_file.name
@@ -89,7 +90,7 @@ class TestWeeklyDigest(unittest.TestCase):
     
     def setUp(self):
         """Set up test data for weekly digest."""
-        end_date = datetime.now()
+        end_date = datetime.now()  # noqa: DTZ005 - fixture value; naive matches production's deliberate naive handling
         start_date = end_date - timedelta(days=7)
         dates = pd.date_range(start_date, end_date, freq='3h')
         
@@ -104,7 +105,7 @@ class TestWeeklyDigest(unittest.TestCase):
     
     def test_weekly_date_range_filtering(self):
         """Test filtering data for weekly range."""
-        end_date = datetime.now()
+        end_date = datetime.now()  # noqa: DTZ005 - fixture value; naive matches production's deliberate naive handling
         start_date = end_date - timedelta(days=7)
         
         weekly_df = self.test_df[
@@ -291,9 +292,8 @@ class TestReportAttachments(unittest.TestCase):
     
     def test_pdf_attachment_handling(self):
         """Test PDF attachment preparation."""
-        pdf_path = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
-        pdf_path.write(b'%PDF-1.4 fake pdf content')
-        pdf_path.close()
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as pdf_path:
+            pdf_path.write(b'%PDF-1.4 fake pdf content')
         
         self.assertTrue(os.path.exists(pdf_path.name))
         self.assertTrue(pdf_path.name.endswith('.pdf'))
@@ -305,9 +305,8 @@ class TestReportAttachments(unittest.TestCase):
         attachments = []
         
         for i in range(3):
-            temp = tempfile.NamedTemporaryFile(delete=False, suffix=f'_file{i}.txt')
-            temp.write(b'test content')
-            temp.close()
+            with tempfile.NamedTemporaryFile(delete=False, suffix=f'_file{i}.txt') as temp:
+                temp.write(b'test content')
             attachments.append(temp.name)
         
         self.assertEqual(len(attachments), 3)
@@ -321,9 +320,8 @@ class TestReportAttachments(unittest.TestCase):
         max_size_mb = 25  # Common email limit
         
         # Create small test file
-        temp = tempfile.NamedTemporaryFile(delete=False)
-        temp.write(b'test' * 100)
-        temp.close()
+        with tempfile.NamedTemporaryFile(delete=False) as temp:
+            temp.write(b'test' * 100)
         
         file_size_mb = os.path.getsize(temp.name) / (1024 * 1024)
         

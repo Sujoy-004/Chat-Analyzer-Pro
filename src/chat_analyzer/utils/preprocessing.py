@@ -4,8 +4,8 @@ Functions for cleaning and preparing chat messages for analysis.
 """
 
 import re
+
 import pandas as pd
-from typing import List, Optional
 
 
 def preprocess_text(text: str, lowercase: bool = True, remove_urls: bool = True,
@@ -85,7 +85,7 @@ def clean_messages(df: pd.DataFrame, message_col: str = 'message',
     return df.reset_index(drop=True)
 
 
-def extract_emojis(text: str) -> List[str]:
+def extract_emojis(text: str) -> list[str]:
     """
     Extract all emojis from text.
     
@@ -99,12 +99,12 @@ def extract_emojis(text: str) -> List[str]:
         return []
     
     emoji_pattern = re.compile("["
-        u"\U0001F600-\U0001F64F"  # emoticons
-        u"\U0001F300-\U0001F5FF"  # symbols & pictographs
-        u"\U0001F680-\U0001F6FF"  # transport & map symbols
-        u"\U0001F1E0-\U0001F1FF"  # flags (iOS)
-        u"\U00002702-\U000027B0"
-        u"\U000024C2-\U0001F251"
+        "\U0001F600-\U0001F64F"  # emoticons
+        "\U0001F300-\U0001F5FF"  # symbols & pictographs
+        "\U0001F680-\U0001F6FF"  # transport & map symbols
+        "\U0001F1E0-\U0001F1FF"  # flags (iOS)
+        "\U00002702-\U000027B0"
+        "\U000024C2-\U0001F251"
         "]+", flags=re.UNICODE)
     
     return emoji_pattern.findall(text)
@@ -124,18 +124,18 @@ def remove_emojis(text: str) -> str:
         return ""
     
     emoji_pattern = re.compile("["
-        u"\U0001F600-\U0001F64F"
-        u"\U0001F300-\U0001F5FF"
-        u"\U0001F680-\U0001F6FF"
-        u"\U0001F1E0-\U0001F1FF"
-        u"\U00002702-\U000027B0"
-        u"\U000024C2-\U0001F251"
+        "\U0001F600-\U0001F64F"
+        "\U0001F300-\U0001F5FF"
+        "\U0001F680-\U0001F6FF"
+        "\U0001F1E0-\U0001F1FF"
+        "\U00002702-\U000027B0"
+        "\U000024C2-\U0001F251"
         "]+", flags=re.UNICODE)
     
     return emoji_pattern.sub(r'', text)
 
 
-def extract_urls(text: str) -> List[str]:
+def extract_urls(text: str) -> list[str]:
     """
     Extract all URLs from text.
     
@@ -152,7 +152,7 @@ def extract_urls(text: str) -> List[str]:
     return url_pattern.findall(text)
 
 
-def tokenize_simple(text: str) -> List[str]:
+def tokenize_simple(text: str) -> list[str]:
     """
     Simple tokenization by splitting on whitespace.
     

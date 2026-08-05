@@ -11,14 +11,14 @@ This module analyzes conversation networks in group chats, including:
 Designed for group chats with 3+ participants, but works with any size.
 """
 
-import pandas as pd
-import numpy as np
+from collections import defaultdict
+from typing import Any
+
 import matplotlib
 import matplotlib.pyplot as plt
-import seaborn as sns
 import networkx as nx
-from collections import defaultdict, Counter
-from typing import Dict, List, Tuple, Any, Optional
+import pandas as pd
+import seaborn as sns
 
 
 def build_interaction_network(df: pd.DataFrame, weight_threshold: int = 0) -> nx.DiGraph:
@@ -61,7 +61,7 @@ def build_interaction_network(df: pd.DataFrame, weight_threshold: int = 0) -> nx
     return G
 
 
-def calculate_network_metrics(G: nx.DiGraph) -> Dict[str, Any]:
+def calculate_network_metrics(G: nx.DiGraph) -> dict[str, Any]:
     """
     Calculate various network centrality and connectivity metrics.
     
@@ -93,7 +93,7 @@ def calculate_network_metrics(G: nx.DiGraph) -> Dict[str, Any]:
         # PageRank (works for any graph)
         metrics['pagerank'] = nx.pagerank(G)
         
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - optional metric computation degrades to empty dicts, never crashes
         print(f"Warning: Could not calculate some centrality metrics: {e}")
         metrics['betweenness_centrality'] = {}
         metrics['pagerank'] = {}
@@ -110,7 +110,7 @@ def calculate_network_metrics(G: nx.DiGraph) -> Dict[str, Any]:
     return metrics
 
 
-def identify_key_participants(G: nx.DiGraph, metrics: Dict[str, Any]) -> Dict[str, Any]:
+def identify_key_participants(G: nx.DiGraph, metrics: dict[str, Any]) -> dict[str, Any]:
     """
     Identify key participants based on network position.
     
@@ -144,7 +144,7 @@ def identify_key_participants(G: nx.DiGraph, metrics: Dict[str, Any]) -> Dict[st
             }
     
     # Most influential (highest PageRank)
-    if 'pagerank' in metrics and metrics['pagerank']:
+    if metrics.get('pagerank'):
         pageranks = metrics['pagerank']
         most_influential = max(pageranks, key=pageranks.get)
         key_roles['most_influential'] = {
@@ -153,7 +153,7 @@ def identify_key_participants(G: nx.DiGraph, metrics: Dict[str, Any]) -> Dict[st
         }
     
     # Bridge connector (highest betweenness)
-    if 'betweenness_centrality' in metrics and metrics['betweenness_centrality']:
+    if metrics.get('betweenness_centrality'):
         betweenness = metrics['betweenness_centrality']
         bridge = max(betweenness, key=betweenness.get)
         key_roles['bridge_connector'] = {
@@ -164,7 +164,7 @@ def identify_key_participants(G: nx.DiGraph, metrics: Dict[str, Any]) -> Dict[st
     return key_roles
 
 
-def analyze_interaction_patterns(df: pd.DataFrame, G: nx.DiGraph) -> Dict[str, Any]:
+def analyze_interaction_patterns(df: pd.DataFrame, G: nx.DiGraph) -> dict[str, Any]:
     """
     Analyze detailed interaction patterns between participants.
     
@@ -227,7 +227,7 @@ def analyze_interaction_patterns(df: pd.DataFrame, G: nx.DiGraph) -> Dict[str, A
     return patterns
 
 
-def detect_subgroups(G: nx.DiGraph) -> Dict[str, Any]:
+def detect_subgroups(G: nx.DiGraph) -> dict[str, Any]:
     """
     Detect subgroups/communities within the network.
     
@@ -254,7 +254,7 @@ def detect_subgroups(G: nx.DiGraph) -> Dict[str, Any]:
         # Modularity score
         subgroups['modularity'] = community.modularity(G_undirected, communities)
         
-    except Exception as e:
+    except Exception:  # noqa: BLE001 - python-louvain may be absent; fall back to connected components
         # Fallback: use connected components
         components = list(nx.connected_components(G_undirected))
         subgroups['communities'] = [list(c) for c in components]
@@ -266,9 +266,9 @@ def detect_subgroups(G: nx.DiGraph) -> Dict[str, Any]:
 
 def plot_network_graph(
     G: nx.DiGraph,
-    metrics: Dict[str, Any] = None,
+    metrics: dict[str, Any] | None = None,
     layout: str = 'spring',
-    figsize: Tuple[int, int] = (14, 10),
+    figsize: tuple[int, int] = (14, 10),
     node_size_metric: str = 'degree',
     title: str = 'Conversation Network Graph'
 ) -> None:
@@ -283,7 +283,7 @@ def plot_network_graph(
         node_size_metric: Metric for node sizing ('degree', 'pagerank', 'betweenness')
         title: Plot title
     """
-    fig, ax = plt.subplots(figsize=figsize)
+    _, ax = plt.subplots(figsize=figsize)
     
     # Choose layout
     if layout == 'spring':
@@ -362,9 +362,9 @@ def plot_network_graph(
 
 def plot_network_dashboard(
     G: nx.DiGraph,
-    metrics: Dict[str, Any],
-    patterns: Dict[str, Any],
-    figsize: Tuple[int, int] = (20, 14)
+    metrics: dict[str, Any],
+    patterns: dict[str, Any],
+    figsize: tuple[int, int] = (20, 14)
 ) -> None:
     """
     Create comprehensive network analysis dashboard.
@@ -407,11 +407,11 @@ def plot_network_dashboard(
     
     # 2. Centrality comparison
     ax2 = fig.add_subplot(gs[0, 2])
-    if 'pagerank' in metrics and metrics['pagerank']:
+    if metrics.get('pagerank'):
         participants = list(metrics['pagerank'].keys())
         pagerank_values = list(metrics['pagerank'].values())
         
-        bars = ax2.barh(participants, pagerank_values, color='#3498DB', alpha=0.7)
+        ax2.barh(participants, pagerank_values, color='#3498DB', alpha=0.7)
         ax2.set_xlabel('PageRank Score', fontsize=10)
         ax2.set_title('Influence (PageRank)', fontsize=12, fontweight='bold')
         ax2.grid(True, alpha=0.3, axis='x')
@@ -458,20 +458,20 @@ Reciprocity: {patterns.get('reciprocity_score', 0):.2%}
 Strongest Connection:
 """
     
-    if 'strongest_connections' in patterns and patterns['strongest_connections']:
+    if patterns.get('strongest_connections'):
         top = patterns['strongest_connections'][0]
         stats_text += f"{top['from']} → {top['to']}\n({top['interactions']} interactions)"
     
     ax5.text(0.05, 0.95, stats_text, transform=ax5.transAxes,
             fontsize=11, verticalalignment='top', fontfamily='monospace',
-            bbox=dict(boxstyle='round', facecolor='lightgray', alpha=0.8))
+            bbox={'boxstyle': 'round', 'facecolor': 'lightgray', 'alpha': 0.8})
     
     plt.suptitle('Network Analysis Dashboard', fontsize=18, fontweight='bold', y=0.98)
     plt.tight_layout()
     plt.show()
 
 
-def analyze_network(df: pd.DataFrame, weight_threshold: int = 0) -> Dict[str, Any]:
+def analyze_network(df: pd.DataFrame, weight_threshold: int = 0) -> dict[str, Any]:
     """
     Complete network analysis pipeline.
     

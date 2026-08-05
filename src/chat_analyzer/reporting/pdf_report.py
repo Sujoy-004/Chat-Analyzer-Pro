@@ -12,23 +12,28 @@ visualizations, and relationship health metrics. The report includes:
 Dependencies: reportlab, matplotlib, pandas, numpy
 """
 
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
-from datetime import datetime, timedelta
-from typing import Dict, List, Tuple, Any, Optional
 import io
-import base64
+from datetime import datetime
+from typing import Any
+
+import matplotlib.pyplot as plt
+import numpy as np
 
 # PDF generation imports
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter, A4
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle, PageBreak
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_LEFT
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
-from reportlab.pdfgen import canvas
-from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT, TA_JUSTIFY
+from reportlab.platypus import (
+    Image,
+    PageBreak,
+    Paragraph,
+    SimpleDocTemplate,
+    Spacer,
+    Table,
+    TableStyle,
+)
 
 
 class ChatAnalysisPDFGenerator:
@@ -115,7 +120,7 @@ class ChatAnalysisPDFGenerator:
             alignment=TA_CENTER
         )
 
-    def add_title_page(self, analysis_data: Dict[str, Any]):
+    def add_title_page(self, analysis_data: dict[str, Any]):
         """Add title page to the report."""
         # Title
         self.story.append(Spacer(1, 2*inch))
@@ -155,7 +160,7 @@ class ChatAnalysisPDFGenerator:
         self.story.append(Spacer(1, 1*inch))
         
         # Generated timestamp
-        generated_time = datetime.now().strftime("%B %d, %Y at %I:%M %p")
+        generated_time = datetime.now().strftime("%B %d, %Y at %I:%M %p")  # noqa: DTZ005 - report footer is local-time display text, deliberately naive
         self.story.append(Paragraph(f"Report generated on {generated_time}", self.footer_style))
         self.story.append(PageBreak())
 
@@ -182,7 +187,7 @@ class ChatAnalysisPDFGenerator:
         
         return img
 
-    def create_health_score_chart(self, health_data: Dict[str, Any]) -> plt.Figure:
+    def create_health_score_chart(self, health_data: dict[str, Any]) -> plt.Figure:
         """Create health score gauge chart."""
         fig, ax = plt.subplots(figsize=(8, 6))
         
@@ -190,7 +195,6 @@ class ChatAnalysisPDFGenerator:
         grade = health_data.get('grade', 'N/A')
         
         # Create gauge
-        theta = np.linspace(0, np.pi, 100)
         colors_list = ['#E74C3C', '#F39C12', '#F1C40F', '#2ECC71', '#27AE60']
         ranges = [0.0, 0.4, 0.6, 0.8, 0.9, 1.0]
         
@@ -221,9 +225,9 @@ class ChatAnalysisPDFGenerator:
         plt.tight_layout()
         return fig
 
-    def create_component_breakdown_chart(self, health_data: Dict[str, Any]) -> plt.Figure:
+    def create_component_breakdown_chart(self, health_data: dict[str, Any]) -> plt.Figure:
         """Create component breakdown radar chart."""
-        fig, ax = plt.subplots(figsize=(8, 8), subplot_kw=dict(projection='polar'))
+        fig, ax = plt.subplots(figsize=(8, 8), subplot_kw={'projection': 'polar'})
         
         component_scores = health_data.get('component_scores', {})
         categories = ['Initiation\nBalance', 'Responsiveness', 'Response\nBalance', 'Participation\nBalance']
@@ -255,14 +259,14 @@ class ChatAnalysisPDFGenerator:
         plt.tight_layout()
         return fig
 
-    def create_message_distribution_chart(self, dominance_data: Dict[str, Any]) -> plt.Figure:
+    def create_message_distribution_chart(self, dominance_data: dict[str, Any]) -> plt.Figure:
         """Create message distribution pie chart."""
         fig, ax = plt.subplots(figsize=(8, 6))
         
         msg_dist = dominance_data.get('message_distribution', {})
         if msg_dist:
             colors_list = ['#FF6B6B', '#4ECDC4', '#95E1D3', '#F38BA8', '#A8E6CF'][:len(msg_dist)]
-            wedges, texts, autotexts = ax.pie(msg_dist.values(), labels=msg_dist.keys(), 
+            _, _, autotexts = ax.pie(msg_dist.values(), labels=msg_dist.keys(), 
                                               autopct='%1.1f%%', colors=colors_list, 
                                               startangle=90, textprops={'fontsize': 12})
             
@@ -280,7 +284,7 @@ class ChatAnalysisPDFGenerator:
         plt.tight_layout()
         return fig
 
-    def add_health_analysis_section(self, analysis_data: Dict[str, Any]):
+    def add_health_analysis_section(self, analysis_data: dict[str, Any]):
         """Add relationship health analysis section."""
         self.story.append(Paragraph("Relationship Health Analysis", self.subtitle_style))
         
@@ -321,7 +325,7 @@ class ChatAnalysisPDFGenerator:
         
         self.story.append(PageBreak())
 
-    def add_conversation_patterns_section(self, analysis_data: Dict[str, Any]):
+    def add_conversation_patterns_section(self, analysis_data: dict[str, Any]):
         """Add conversation patterns analysis section."""
         self.story.append(Paragraph("Conversation Patterns", self.subtitle_style))
         
@@ -377,13 +381,13 @@ class ChatAnalysisPDFGenerator:
         
         self.story.append(PageBreak())
 
-    def add_detailed_metrics_section(self, analysis_data: Dict[str, Any]):
+    def add_detailed_metrics_section(self, analysis_data: dict[str, Any]):
         """Add detailed metrics section."""
         self.story.append(Paragraph("Detailed Analysis Metrics", self.subtitle_style))
         
         # Response analysis
         response_data = analysis_data.get('response_analysis', {})
-        if 'response_stats' in response_data and response_data['response_stats']:
+        if response_data.get('response_stats'):
             self.story.append(Paragraph("Response Time Statistics", self.section_style))
             
             response_stats = response_data['response_stats']
@@ -435,7 +439,7 @@ class ChatAnalysisPDFGenerator:
         self.story.append(balance_table)
         self.story.append(Spacer(1, 0.3*inch))
 
-    def add_recommendations_section(self, analysis_data: Dict[str, Any]):
+    def add_recommendations_section(self, analysis_data: dict[str, Any]):
         """Add recommendations and insights section."""
         self.story.append(Paragraph("Recommendations & Insights", self.subtitle_style))
         
@@ -495,7 +499,7 @@ class ChatAnalysisPDFGenerator:
         """
         self.story.append(Paragraph(methodology_text, self.body_style))
 
-    def generate_report(self, analysis_data: Dict[str, Any]) -> str:
+    def generate_report(self, analysis_data: dict[str, Any]) -> str:
         """
         Generate complete PDF report.
         
@@ -532,7 +536,7 @@ class ChatAnalysisPDFGenerator:
 
 
 def generate_chat_analysis_pdf(
-    analysis_results: Dict[str, Any], 
+    analysis_results: dict[str, Any], 
     output_filename: str = "chat_analysis_report.pdf"
 ) -> str:
     """

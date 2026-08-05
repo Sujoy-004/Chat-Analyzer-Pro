@@ -6,11 +6,11 @@ This module provides conversation summarization capabilities using T5-small mode
 Enhanced version with group chat analysis features.
 """
 
-import pandas as pd
-import numpy as np
-from typing import List, Dict, Union, Optional, Tuple
-from collections import Counter
 import warnings
+from collections import Counter
+
+import pandas as pd
+
 warnings.filterwarnings('ignore')
 
 
@@ -30,7 +30,7 @@ class ConversationSummarizer:
     """
     
     def __init__(self, model_name: str = "t5-small", max_length: int = 150, 
-                 min_length: int = 40, max_participants_in_report: int = None):
+                 min_length: int = 40, max_participants_in_report: int | None = None):
         """
         Initialize the ConversationSummarizer with T5 model.
         
@@ -48,7 +48,7 @@ class ConversationSummarizer:
         
         # Initialize T5 model and tokenizer
         try:
-            from transformers import pipeline, T5Tokenizer, T5ForConditionalGeneration
+            from transformers import T5ForConditionalGeneration, T5Tokenizer, pipeline
             self.tokenizer = T5Tokenizer.from_pretrained(model_name)
             self.model = T5ForConditionalGeneration.from_pretrained(model_name)
             self.summarizer = pipeline(
@@ -97,7 +97,7 @@ class ConversationSummarizer:
         return conversation_text
     
     
-    def detect_group_type(self, df: pd.DataFrame) -> Dict[str, Union[str, int]]:
+    def detect_group_type(self, df: pd.DataFrame) -> dict[str, str | int]:
         """
         Detect if conversation is 1-on-1, small group, or large group.
         
@@ -166,7 +166,7 @@ class ConversationSummarizer:
         return pd.DataFrame(interaction_data)
     
     
-    def get_dominant_speakers(self, df: pd.DataFrame, top_n: int = None) -> pd.DataFrame:
+    def get_dominant_speakers(self, df: pd.DataFrame, top_n: int | None = None) -> pd.DataFrame:
         """
         Identify dominant speakers in the conversation.
         
@@ -203,9 +203,9 @@ class ConversationSummarizer:
         self, 
         df: pd.DataFrame, 
         max_messages: int = 100,
-        custom_max_length: Optional[int] = None,
-        custom_min_length: Optional[int] = None
-    ) -> Dict[str, Union[str, int]]:
+        custom_max_length: int | None = None,
+        custom_min_length: int | None = None
+    ) -> dict[str, str | int]:
         """
         Summarize an entire conversation.
         
@@ -257,10 +257,10 @@ class ConversationSummarizer:
                 'model_used': self.model_name
             }
             
-        except Exception as e:
-            print(f"❌ Error during summarization: {e}")
+        except Exception as e:  # noqa: BLE001 - summarization failure degrades to a friendly error dict, never crashes
+            print(f"? Error during summarization: {e}")
             return {
-                'summary': f'Error generating summary: {str(e)}',
+                'summary': f'Error generating summary: {e!s}',
                 'total_messages': len(df),
                 'messages_summarized': 0
             }
@@ -272,7 +272,7 @@ class ConversationSummarizer:
         start_date: str, 
         end_date: str,
         date_column: str = 'date'
-    ) -> Dict[str, Union[str, int]]:
+    ) -> dict[str, str | int]:
         """
         Summarize conversation within a specific date range.
         
@@ -320,7 +320,7 @@ class ConversationSummarizer:
         df: pd.DataFrame, 
         participant: str,
         sender_column: str = 'sender'
-    ) -> Dict[str, Union[str, int]]:
+    ) -> dict[str, str | int]:
         """
         Summarize messages from a specific participant.
         
@@ -392,7 +392,7 @@ class ConversationSummarizer:
         return pd.DataFrame(summaries)
     
     
-    def get_key_topics(self, df: pd.DataFrame, top_n: int = 10) -> List[str]:
+    def get_key_topics(self, df: pd.DataFrame, top_n: int = 10) -> list[str]:
         """
         Extract key topics/words from conversation (simple frequency-based).
         
@@ -425,7 +425,7 @@ class ConversationSummarizer:
         return top_words
     
     
-    def generate_full_report(self, df: pd.DataFrame) -> Dict:
+    def generate_full_report(self, df: pd.DataFrame) -> dict:
         """
         Generate a comprehensive summary report.
         Now with configurable participant limit for group chats.
@@ -476,7 +476,7 @@ class ConversationSummarizer:
         return report
     
     
-    def analyze_group_dynamics(self, df: pd.DataFrame) -> Dict:
+    def analyze_group_dynamics(self, df: pd.DataFrame) -> dict:
         """
         Comprehensive group dynamics analysis.
         

@@ -24,7 +24,7 @@ import uuid
 import zipfile
 from datetime import UTC, datetime
 from io import BytesIO
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import pandas as pd
 
@@ -95,12 +95,12 @@ VIDEO_EXTENSIONS = {'.mp4', '.avi', '.mov', '.mkv', '.webm', '.flv', '.3gp'}
 MEDIA_EXTENSIONS = AUDIO_EXTENSIONS | VIDEO_EXTENSIONS
 
 
-def get_dependency_status() -> Dict[str, bool]:
+def get_dependency_status() -> dict[str, bool]:
     """Get status of all optional dependencies."""
     return DEPENDENCIES.copy()
 
 
-def try_parse_datetime(date_str: str) -> Tuple[str, str]:
+def try_parse_datetime(date_str: str) -> tuple[str, str]:
     """
     Parse WhatsApp-like date+time string into ISO date and HH:MM.
     Returns (date_iso, time_hm). On failure, returns (original, '').
@@ -111,7 +111,7 @@ def try_parse_datetime(date_str: str) -> Tuple[str, str]:
     for candidate in candidates:
         for fmt in WHATSAPP_DATE_PATTERNS:
             try:
-                dt = datetime.strptime(candidate, fmt)
+                dt = datetime.strptime(candidate, fmt)  # noqa: DTZ007 - WhatsApp exports carry no timezone; naive datetime is deliberate and normalized to naive UTC downstream
                 return dt.strftime("%Y-%m-%d"), dt.strftime("%H:%M")
             except ValueError:
                 continue
@@ -126,17 +126,17 @@ def try_parse_datetime(date_str: str) -> Tuple[str, str]:
             part = f"{match.group(1)}, {match.group(2)}"
             for fmt in WHATSAPP_DATE_PATTERNS:
                 try:
-                    dt = datetime.strptime(part, fmt)
+                    dt = datetime.strptime(part, fmt)  # noqa: DTZ007 - WhatsApp exports carry no timezone; naive datetime is deliberate and normalized to naive UTC downstream
                     return dt.strftime("%Y-%m-%d"), dt.strftime("%H:%M")
                 except ValueError:
                     continue
-        except Exception:
+        except Exception:  # noqa: S110, BLE001 - unparseable date patterns are skipped silently (best-effort parse)
             pass
     
     return s, ""
 
 
-def parse_whatsapp_text(text: str) -> List[Dict[str, Any]]:
+def parse_whatsapp_text(text: str) -> list[dict[str, Any]]:
     """
     Parse WhatsApp .txt export into structured message list.
     Handles multiline messages and various date formats.
@@ -189,7 +189,7 @@ def parse_whatsapp_text(text: str) -> List[Dict[str, Any]]:
     return messages
 
 
-def parse_json_chat(data_input: Any) -> Optional[List[Dict[str, Any]]]:
+def parse_json_chat(data_input: Any) -> list[dict[str, Any]] | None:
     """
     Parse JSON chat exports (Telegram, etc.).
     Handles bytes, strings, and file-like objects.
@@ -238,7 +238,7 @@ def ocr_image_bytes(image_bytes: bytes, lang: str = "eng") -> str:
         image = Image.open(BytesIO(image_bytes)).convert("RGB")
         text = pytesseract.image_to_string(image, lang=lang)
         return text.strip()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - OCR failure degrades to empty text, never crashes ingestion
         logger.error(f"OCR failed: {e}")
         return ""
 
@@ -264,11 +264,11 @@ def extract_text_from_pdf(pdf_bytes: bytes, ocr_lang: str = "eng") -> str:
                         # Try OCR fallback
                         ocr_text = _ocr_pdf_page(pdf_bytes, i, ocr_lang)
                         pages_text.append(f"[page:{i}][ocr]\n{ocr_text}")
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001 - a failing PDF page degrades to a logged warning, never aborts the export
                     logger.warning(f"Failed to process PDF page {i}: {e}")
                     ocr_text = _ocr_pdf_page(pdf_bytes, i, ocr_lang)
                     pages_text.append(f"[page:{i}][ocr]\n{ocr_text}")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - PDF extraction failure degrades to a logged error, never crashes
         logger.error(f"PDF processing failed: {e}")
         return ""
     
@@ -284,13 +284,13 @@ def _ocr_pdf_page(pdf_bytes: bytes, page_num: int, lang: str) -> str:
         images = convert_from_bytes(pdf_bytes, first_page=page_num, last_page=page_num)
         if images:
             return pytesseract.image_to_string(images[0], lang=lang).strip()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - per-page OCR failure degrades to empty text, never crashes
         logger.warning(f"PDF OCR failed for page {page_num}: {e}")
     
     return ""
 
 
-def extract_media_metadata(file_bytes: bytes, filename: str) -> Dict[str, Any]:
+def extract_media_metadata(file_bytes: bytes, filename: str) -> dict[str, Any]:
     """Extract basic metadata from media files."""
     file_size = len(file_bytes)
     file_ext = filename.lower().split('.')[-1]
@@ -382,7 +382,7 @@ def messages_to_dataframe(messages: list[dict]) -> pd.DataFrame:
     return df
 
 
-def normalize_message(raw_msg: Dict[str, Any]) -> Dict[str, Any]:
+def normalize_message(raw_msg: dict[str, Any]) -> dict[str, Any]:
     """
     Normalize raw message to standard schema:
     {
@@ -442,7 +442,7 @@ def normalize_message(raw_msg: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _read_file_content(uploaded_file: Any) -> Tuple[str, bytes]:
+def _read_file_content(uploaded_file: Any) -> tuple[str, bytes]:
     """Extract filename and content from uploaded file object."""
     if hasattr(uploaded_file, "name") and hasattr(uploaded_file, "read"):
         # Streamlit UploadedFile-like object
@@ -458,7 +458,7 @@ def _read_file_content(uploaded_file: Any) -> Tuple[str, bytes]:
         raise ValueError("Unsupported uploaded_file type")
 
 
-def process_uploaded_file(uploaded_file: Any) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+def process_uploaded_file(uploaded_file: Any) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """
     Main ingestion function. Processes any supported file type.
     
@@ -470,7 +470,7 @@ def process_uploaded_file(uploaded_file: Any) -> Tuple[List[Dict[str, Any]], Lis
     """
     try:
         filename, content = _read_file_content(uploaded_file)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - unreadable upload degrades to a logged error, never crashes
         logger.error(f"Failed to read file: {e}")
         return [], [{"file": "unknown", "note": f"File reading error: {e}"}]
     
@@ -507,7 +507,7 @@ def process_uploaded_file(uploaded_file: Any) -> Tuple[List[Dict[str, Any]], Lis
         else:
             raw_messages = _process_unknown_file(content, filename)
     
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - processing failure degrades to a logged error, never crashes
         logger.error(f"Processing failed for {filename}: {e}")
         media_results.append({"file": filename, "note": f"Processing error: {e}"})
     
@@ -517,7 +517,7 @@ def process_uploaded_file(uploaded_file: Any) -> Tuple[List[Dict[str, Any]], Lis
         try:
             normalized = normalize_message(raw_msg)
             normalized_messages.append(normalized)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - a malformed message is skipped with a warning, never aborts the batch
             logger.warning(f"Message normalization failed: {e}")
             # Fallback normalization
             normalized_messages.append({
@@ -534,7 +534,7 @@ def process_uploaded_file(uploaded_file: Any) -> Tuple[List[Dict[str, Any]], Lis
     return normalized_messages, media_results
 
 
-def _process_zip_file(content: bytes, filename: str) -> Tuple[List[Dict], List[Dict]]:
+def _process_zip_file(content: bytes, filename: str) -> tuple[list[dict], list[dict]]:
     """Process ZIP archive contents."""
     messages, media = [], []
     
@@ -575,7 +575,7 @@ def _process_zip_file(content: bytes, filename: str) -> Tuple[List[Dict], List[D
                     else:
                         media.append({"file": member_name, "note": "Unsupported file type in ZIP"})
                 
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001 - a failing ZIP member degrades to a warning, never aborts the archive
                     logger.warning(f"Failed to process ZIP member {member}: {e}")
                     media.append({"file": member, "note": f"Processing error: {e}"})
     
@@ -585,7 +585,7 @@ def _process_zip_file(content: bytes, filename: str) -> Tuple[List[Dict], List[D
     return messages, media
 
 
-def _process_text_file(content: bytes, filename: str) -> List[Dict]:
+def _process_text_file(content: bytes, filename: str) -> list[dict]:
     """Process text file as WhatsApp export."""
     try:
         text = content.decode('utf-8', errors='ignore')
@@ -593,12 +593,12 @@ def _process_text_file(content: bytes, filename: str) -> List[Dict]:
         for msg in messages:
             msg["source_hint"] = "whatsapp_txt"
         return messages
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - text processing failure degrades to a logged error, never crashes
         logger.error(f"Text file processing failed: {e}")
         return []
 
 
-def _process_json_file(content: bytes, filename: str) -> List[Dict]:
+def _process_json_file(content: bytes, filename: str) -> list[dict]:
     """Process JSON file as chat export."""
     messages = parse_json_chat(content)
     if messages:
@@ -609,7 +609,7 @@ def _process_json_file(content: bytes, filename: str) -> List[Dict]:
     return []
 
 
-def _process_image_file(content: bytes, filename: str) -> Tuple[List[Dict], List[Dict]]:
+def _process_image_file(content: bytes, filename: str) -> tuple[list[dict], list[dict]]:
     """Process image file with OCR."""
     ocr_text = ocr_image_bytes(content)
     media_result = {"file": filename, "ocr": ocr_text}
@@ -628,7 +628,7 @@ def _process_image_file(content: bytes, filename: str) -> Tuple[List[Dict], List
     return messages, [media_result]
 
 
-def _process_pdf_file(content: bytes, filename: str) -> Tuple[List[Dict], List[Dict]]:
+def _process_pdf_file(content: bytes, filename: str) -> tuple[list[dict], list[dict]]:
     """Process PDF file with text extraction."""
     pdf_text = extract_text_from_pdf(content)
     media_result = {"file": filename, "extracted_text": pdf_text}
@@ -648,7 +648,7 @@ def _process_pdf_file(content: bytes, filename: str) -> Tuple[List[Dict], List[D
     return messages, [media_result]
 
 
-def _process_media_file(content: bytes, filename: str) -> List[Dict]:
+def _process_media_file(content: bytes, filename: str) -> list[dict]:
     """Process media file - extract metadata only."""
     metadata = extract_media_metadata(content, filename)
     return [{
@@ -658,7 +658,7 @@ def _process_media_file(content: bytes, filename: str) -> List[Dict]:
     }]
 
 
-def _process_unknown_file(content: bytes, filename: str) -> List[Dict]:
+def _process_unknown_file(content: bytes, filename: str) -> list[dict]:
     """Try to process unknown file as text."""
     try:
         text = content.decode('utf-8', errors='ignore')
@@ -686,15 +686,15 @@ def _process_unknown_file(content: bytes, filename: str) -> List[Dict]:
 
 
 # Utility function for debugging
-def get_supported_formats() -> Dict[str, List[str]]:
+def get_supported_formats() -> dict[str, list[str]]:
     """Return dict of supported file formats by category."""
     return {
         "chat_exports": ["txt", "json"],
         "archives": ["zip"],
-        "images": list(ext.lstrip('.') for ext in IMAGE_EXTENSIONS),
+        "images": [ext.lstrip('.') for ext in IMAGE_EXTENSIONS],
         "documents": ["pdf"],
-        "audio": list(ext.lstrip('.') for ext in AUDIO_EXTENSIONS),
-        "video": list(ext.lstrip('.') for ext in VIDEO_EXTENSIONS),
+        "audio": [ext.lstrip('.') for ext in AUDIO_EXTENSIONS],
+        "video": [ext.lstrip('.') for ext in VIDEO_EXTENSIONS],
     }
 
 
@@ -723,5 +723,5 @@ if __name__ == "__main__":
                 print("\nMedia analysis:")
                 pprint(media[:3])
                 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - CLI demo block degrades to a printed error, never crashes
             print(f"Error processing {filepath}: {e}")

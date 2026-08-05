@@ -6,14 +6,13 @@ Provides heatmaps, word clouds, timeline plots, sentiment visualizations,
 and interactive elements for Streamlit integration.
 """
 
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
-from typing import Optional, List, Dict, Tuple, Union
-import warnings
-from datetime import datetime
 import logging
+import warnings
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import seaborn as sns
 
 # Configure logging (Anti-Pattern 4: never hijack global log config at import)
 logging.getLogger(__name__).addHandler(logging.NullHandler())
@@ -33,7 +32,7 @@ class ChatVisualizer:
     Provides various plotting methods for different aspects of chat data.
     """
     
-    def __init__(self, figsize: Tuple[int, int] = (12, 6), style: str = 'seaborn-v0_8-darkgrid'):
+    def __init__(self, figsize: tuple[int, int] = (12, 6), style: str = 'seaborn-v0_8-darkgrid'):
         """
         Initialize the ChatVisualizer.
         
@@ -59,7 +58,7 @@ class ChatVisualizer:
         self,
         df: pd.DataFrame,
         resample_freq: str = 'D',
-        figsize: Optional[Tuple[int, int]] = None,
+        figsize: tuple[int, int] | None = None,
         title: str = 'Message Timeline',
         show_trend: bool = True
     ) -> plt.Figure:
@@ -115,7 +114,7 @@ class ChatVisualizer:
     def plot_activity_heatmap(
         self,
         df: pd.DataFrame,
-        figsize: Optional[Tuple[int, int]] = None,
+        figsize: tuple[int, int] | None = None,
         title: str = 'Activity Heatmap (Hour vs Day)'
     ) -> plt.Figure:
         """
@@ -164,7 +163,7 @@ class ChatVisualizer:
         self,
         df: pd.DataFrame,
         message_col: str = 'message',
-        figsize: Optional[Tuple[int, int]] = None,
+        figsize: tuple[int, int] | None = None,
         title: str = 'Word Cloud',
         max_words: int = 100,
         background_color: str = 'white',
@@ -186,7 +185,7 @@ class ChatVisualizer:
             matplotlib Figure object
         """
         try:
-            from wordcloud import WordCloud, STOPWORDS
+            from wordcloud import STOPWORDS, WordCloud
         except ImportError:
             logger.error("wordcloud package not installed. Install with: pip install wordcloud")
             fig, ax = plt.subplots(figsize=self.figsize)
@@ -228,7 +227,7 @@ class ChatVisualizer:
         df: pd.DataFrame,
         message_col: str = 'message',
         top_n: int = 15,
-        figsize: Optional[Tuple[int, int]] = None,
+        figsize: tuple[int, int] | None = None,
         title: str = 'Top Emoji Usage'
     ) -> plt.Figure:
         """
@@ -255,12 +254,12 @@ class ChatVisualizer:
         
         # Extract emojis
         emoji_pattern = re.compile("["
-            u"\U0001F600-\U0001F64F"  # emoticons
-            u"\U0001F300-\U0001F5FF"  # symbols & pictographs
-            u"\U0001F680-\U0001F6FF"  # transport & map symbols
-            u"\U0001F1E0-\U0001F1FF"  # flags
-            u"\U00002702-\U000027B0"
-            u"\U000024C2-\U0001F251"
+            "\U0001F600-\U0001F64F"  # emoticons
+            "\U0001F300-\U0001F5FF"  # symbols & pictographs
+            "\U0001F680-\U0001F6FF"  # transport & map symbols
+            "\U0001F1E0-\U0001F1FF"  # flags
+            "\U00002702-\U000027B0"
+            "\U000024C2-\U0001F251"
             "]+", flags=re.UNICODE)
         
         all_emojis = []
@@ -295,7 +294,7 @@ class ChatVisualizer:
         self,
         df: pd.DataFrame,
         sentiment_col: str = 'sentiment',
-        figsize: Optional[Tuple[int, int]] = None,
+        figsize: tuple[int, int] | None = None,
         title: str = 'Sentiment Distribution'
     ) -> plt.Figure:
         """
@@ -322,7 +321,7 @@ class ChatVisualizer:
         colors = [self.colors['positive'], self.colors['neutral'], self.colors['negative']]
         colors = colors[:len(sentiment_counts)]
         
-        wedges, texts, autotexts = ax.pie(
+        _, _, autotexts = ax.pie(
             sentiment_counts.values,
             labels=sentiment_counts.index,
             autopct='%1.1f%%',
@@ -345,7 +344,7 @@ class ChatVisualizer:
         df: pd.DataFrame,
         sentiment_score_col: str = 'sentiment_score',
         resample_freq: str = 'D',
-        figsize: Optional[Tuple[int, int]] = None,
+        figsize: tuple[int, int] | None = None,
         title: str = 'Sentiment Over Time'
     ) -> plt.Figure:
         """
@@ -403,7 +402,7 @@ class ChatVisualizer:
         df: pd.DataFrame,
         sender_col: str = 'sender',
         top_n: int = 10,
-        figsize: Optional[Tuple[int, int]] = None,
+        figsize: tuple[int, int] | None = None,
         title: str = 'Top Active Users'
     ) -> plt.Figure:
         """
@@ -449,7 +448,7 @@ class ChatVisualizer:
         response_time_col: str = 'response_time_minutes',
         bins: int = 50,
         max_minutes: int = 1440,
-        figsize: Optional[Tuple[int, int]] = None,
+        figsize: tuple[int, int] | None = None,
         title: str = 'Response Time Distribution'
     ) -> plt.Figure:
         """
@@ -504,7 +503,7 @@ class ChatVisualizer:
         df: pd.DataFrame,
         health_score_col: str = 'health_score',
         resample_freq: str = 'W',
-        figsize: Optional[Tuple[int, int]] = None,
+        figsize: tuple[int, int] | None = None,
         title: str = 'Relationship Health Score Trend'
     ) -> plt.Figure:
         """
@@ -558,7 +557,7 @@ class ChatVisualizer:
     def create_summary_dashboard(
         self,
         df: pd.DataFrame,
-        output_path: Optional[str] = None
+        output_path: str | None = None
     ) -> plt.Figure:
         """
         Create a comprehensive dashboard with multiple plots.
@@ -670,7 +669,7 @@ def quick_sentiment(df: pd.DataFrame, **kwargs) -> plt.Figure:
     return viz.plot_sentiment_distribution(df, **kwargs)
 
 
-def quick_dashboard(df: pd.DataFrame, output_path: Optional[str] = None) -> plt.Figure:
+def quick_dashboard(df: pd.DataFrame, output_path: str | None = None) -> plt.Figure:
     """Generate complete dashboard quickly."""
     viz = ChatVisualizer()
     return viz.create_summary_dashboard(df, output_path)

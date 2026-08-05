@@ -1,10 +1,10 @@
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
-from collections import Counter
 import re
-from datetime import datetime
+from collections import Counter
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+
 
 class ChatEDA:
     """
@@ -132,7 +132,7 @@ class ChatEDA:
     
     def create_dashboard(self, figsize=(15, 10)):
         """Create comprehensive EDA dashboard"""
-        fig, axes = plt.subplots(2, 3, figsize=figsize)
+        fig, _ = plt.subplots(2, 3, figsize=figsize)
         fig.suptitle('Chat Analysis Dashboard', fontsize=16, fontweight='bold')
         
         # Implementation would include all visualization code from the notebook

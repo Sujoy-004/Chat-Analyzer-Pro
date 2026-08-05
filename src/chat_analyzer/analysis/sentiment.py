@@ -1,9 +1,8 @@
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
-from datetime import datetime, timedelta
 import warnings
+
+import matplotlib.pyplot as plt
+import pandas as pd
+
 warnings.filterwarnings('ignore')
 
 # Sentiment analysis imports
@@ -61,7 +60,7 @@ def initialize_analyzers(hf_model=None):
                 device=-1  # Use CPU
             )
             print("✅ HuggingFace analyzer loaded")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - HF init failure degrades to VADER-only path, never crashes
             print(f"⚠️ HuggingFace analyzer failed: {e}")
             _hf_analyzer = None
     
@@ -141,7 +140,7 @@ def analyze_huggingface(text):
         
         return scores
     
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - per-message HF failure degrades to neutral, never crashes the batch
         print(f"HF analysis error: {e}")
         return {'positive': 0, 'negative': 0, 'neutral': 1}
 
@@ -312,7 +311,7 @@ def plot_sentiment_analysis(df, figsize=(15, 10)):
         ax1 = axes[0, 0]
         sentiment_counts = df['consensus_sentiment'].value_counts()
         colors = ['#2ecc71', '#f39c12', '#e74c3c']
-        wedges, texts, autotexts = ax1.pie(sentiment_counts.values,
+        _, _, _ = ax1.pie(sentiment_counts.values,
                                           labels=sentiment_counts.index,
                                           autopct='%1.1f%%',
                                           colors=colors[:len(sentiment_counts)],
