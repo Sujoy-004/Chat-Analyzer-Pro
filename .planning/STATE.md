@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: "Plan 04-05 complete; next: 04-04"
-last_updated: "2026-08-04T09:57:27.805Z"
-last_activity: 2026-08-04 -- Plan 04-05 done (README quickstart + doc reconciliation)
+stopped_at: "All Phase 4 plans complete (04-04 QUAL-02 gate closed); verification pending"
+last_updated: "2026-08-05T00:00:00.000Z"
+last_activity: 2026-08-05 -- Plan 04-04 complete (legacy test rewire + full-suite green + ruff 0 errors)
 progress:
   total_phases: 4
   completed_phases: 2
   total_plans: 8
-  completed_plans: 7
-  percent: 88
+  completed_plans: 8
+  percent: 100
 ---
 
 # Project State
@@ -25,18 +25,18 @@ See: .planning/PROJECT.md (updated 2026-08-01)
 
 ## Current Position
 
-Phase: 4 (NLP Extras & Quality Gate) — EXECUTING
+Phase: 4 (NLP Extras & Quality Gate) — EXECUTING (all plans done, verification pending)
 Plan: 5 of 5
 Status: Executing Phase 4
-Last activity: 2026-08-04 -- Plan 04-05 complete (README quickstart + doc reconciliation)
+Last activity: 2026-08-05 -- Plan 04-04 complete (legacy test rewire, full suite green, ruff 0 errors)
 
-Progress: [█████████░] 88%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 7
+- Total plans completed: 8
 - Average duration: 19min
 - Total execution time: 2.3 hours
 
@@ -45,7 +45,7 @@ Progress: [█████████░] 88%
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 1. Package Foundation | 2 / 2 | 45min | 22.5min |
-| 4. NLP Extras & Quality Gate | 4 / 5 | 85min | 21.3min |
+| 4. NLP Extras & Quality Gate | 5 / 5 | 85min | 17min |
 
 **Recent Trend:**
 
@@ -103,6 +103,7 @@ Recent decisions affecting current work:
 - [Phase 4]: CLI-04 error taxonomy = `_EXPORT_WHATSAPP`/`_EXPORT_TELEGRAM` constants + `_friendly_error(chat_file, exc)` classifier (file-not-found via isinstance / unsupported-type / empty-parse by substring / defensive catch-all); every positional failure ends `typer.Exit(code=1) from None`, interactive keeps `continue` (D-15); Phase 2 test substrings ("expected a WhatsApp .txt or Telegram .json", "File not found", "No messages could be parsed") preserved inside the composed messages
 - [Phase 04]: README quickstart-first per D-18 with neutral D-19 options block; REQUIREMENTS/ROADMAP reconciled: ANAL-07/09 always-on (D-07/D-07b), OUT-04/05 NO FLAG (D-08), zero --output/--no-report strings in ROADMAP.md — QUAL-03 + reconciliation notes #1/#2 from the orchestrator; plan must_haves artifact pins not_contains --output on ROADMAP.md
 - [Phase 04]: Phase 3 ROADMAP historical note reworded flag-free (OUT-04 output path / OUT-05 report opt-out semantics) despite Task-2 'don't touch Phase 1/2/3' scoping — Plan must_haves artifact ROADMAP.md not_contains --output + success criterion 'no flag wording anywhere in the docs' take precedence
+- [Phase 04]: 04-04 QUAL-02 gate closed FULL-SCOPE (user-approved): pre-existing baseline failures in test_end_to_end.py (11, pandas 2.x freq drift + cp1252 emoji fixture) and test_reporting.py (15, same freq drift), plus 380 pre-existing ruff errors (deferred-items #1), all fixed so pytest 175/175 + `ruff check src/chat_analyzer tests` 0 errors BOTH pass. `tests/__init__.py` added so `python -m unittest tests.test_analysis` module-path invocation works (reconciles plan acceptance)
 
 ### Pending Todos
 
@@ -133,6 +134,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-04T09:57:27.772Z
-Stopped at: Plan 04-05 complete; next: 04-04
-Resume file: .planning/phases/04-nlp-extras-quality-gate/04-04-PLAN.md
+Last session: 2026-08-05T00:00:00.000Z
+Stopped at: All Phase 4 plans complete; verification pending
+Resume file: .planning/phases/04-nlp-extras-quality-gate/04-04-SUMMARY.md
