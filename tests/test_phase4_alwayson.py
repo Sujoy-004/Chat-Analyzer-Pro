@@ -41,6 +41,7 @@ def _run(args: list[str], cwd: Path) -> subprocess.CompletedProcess:
     """Run the CLI, suppressing the auto-open browser (D-09 degrade path)."""
     env = dict(os.environ)
     env["BROWSER"] = "__none__"  # webbrowser.get() raises -> open_report degrades
+    env["CHAT_ANALYZER_FORCE_NLP"] = "0"  # never trigger model downloads (WR-05)
     return subprocess.run(
         args,
         text=True,
@@ -60,8 +61,9 @@ def _copy_sample(tmp_path: Path, name: str) -> Path:
     return dst
 
 
-def test_health_network_in_report():
+def test_health_network_in_report(monkeypatch):
     """Test A: run_pipeline returns health + network blocks and charts."""
+    monkeypatch.setenv("CHAT_ANALYZER_FORCE_NLP", "0")
     results = run_pipeline(SAMPLES / "whatsapp_sample.txt", _console())
 
     # Health: score is a float in [0, 1]
