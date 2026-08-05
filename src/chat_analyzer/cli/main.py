@@ -59,8 +59,9 @@ def _friendly_error(chat_file: Path, exc: Exception) -> str:
     text = str(exc)
     if "Unsupported file type" in text:
         return (
-            "Unsupported file type: expected a WhatsApp .txt or Telegram .json "
-            f"export. {_EXPORT_WHATSAPP} {_EXPORT_TELEGRAM}"
+            "Unsupported file type: expected a WhatsApp .txt, Telegram .json, "
+            "or a .zip export archive. "
+            f"{_EXPORT_WHATSAPP} {_EXPORT_TELEGRAM}"
         )
     if "No messages could be parsed" in text:
         return (
@@ -157,7 +158,7 @@ def main(
         if not chat_file.is_file():
             typer.echo(_friendly_error(chat_file, FileNotFoundError()), err=True)
             raise typer.Exit(code=1)
-        if chat_file.suffix.lower() not in {".txt", ".json"}:
+        if chat_file.suffix.lower() not in {".txt", ".json", ".zip"}:
             typer.echo(
                 _friendly_error(chat_file, ValueError("Unsupported file type")),
                 err=True,
@@ -187,7 +188,7 @@ def main(
         if not path.is_file():
             typer.echo(_friendly_error(path, FileNotFoundError()), err=True)
             continue
-        if path.suffix.lower() not in {".txt", ".json"}:
+        if path.suffix.lower() not in {".txt", ".json", ".zip"}:
             typer.echo(
                 _friendly_error(path, ValueError("Unsupported file type")),
                 err=True,

@@ -56,6 +56,8 @@ python -m chat_analyzer path/to/your-chat-export.txt
 
 There are no flags — one command does everything. The terminal shows progress as the analysis runs, then a summary of what it found. The report is always saved to the **current working directory** (the folder where you run the command) as `<chat_name>_report.html` and auto-opens in your browser (if the browser can't open, the absolute path is printed instead).
 
+**Inputs:** a WhatsApp `.txt`, a Telegram `.json`, or a `.zip` export archive (WhatsApp "Export chat" and Telegram "Export Telegram data" can both produce one). When a `.zip` contains several chat transcripts, the tool lists them and lets you choose which to analyze (press Enter to analyze all). Media files inside the zip (images, videos, stickers) are ignored — only the conversation text is analyzed.
+
 ## What does the NLP download question mean?
 
 The first time you run the tool on an interactive terminal and the NLP models aren't installed, it asks one question about downloading them — it's only asked once. The options are:
