@@ -125,10 +125,17 @@ def run_pipeline(path: Path, console) -> AnalysisResults:
 
                 rows, counts = parse_telegram_chat_with_report(str(path))
                 source = "telegram"
+            elif path.suffix.lower() == ".zip":
+                # Item C: a WhatsApp/Telegram zip export may contain transcripts
+                # (.txt -> WhatsApp, .json -> Telegram). The user picks which to
+                # analyze; rows/counts come back in the same contract shape.
+                from chat_analyzer.cli.zip_input import parse_zip_with_report
+
+                rows, counts, source = parse_zip_with_report(path, console)
             else:
                 raise ValueError(
-                    f"Unsupported file type: {path.suffix} — expected .txt (WhatsApp) "
-                    "or .json (Telegram)"
+                    f"Unsupported file type: {path.suffix} — expected .txt (WhatsApp), "
+                    ".json (Telegram), or .zip (exported archive)"
                 )
 
         # D-05 / CLI-03: surface the parsed count immediately after parsing
