@@ -85,6 +85,25 @@ def _fake_summarizer(text, **kwargs):
     return [{"summary_text": "A test summary."}]
 
 
+class _FakeT5Model:
+    """Stand-in for T5ForConditionalGeneration mocking the direct
+    generate() path the summarizer uses (no pipeline() abstraction)."""
+
+    def generate(self, **kwargs):
+        return [[0]]
+
+
+class _FakeT5Tokenizer:
+    """Stand-in for T5Tokenizer — callable and decodable, mirroring how
+    ConversationSummarizer builds inputs and decodes outputs."""
+
+    def __call__(self, text, **kwargs):
+        return {"input_ids": [[0]]}
+
+    def decode(self, output, skip_special_tokens=True):
+        return "A test summary."
+
+
 def _fake_pipeline_factory(task, *args, **kwargs):
     """transformers.pipeline factory mock: task-aware so the emotion
     classifier and the T5 summarizer each get a fitting callable."""
@@ -114,10 +133,10 @@ def _mocked_nlp(gate_on: bool = True):
         with (
             unittest.mock.patch("transformers.pipeline", side_effect=_fake_pipeline_factory),
             unittest.mock.patch.object(
-                transformers.T5Tokenizer, "from_pretrained", return_value=object()
+                transformers.T5Tokenizer, "from_pretrained", return_value=_FakeT5Tokenizer()
             ),
             unittest.mock.patch.object(
-                transformers.T5ForConditionalGeneration, "from_pretrained", return_value=object()
+                transformers.T5ForConditionalGeneration, "from_pretrained", return_value=_FakeT5Model()
             ),
         ):
             yield

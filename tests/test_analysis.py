@@ -254,6 +254,34 @@ class TestEmotionClassification(unittest.TestCase):
         self.assertIsInstance(distribution, dict)
         self.assertGreater(len(distribution), 1)
 
+    def test_emotion_pipeline_nested_list_transformers5(self):
+        """transformers 5.x nests top_k=None output one level deeper:
+        [[{label, score}, ...]] instead of 4.x's flat [{label, score}, ...].
+        The real EmotionAnalyzer must normalize both shapes so scores are not
+        silently degraded to uniform 1/6 neutral (C-… 5.x compat regression)."""
+
+        def _nested_classifier(text):
+            if 'love' in str(text).lower():
+                return [list(self.LOVE_SCORES)]
+            return [list(self.JOY_SCORES)]
+
+        from chat_analyzer.analysis import emotion as _emotion_module
+
+        with (
+            redirect_stdout(StringIO()),
+            mock.patch.object(_emotion_module, "_emotion_analyzer", _nested_classifier),
+            mock.patch.object(_emotion_module, "_emotion_model_loaded", True),
+        ):
+            analyzer = EmotionAnalyzer()
+
+        with redirect_stdout(StringIO()):
+            df_emo = analyzer.analyze_emotions(self.df)
+
+        # Real per-message scores surfaced (not the uniform 1/6 fallback).
+        self.assertGreater(df_emo['dominant_emotion'].nunique(), 1)
+        dominant_col = f"emotion_{df_emo['dominant_emotion'].mode().iloc[0]}"
+        self.assertGreater(df_emo[dominant_col].max(), 0.5)
+
 
 class TestRelationshipHealth(unittest.TestCase):
     """Test cases for relationship health metrics (real analyze_relationship_health)."""
