@@ -65,7 +65,9 @@ def test_header_without_sender_is_system(tmp_path):
 
 def test_common_datetime_formats():
     """US 12h, EU 24h, iOS bracket + 4-digit year each parse to the correct
-    datetime (D-17: %m/%d tried first; no M/D-vs-D/M heuristics)."""
+    datetime (D-17: %d/%m tried first for the dominant DD/MM export; the M/D
+    variant still resolves unambiguously when the day > 12 or the month is
+    invalid)."""
     cases = [
         ("12/25/23, 9:30 AM - Alice: US 12h", datetime(2023, 12, 25, 9, 30)),  # noqa: DTZ001 - expected values are deliberately naive
         ("25/12/2023, 21:07 - Bob: EU 24h", datetime(2023, 12, 25, 21, 7)),  # noqa: DTZ001
@@ -110,3 +112,37 @@ def test_parse_file_returns_df_with_time_period():
     assert "timestamp" in df.columns
     assert "time_period" in df.columns
     assert len(df) == 3
+
+
+def test_ddmmyy_parsed_before_mmddyy_regression(tmp_path):
+    """A DD/MM/YY line like 02/11/25 must parse as 2 Nov, not 11 Feb.
+
+    Regression for the real-export water test: US formats were tried first and
+    silently misread 02/11/25 (and 10/11/25) whenever the day <= 12, corrupting
+    the reported date range. %d/%m is now tried first (C-17)."""
+    f = tmp_path / "ddmmyy_first.txt"
+    f.write_text("02/11/25, 9:30 AM - Alice: day-first\n", encoding="utf-8")
+
+    parser = WhatsAppParser()
+    row = parser.parse_line_strict("02/11/25, 9:30 AM - Alice: day-first")
+    assert row is not None
+    assert row["datetime"] == datetime(2025, 11, 2, 9, 30)  # noqa: DTZ001 - naive by design
+
+
+def test_empty_body_message_kept_not_system(tmp_path):
+    """A message line whose sender has no visible content, e.g.
+    '7:08 PM - sujoy: <trailing space>', must count as a real message — not a
+    system line. WhatsApp removes media/body while leaving the sender stamp.
+
+    The strip() at parse time removes the trailing space, so the pattern makes
+    whitespace after the sender colon optional to still capture the row."""
+    f = tmp_path / "empty_body.txt"
+    f.write_text("27/10/25, 7:08 pm - sujoy: \n", encoding="utf-8")
+
+    parser = WhatsAppParser()
+    rows, counts = parser.parse_file_with_report(str(f))
+    assert len(rows) == 1
+    assert counts["parsed_messages"] == 1
+    assert counts["system_messages"] == 0
+    assert rows[0]["sender"] == "sujoy"
+    assert rows[0]["message"] == ""

@@ -4,20 +4,21 @@ from datetime import datetime
 
 import pandas as pd
 
-# Known WhatsApp timestamp formats (D-17 — no M/D-vs-D/M disambiguation
-# heuristics; %m/%d is tried first, documented only). Covers 2/4-digit year,
-# with and without seconds, 12h AM/PM and 24h variants (WARNING-1: 4-digit
-# year + seconds variants added so iOS exports like
-# "[14/06/2024, 2:30:45 PM] Maria: msg" parse).
+# Known WhatsApp timestamp formats (C-17 — no M/D-vs-D/M disambiguation
+# heuristics beyond a fixed locale bias; %d/%m is tried first because the
+# dominant DD/MM/YYYY export (incl. iOS "[14/06/2024, 2:30:45 PM]") parses
+# correctly there and a US-first order would silently misread e.g. 02/11/25
+# as Feb 11 instead of Nov 2 whenever the day <= 12). Covers 2/4-digit year,
+# with and without seconds, 12h AM/PM and 24h variants.
 DATE_FORMATS = (
-    "%m/%d/%y %I:%M %p", "%d/%m/%y %I:%M %p",
-    "%m/%d/%Y %I:%M %p", "%d/%m/%Y %I:%M %p",
-    "%m/%d/%y %I:%M:%S %p", "%d/%m/%y %I:%M:%S %p",
-    "%m/%d/%Y %I:%M:%S %p", "%d/%m/%Y %I:%M:%S %p",
-    "%m/%d/%y %H:%M", "%d/%m/%y %H:%M",
-    "%m/%d/%Y %H:%M", "%d/%m/%Y %H:%M",
-    "%m/%d/%y %H:%M:%S", "%d/%m/%y %H:%M:%S",
-    "%m/%d/%Y %H:%M:%S", "%d/%m/%Y %H:%M:%S",
+    "%d/%m/%y %I:%M %p", "%m/%d/%y %I:%M %p",
+    "%d/%m/%Y %I:%M %p", "%m/%d/%Y %I:%M %p",
+    "%d/%m/%y %I:%M:%S %p", "%m/%d/%y %I:%M:%S %p",
+    "%d/%m/%Y %I:%M:%S %p", "%m/%d/%Y %I:%M:%S %p",
+    "%d/%m/%y %H:%M", "%m/%d/%y %H:%M",
+    "%d/%m/%Y %H:%M", "%m/%d/%Y %H:%M",
+    "%d/%m/%y %H:%M:%S", "%m/%d/%y %H:%M:%S",
+    "%d/%m/%Y %H:%M:%S", "%m/%d/%Y %H:%M:%S",
 )
 
 
@@ -28,14 +29,17 @@ class WhatsAppParser:
 
     def __init__(self):
         # Regex pattern to match WhatsApp message format
-        # Handles various date/time formats
+        # Handles various date/time formats. `:\s?(.*)` makes the whitespace
+        # after the sender colon optional so empty-body messages (deleted or
+        # media-removed lines like "7:08 PM - sujoy:" after strip()) still
+        # count as real messages instead of falling through to system lines.
         self.message_pattern = re.compile(
-            r'(\d{1,2}/\d{1,2}/\d{2,4}),?\s(\d{1,2}:\d{2}(?::\d{2})?)?\s?([AaPp][Mm])?\s?-\s([^:]+):\s(.*)'
+            r'(\d{1,2}/\d{1,2}/\d{2,4}),?\s(\d{1,2}:\d{2}(?::\d{2})?)?\s?([AaPp][Mm])?\s?-\s([^:]+):\s?(.*)'
         )
 
         # Alternative pattern for different date formats
         self.alt_pattern = re.compile(
-            r'\[(\d{1,2}/\d{1,2}/\d{2,4}),?\s(\d{1,2}:\d{2}(?::\d{2})?)?\s?([AaPp][Mm])?\]\s([^:]+):\s(.*)'
+            r'\[(\d{1,2}/\d{1,2}/\d{2,4}),?\s(\d{1,2}:\d{2}(?::\d{2})?)?\s?([AaPp][Mm])?\]\s([^:]+):\s?(.*)'
         )
 
         # System-line classification (D-18): header-without-sender lines,
