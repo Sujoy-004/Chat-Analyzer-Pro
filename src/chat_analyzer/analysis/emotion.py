@@ -105,12 +105,16 @@ class EmotionAnalyzer:
         try:
             if self.pipeline is not None:
                 # transformers 4.x with top_k=None returns a FLAT list of
-                # {"label":.., "score":..} dicts for every class (RESEARCH
-                # Pitfall 1). Indexing [0] grabbed one dict and then iterated
-                # its keys — a TypeError swallowed by the except below that
-                # silently degraded every message to uniform 1/6 neutral
-                # scores. Consume the whole list so real scores surface.
+                # {"label":.., "score":..} dicts for every class, while 5.x
+                # nests it one level deeper: [[{"label":..,"score":..}, ...]].
+                # Indexing incorrectly caught a dict/list before and a
+                # TypeError was swallowed by the except below, silently
+                # degrading every scored message to uniform 1/6 neutral
+                # scores. Normalize both shapes so real scores surface
+                # (C-… 5.x compat).
                 res = self.pipeline(text[:512])  # Limit to 512 chars for efficiency
+                if res and isinstance(res[0], list):
+                    res = res[0]
 
                 # Convert to our standard format
                 emotion_scores = {item['label']: float(item['score']) for item in res}

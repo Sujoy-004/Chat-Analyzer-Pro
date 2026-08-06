@@ -48,14 +48,13 @@ class ConversationSummarizer:
         
         # Initialize T5 model and tokenizer
         try:
-            from transformers import T5ForConditionalGeneration, T5Tokenizer, pipeline
+            from transformers import T5ForConditionalGeneration, T5Tokenizer
             self.tokenizer = T5Tokenizer.from_pretrained(model_name)
             self.model = T5ForConditionalGeneration.from_pretrained(model_name)
-            self.summarizer = pipeline(
-                "summarization",
-                model=self.model,
-                tokenizer=self.tokenizer
-            )
+            # The abstractive summary runs directly through model.generate(),
+            # NOT the pipeline("summarization", ...) abstraction: transformers
+            # 5.x removed that pipeline task (C-… 5.x compat), and the direct
+            # call works across 4.x and 5.x alike.
             print(f"✅ {model_name} loaded successfully!")
         except Exception as e:
             print(f"❌ Error loading model: {e}")
@@ -239,17 +238,25 @@ class ConversationSummarizer:
         try:
             max_len = custom_max_length if custom_max_length else self.max_length
             min_len = custom_min_length if custom_min_length else self.min_length
-            
-            summary_result = self.summarizer(
-                conversation_text,
+
+            # T5 conditional generation (version-agnostic). The "summarize: "
+            # prefix replaces what pipeline("summarization", ...) auto-prepended.
+            inputs = self.tokenizer(
+                "summarize: " + conversation_text,
+                return_tensors="pt",
+                truncation=True,
+                max_length=512,
+            )
+            outputs = self.model.generate(
+                **inputs,
                 max_length=max_len,
                 min_length=min_len,
                 do_sample=False,
-                truncation=True
             )
-            
-            summary_text = summary_result[0]['summary_text']
-            
+            summary_text = self.tokenizer.decode(
+                outputs[0], skip_special_tokens=True
+            )
+
             return {
                 'summary': summary_text,
                 'total_messages': len(df),
