@@ -35,3 +35,8 @@ chat-analyzer = "chat_analyzer.cli:app"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/chat_analyzer"]
+
+[tool.pytest.ini_options]
+markers = [
+  "slow: long wall-clock tests (subprocess spawns / full pipeline renders)",
+]

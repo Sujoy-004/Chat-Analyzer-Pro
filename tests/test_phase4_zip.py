@@ -20,6 +20,7 @@ import zipfile
 from io import StringIO
 from pathlib import Path
 
+import pytest
 from rich.console import Console
 
 SAMPLES = Path(__file__).resolve().parents[1] / "data" / "sample_chats"
@@ -71,6 +72,7 @@ def _txt_content() -> bytes:
     return TXT.read_bytes()
 
 
+@pytest.mark.slow
 def test_zip_single_transcript(tmp_path):
     """Test 1: a zip with one WhatsApp .txt analyzes and produces a report."""
     z = _make_zip(tmp_path, "chat.zip", {"_chat.txt": _txt_content()})
@@ -82,6 +84,7 @@ def test_zip_single_transcript(tmp_path):
     assert report.exists(), f"report missing: {res.stdout}"
 
 
+@pytest.mark.slow
 def test_zip_multiple_transcripts_non_tty(tmp_path):
     """Test 2: two .txt files, piped (not a tty) -> analyze all, merged count."""
     z = _make_zip(
@@ -138,6 +141,7 @@ def test_selection_interactive_returns_picks():
     assert chosen == [("a.txt", "whatsapp"), ("c.txt", "whatsapp")]
 
 
+@pytest.mark.slow
 def test_zip_mixed_txt_json(tmp_path):
     """Test 6: zip with both .txt and .json -> merged, source whatsapp."""
     tele = SAMPLES / "telegram_sample.json"

@@ -17,9 +17,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 from rich.console import Console
 
 from chat_analyzer.cli.pipeline import run_pipeline
+
+pytestmark = pytest.mark.slow
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SAMPLES = REPO_ROOT / "data" / "sample_chats"

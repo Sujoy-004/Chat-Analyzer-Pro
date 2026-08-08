@@ -31,6 +31,8 @@ import sys
 from datetime import date
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SAMPLES = REPO_ROOT / "data" / "sample_chats"
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
@@ -72,6 +74,7 @@ def _copy_sample(tmp_path: Path, name: str) -> Path:
     return dst
 
 
+@pytest.mark.slow
 def test_positional_whatsapp_roundtrip(tmp_path):
     """Test 1 (ROADMAP crit 1): one command runs the full pipeline e2e."""
     dst = _copy_sample(tmp_path, "whatsapp_sample.txt")
@@ -84,6 +87,7 @@ def test_positional_whatsapp_roundtrip(tmp_path):
     assert "Report:" in out
 
 
+@pytest.mark.slow
 def test_no_console_pollution(tmp_path):
     """Test 10 (Pitfall 5): analysis-stage prints are captured (T-02-05);
     the VADER pin keeps the transformers 'Initializing Sentiment' warning
@@ -97,6 +101,7 @@ def test_no_console_pollution(tmp_path):
     assert "Initializing Sentiment" not in out
 
 
+@pytest.mark.slow
 def test_stage_narration_and_order(tmp_path):
     """Test 2 (ROADMAP crit 4): stage lines present; token before panel."""
     dst = _copy_sample(tmp_path, "whatsapp_sample.txt")
@@ -111,6 +116,7 @@ def test_stage_narration_and_order(tmp_path):
     assert out.index("Messages: 27") < out.index("Total messages: 27")
 
 
+@pytest.mark.slow
 def test_report_written_next_to_input(tmp_path):
     """Test 3 (D-08/LOW #8): report in cwd (tmp_path); no NEW repo writes.
 
@@ -129,6 +135,7 @@ def test_report_written_next_to_input(tmp_path):
     assert after == before, f"CLI wrote into the repo: {after - before}"
 
 
+@pytest.mark.slow
 def test_report_card_wellformed(tmp_path):
     """Test 4 (ROADMAP crit 2+3): 6 tabs, >= 4 charts, utf-8 declaration."""
     dst = _copy_sample(tmp_path, "whatsapp_sample.txt")
@@ -143,6 +150,7 @@ def test_report_card_wellformed(tmp_path):
     assert '<meta charset="utf-8">' in html
 
 
+@pytest.mark.slow
 def test_nlp_status_notice(tmp_path):
     """Test 11 (B1): the always-visible status notice + tip on a base install."""
     dst = _copy_sample(tmp_path, "whatsapp_sample.txt")
@@ -155,6 +163,7 @@ def test_nlp_status_notice(tmp_path):
     assert out.count("pip install chat-analyzer-pro[nlp]") == 1
 
 
+@pytest.mark.slow
 def test_interactive_path(tmp_path):
     """Test 5 (D-01): no-arg interactive prompt analyzes a piped path."""
     dst = _copy_sample(tmp_path, "whatsapp_sample.txt")
@@ -203,6 +212,7 @@ def test_unsupported_and_error_paths(tmp_path):
     assert "Traceback" not in res3.stdout + res3.stderr
 
 
+@pytest.mark.slow
 def test_telegram_roundtrip(tmp_path):
     """Test 8 (D-19/D-20): telegram export parses end-to-end."""
     dst = _copy_sample(tmp_path, "telegram_sample.json")
@@ -214,6 +224,7 @@ def test_telegram_roundtrip(tmp_path):
     assert "Messages: 5" in out
 
 
+@pytest.mark.slow
 def test_skip_surfacing(tmp_path):
     """Test 9 (D-15/D-16): skipped lines counted + report skip note; no today."""
     src = tmp_path / "mixed.txt"

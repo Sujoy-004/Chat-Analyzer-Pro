@@ -22,6 +22,7 @@ import warnings
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SAMPLE_WHATSAPP = "data/sample_chats/whatsapp_sample.txt"
@@ -101,6 +102,7 @@ def test_python_m_help():
     assert result.returncode == 0
 
 
+@pytest.mark.slow
 def test_prompt_happy_path():
     """Piped valid export is processed and reports a message count."""
     result = run_cli([], f"{SAMPLE_WHATSAPP}\n")
@@ -109,6 +111,7 @@ def test_prompt_happy_path():
     assert count is not None and count > 0
 
 
+@pytest.mark.slow
 def test_invalid_path_reprompts():
     """First invalid path re-prompts; the valid second path gets processed."""
     result = run_cli([], f"nonexistent_export.txt\n{SAMPLE_WHATSAPP}\n")
@@ -125,6 +128,7 @@ def test_unprocessable_input_exits_one():
     assert "Traceback" not in output
 
 
+@pytest.mark.slow
 def test_import_matrix():
     """Every chat_analyzer module imports cleanly in a subprocess (QUAL-01)."""
     imports = ", ".join(ALL_MODULES)

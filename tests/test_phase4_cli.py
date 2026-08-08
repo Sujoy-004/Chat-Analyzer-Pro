@@ -29,6 +29,8 @@ import unittest.mock
 from io import StringIO
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SAMPLES = REPO_ROOT / "data" / "sample_chats"
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
@@ -70,6 +72,7 @@ def _copy_sample(tmp_path: Path, name: str) -> Path:
     return dst
 
 
+@pytest.mark.slow
 def test_positional_hint_line(tmp_path):
     """Test 1 (D-06): positional run with NLP missing hints once, never prompts."""
     dst = _copy_sample(tmp_path, "whatsapp_sample.txt")
@@ -83,6 +86,7 @@ def test_positional_hint_line(tmp_path):
     assert out.count("pip install chat-analyzer-pro[nlp]") == 1  # exactly once
 
 
+@pytest.mark.slow
 def test_piped_noarg_hint(tmp_path):
     """Test 2 (D-06): piped no-arg run hints; menu suppressed (not a tty)."""
     dst = _copy_sample(tmp_path, "whatsapp_sample.txt")
@@ -132,6 +136,7 @@ def test_positional_empty_chat(tmp_path):
     assert "Traceback" not in out
 
 
+@pytest.mark.slow
 def test_interactive_reprompts_on_bad_file(tmp_path):
     """Test 6 (D-15): bad suffix re-prompts; a valid path then analyzes."""
     bad = tmp_path / "chat.pdf"

@@ -26,6 +26,7 @@ def _console() -> Console:
     return Console(file=io.StringIO(), force_terminal=False)
 
 
+@pytest.mark.slow
 def test_whatsapp_e2e(monkeypatch):
     """The WhatsApp sample produces a complete AnalysisResults."""
     # Pin the NLP gate OFF deterministically (Pitfall 5): a cached emotion
@@ -72,6 +73,7 @@ def test_whatsapp_e2e(monkeypatch):
     }
 
 
+@pytest.mark.slow
 def test_telegram_e2e():
     """The Telegram sample produces a complete AnalysisResults."""
     results = run_pipeline(DATA / "telegram_sample.json", _console())
@@ -87,6 +89,7 @@ def test_all_skipped_raises_friendly():
         run_pipeline(FIXTURES / "whatsapp_all_skipped.txt", _console())
 
 
+@pytest.mark.slow
 def test_no_emoji_print_pollution(capsys):
     """Analysis-stage prints (emoji lines) never reach the terminal stdout."""
     run_pipeline(DATA / "whatsapp_sample.txt", _console())
@@ -101,6 +104,7 @@ def test_unsupported_format():
         run_pipeline(Path("chat.pdf"), _console())
 
 
+@pytest.mark.slow
 def test_agg_headless():
     """run_pipeline works headless — matplotlib backend is Agg during the run."""
     run_pipeline(DATA / "whatsapp_sample.txt", _console())
