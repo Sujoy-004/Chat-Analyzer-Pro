@@ -31,14 +31,14 @@ def adapt(
     network=None,
     emotion=None,
     summary=None,
+    narrative=None,
 ) -> AnalysisResults:
     """Assemble the AnalysisResults contract from the analysis module dicts.
 
-    health/network/emotion/summary are keyword-only with None defaults
-    (reconciliation note #2) so Phase 2 direct-call tests stay green. The
-    always-on health + network blocks arrive in plan 04-01; emotion and
-    summary arrive in plan 04-02. The positional EDA dict param is named
-    eda_summary so the keyword-only summary slot can exist (04-02 contract).
+    health/network/emotion/summary/narrative are keyword-only with None
+    defaults (reconciliation note #2) so Phase 2 direct-call tests stay
+    green. The always-on narrative block (B2) is present on every result —
+    a default empty Tier-A-shaped dict when the caller passes nothing.
     """
     total_messages = len(df)
 
@@ -125,6 +125,7 @@ def adapt(
     # instead of the tabs' content.
     emotion_block = _build_emotion_block(emotion) if emotion is not None else None
     summary_block = _build_summary_block(summary) if summary is not None else None
+    narrative_block = _build_narrative_block(narrative)
 
     return AnalysisResults(
         source=parse.source,
@@ -142,6 +143,7 @@ def adapt(
         network=network_block,
         emotion=emotion_block,
         summary=summary_block,
+        narrative=narrative_block,
         charts=dict(charts),
         insights=build_insights(
             stats,
@@ -228,6 +230,46 @@ def _build_summary_block(summary: dict) -> dict:
     }
 
 
+def _build_narrative_block(narrative: dict | None) -> dict:
+    """Normalize the narrative dict into the AnalysisResults contract shape.
+
+    Defensive (Pattern 2): callers may pass a dict from analyze_narrative
+    (Tier A), a pipeline block with Tier B filled in, or nothing — every
+    access is a .get() so an empty/edge result never KeyErrors here. The
+    default keeps a fully-formed but empty Tier A shape so render/report can
+    always read the block (B1 status notice must never KeyError on old
+    results that lack the key).
+    """
+    if not narrative:
+        return {
+            "tier": "A",
+            "speculative": True,
+            "observations": [],
+            "narrative_summary": "",
+            "status": {"nlp_available": False, "tier_b_generated": False},
+        }
+    observations = []
+    for obs in narrative.get("observations") or []:
+        if isinstance(obs, dict):
+            observations.append(
+                {
+                    "text": str(obs.get("text", "")),
+                    "confidence": obs.get("confidence"),
+                    "kind": obs.get("kind"),
+                }
+            )
+        else:
+            observations.append({"text": str(obs), "confidence": None, "kind": None})
+    return {
+        "tier": narrative.get("tier", "A"),
+        "speculative": bool(narrative.get("speculative", True)),
+        "observations": observations,
+        "narrative_summary": narrative.get("narrative_summary") or "",
+        "status": narrative.get("status")
+        or {"nlp_available": False, "tier_b_generated": False},
+    }
+
+
 def build_insights(
     stats,
     participants,
@@ -279,7 +321,12 @@ def build_insights(
     score = (health or {}).get("overall_score")
     grade = (health or {}).get("grade")
     if score is not None and grade is not None:
-        insights.append(f"This conversation scores {grade} — overall health {score:.2f}.")
+        # B4: a pandas heuristic must not read like an authoritative verdict;
+        # the lead-in qualifies it as a statistical, speculative estimate.
+        insights.append(
+            f"Statistically this conversation scores {grade} on an overall "
+            f"health estimate ({score:.2f}) — speculative, not a verdict."
+        )
 
     density = (network or {}).get("density")
     strongest = (network or {}).get("strongest_connections") or []
