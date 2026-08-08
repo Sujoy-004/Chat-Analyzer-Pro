@@ -21,7 +21,9 @@ def show_summary(results: AnalysisResults, console: Console) -> None:
 
     ASCII-safe symbols only ([WARN]/[INFO], +-| box) — no emoji, no
     box-drawing glyphs (Pitfall 5: the utf-8 reconfigure is a safety net,
-    not a license to ship non-ASCII).
+    not a license to ship non-ASCII). After the report path, one narrative
+    status line (NLP gate driven) and — when a narrative summary exists — a
+    short "What's going on" lead.
     """
     parse = results["parse"]
     stats = results["stats"]
@@ -48,3 +50,23 @@ def show_summary(results: AnalysisResults, console: Console) -> None:
     )
 
     console.print(f"Report: {results['report_path']}")
+
+    narrative = results.get("narrative", {})
+    status = narrative.get("status", {})
+    if not narrative or status.get("nlp_available") is False:
+        console.print(
+            "[INFO] NLP not installed - basic analysis only (the optional "
+            "NLP extras add emotion, summary and a written narrative)",
+            soft_wrap=True,
+        )
+    else:
+        console.print(
+            "[INFO] NLP enabled - emotion, summary and narrative are active",
+            soft_wrap=True,
+        )
+    narrative_summary = narrative.get("narrative_summary")
+    if narrative_summary:
+        console.print(
+            f"[INFO] What's going on: {narrative_summary[:200]}",
+            soft_wrap=True,
+        )

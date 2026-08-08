@@ -11,6 +11,7 @@ validated at the boundary before they reach the template.
 from __future__ import annotations
 
 import logging
+import os
 import re
 import webbrowser
 from pathlib import Path
@@ -49,6 +50,8 @@ TEMPLATE = """<!DOCTYPE html>
   th { background: #f2f4f8; }
   ul { margin-top: 8px; }
   .skip-note { color: #b45309; background: #fef3c7; padding: 8px 12px; border-radius: 6px; margin: 12px 32px 0; }
+  .narrative-summary { font-size: 15px; background: #eef2ff; border-left: 4px solid #667eea; padding: 10px 14px; border-radius: 6px; margin-top: 6px; }
+  .obs-meta { color: #667; font-size: 12px; }
 </style>
 </head>
 <body>
@@ -69,6 +72,7 @@ TEMPLATE = """<!DOCTYPE html>
   <button class="tab" data-tab="network" onclick="showTab('network')">Network</button>
   <button class="tab" data-tab="emotion" onclick="showTab('emotion')">Emotion</button>
   <button class="tab" data-tab="summary" onclick="showTab('summary')">Summary</button>
+  <button class="tab" data-tab="narrative" onclick="showTab('narrative')">What's going on</button>
 </nav>
 <main>
   <div class="panel active" id="tab-overview">
@@ -192,6 +196,21 @@ TEMPLATE = """<!DOCTYPE html>
       {% endif %}
     </div>
   </div>
+  <div class="panel" id="tab-narrative">
+    <div class="card">
+      <p class="lead">{{ narrative.lead }}</p>
+      {% if narrative.narrative_summary %}
+      <p class="narrative-summary">{{ narrative.narrative_summary }}</p>
+      {% endif %}
+      {% if narrative.observations %}
+      <ul>
+        {% for obs in narrative.observations %}
+        <li>{{ obs.text }} <span class="obs-meta">confidence: {{ obs.confidence }}</span> <span class="obs-meta">{{ obs.kind }}</span></li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </div>
+  </div>
 </main>
 <script>
 function showTab(id) {
@@ -234,6 +253,20 @@ def write_report(results: AnalysisResults, input_path: Path) -> Path:
         for name, uri in results["charts"].items()
     }
 
+    narrative = dict(results.get("narrative", {}))
+    narrative_status = narrative.get("status") or {}
+    if not narrative:
+        # Legacy-shaped result with no narrative block at all — neutral placeholder.
+        narrative["lead"] = "Analyzing the flow of this conversation."
+    elif narrative_status.get("nlp_available") and narrative_status.get(
+        "tier_b_generated"
+    ):
+        narrative["lead"] = "Tier B enabled (local generative model) \u2014 statistical inference is speculative."
+    else:
+        narrative["lead"] = "Tier A (statistical inference, speculative) \u2014 generative summary disabled."
+    narrative.setdefault("narrative_summary", "")
+    narrative.setdefault("observations", [])
+
     env = Environment(autoescape=select_autoescape(["html", "xml"]))
     stem = sanitize_filename(input_path.stem)
     title = stem.replace("_", " ").title()
@@ -256,6 +289,7 @@ def write_report(results: AnalysisResults, input_path: Path) -> Path:
         network=results.get("network", {}),
         emotion=results.get("emotion", {}),
         summary=results.get("summary", {}),
+        narrative=narrative,
     )
 
     report_path = Path.cwd() / f"{stem}_report.html"  # D-09: cwd, not input dir
@@ -264,7 +298,13 @@ def write_report(results: AnalysisResults, input_path: Path) -> Path:
 
 
 def open_report(path: Path) -> bool:
-    """Open the report in the default browser (D-09); degrade without crashing."""
+    """Open the report in the default browser (D-09); degrade without crashing.
+
+    Honors the CHAT_ANALYZER_NO_OPEN=1 opt-out: returns False without ever
+    touching webbrowser (no exception, no log).
+    """
+    if os.environ.get("CHAT_ANALYZER_NO_OPEN") == "1":
+        return False
     try:
         return bool(webbrowser.open("file://" + str(path.resolve())))
     except Exception:
