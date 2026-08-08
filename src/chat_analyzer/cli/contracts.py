@@ -19,6 +19,7 @@ class ParseReport:
     parsed_messages: int = 0
     skipped_lines: int = 0
     system_messages: int = 0
+    media_messages: int = 0
 
 
 class AnalysisResults(TypedDict):

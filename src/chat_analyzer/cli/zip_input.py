@@ -6,8 +6,10 @@ accepted only bare .txt (WhatsApp) / .json (Telegram) paths, so a zip export
 was unusable. This module:
 
 - enumerates the chat transcripts inside the zip (.txt -> WhatsApp,
-  .json -> Telegram); media members are ignored (the tool analyzes the
-  conversation text, not the images/videos),
+  .json -> Telegram),
+- counts the real media FILES in the archive (jpg/mp4/opus/pdf/...) so the
+  report's "Media messages" stat covers the export's actual media, not just
+  the "<Media omitted>" text markers (D3/P17),
 - lets the user choose which transcripts to analyze (interactively on a real
   terminal: skip any or selectively merge; non-tty runs fall back to "all"),
 - parses each chosen transcript with the existing hardened parsers and MERGES
@@ -50,6 +52,28 @@ def _list_transcripts(zip_path: Path) -> list[tuple[str, str]]:
             elif lower.endswith(".json"):
                 found.append((name, "telegram"))
     return found
+
+
+def count_zip_media_members(zip_path: Path) -> int:
+    """Count the media FILES inside a zip export (D3/P17).
+
+    WhatsApp/Telegram "Export chat" zips hold the transcripts (.txt/.json)
+    alongside the actual media members (jpg/mp4/opus/pdf/...). Every non-directory
+    member that is not a transcript counts as one media file. Directory entries
+    (members ending in '/') are not files and never count. This is a zip-LEVEL
+    property: call once per archive, never once per transcript, or the same
+    files would be double-counted across merged transcripts.
+    """
+    media = 0
+    with zipfile.ZipFile(zip_path) as zf:
+        for name in zf.namelist():
+            if name.endswith("/"):
+                continue  # directory entry, not a media file
+            lower = name.lower()
+            if lower.endswith((".txt", ".json")):
+                continue  # transcript member, not media
+            media += 1
+    return media
 
 
 def _select_transcripts(
@@ -130,7 +154,10 @@ def parse_zip_with_report(
     Returns (rows, counts, source) — the same contract run_pipeline expects
     from the single-file parsers, so the downstream pipeline is unchanged.
     counts is the SUM across chosen transcripts; source is "whatsapp",
-    "telegram", or "mixed" (Item C: keep both formats).
+    "telegram", or "mixed" (Item C: keep both formats). media_messages is the
+    one zip-level exception (D3/P17): it starts at the merged transcripts'
+    sum (the parsers report none, so 0) and is then ADDED the real media-file
+    count measured once from the whole archive.
     """
     try:
         transcripts = _list_transcripts(zip_path)
@@ -150,6 +177,7 @@ def parse_zip_with_report(
         "parsed_messages": 0,
         "skipped_lines": 0,
         "system_messages": 0,
+        "media_messages": 0,
     }
     kinds = set()
 
@@ -165,6 +193,13 @@ def parse_zip_with_report(
             for key in counts:
                 counts[key] += member_counts.get(key, 0)
             kinds.add(kind)
+
+    # D3/P17: the archive's real media FILES are genuine media messages the
+    # transcript only hints at ("<Media omitted>"). Measured ONCE from the whole
+    # zip — a zip-level property, never per transcript (summing in the loop above
+    # would double-count the same files). The transcripts' own marker rows are
+    # still picked up separately by adapters from the merged rows.
+    counts["media_messages"] += count_zip_media_members(zip_path)
 
     if not rows:
         raise ValueError("No messages could be parsed from the selected transcripts")

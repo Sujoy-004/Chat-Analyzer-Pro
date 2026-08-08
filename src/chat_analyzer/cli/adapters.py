@@ -70,8 +70,18 @@ def adapt(
         "busiest_day": busiest_day,
         "peak_hour": eda_summary.get("activity_patterns", {}).get("peak_hour"),
         "avg_response_time": avg_response_time,
-        "media_messages": int(
-            df["message"].str.contains("<Media omitted>", case=False, na=False).sum()
+        # D3/P17: zip exports carry real media FILES beside the transcript rows.
+        # parse.media_messages holds that zip-level count. In a real WhatsApp
+        # export the "<Media omitted>" rows and the media files are the SAME
+        # messages (1:1), so a sum would double-count — max() is the honest
+        # total. It also covers Telegram zips (files, no markers) and plain
+        # .txt exports (markers, no files). Non-zip paths leave
+        # parse.media_messages at 0 and this reduces to the marker count alone.
+        "media_messages": max(
+            int(
+                df["message"].str.contains("<Media omitted>", case=False, na=False).sum()
+            ),
+            int(getattr(parse, "media_messages", 0) or 0),
         ),
     }
 
