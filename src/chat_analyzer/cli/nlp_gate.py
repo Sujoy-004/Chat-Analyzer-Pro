@@ -1,14 +1,16 @@
 """Silent NLP availability probe + locked model constants (D-02/D-05/D-07c).
 
 The pipeline always *prepares* for NLP (D-01); whether the heavy models
-actually run depends on this pure probe: transformers+torch importable AND
-the emotion model cached locally. Never raises — import failures and missing
-caches all resolve to False so the caller silently runs basic analysis
-(D-02/D-06), with no prompt and no hint (that is main.py's job in 04-03).
+actually run depends on this pure importability probe: transformers+torch
+importable. Never raises — import failures and missing installs all resolve
+to False so the caller silently runs basic analysis (D-02/D-06), with no
+prompt and no hint (that is main.py's job in 05-03). Model weights are NOT
+required up front: they download on first use (announced via model_cached in
+pipeline.py), the "first install gap" fix for fresh [nlp] installs.
 
 The CHAT_ANALYZER_FORCE_NLP env override makes either branch deterministic
-in tests (RESEARCH Pitfall 5: the dev machine has transformers but no cached
-emotion model, so the probe alone would always report "unavailable").
+in tests (RESEARCH Pitfall 5: the dev machine has transformers and no cached
+emotion model, so the probe alone would not reliably exercise both branches).
 
 install_nlp is the guarded runtime installer for the D-04 download menu: a
 subprocess pip re-install of the already-declared [nlp] extras (torch +
@@ -38,6 +40,8 @@ MODEL_ID = "bhadresh-savani/distilbert-base-uncased-emotion"
 EMOTION_MODEL_SIZE_MB = 255
 SUMMARY_MODEL_ID = "t5-small"
 SUMMARY_MODEL_SIZE_MB = 231
+TIER_B_MODEL_ID = "google/flan-t5-small"
+TIER_B_MODEL_SIZE_MB = 340   # approx flan-t5-small total disk (~308 MB weights)
 
 _FORCE_NLP = "CHAT_ANALYZER_FORCE_NLP"
 
@@ -56,12 +60,16 @@ def model_cached(model_id: str) -> bool:
 
 
 def nlp_available(model_id: str = MODEL_ID) -> bool:
-    """Silent availability probe (D-02): never raises, never prompts.
+    """Silent importability probe (D-02): never raises, never prompts.
 
     Env override CHAT_ANALYZER_FORCE_NLP wins ("0" -> False, "1" -> True) so
     tests can force either branch deterministically (RESEARCH Pitfall 5).
-    Otherwise the probe requires transformers+torch to be importable AND the
-    model to be cached locally.
+    Otherwise the probe returns True when transformers+torch import — it no
+    longer requires the weights to be cached locally. The model download
+    happens on first use (announced via model_cached by pipeline.py). This is
+    the "first install gap" fix: install_nlp only pip-installs the extras (no
+    weights), so the old model_cached requirement meant a fresh [nlp] user's
+    very first run silently skipped NLP.
     """
     force = os.environ.get(_FORCE_NLP)
     if force is not None:
@@ -76,7 +84,7 @@ def nlp_available(model_id: str = MODEL_ID) -> bool:
     except ImportError:
         return False
 
-    return model_cached(model_id)
+    return True
 
 
 _CPU_INDEX = "https://download.pytorch.org/whl/cpu"
