@@ -88,6 +88,20 @@ def _results() -> dict:
             "The most-used word is 'hello'.",
             "The overall tone leans Positive (100% of messages).",
         ],
+        "narrative": {
+            "tier": "A",
+            "speculative": True,
+            "observations": [
+                {
+                    "text": "Possibly Alice drives this conversation forward "
+                    "by asking questions much more often.",
+                    "confidence": "medium",
+                    "kind": "driver",
+                }
+            ],
+            "narrative_summary": "Possibly Alice drives this conversation forward.",
+            "status": {"nlp_available": False, "tier_b_generated": False},
+        },
         "report_path": "",
     }
 
@@ -158,6 +172,8 @@ def test_report_location_next_to_input(tmp_path, monkeypatch):
 def test_open_report_degrade(monkeypatch, tmp_path):
     import webbrowser
 
+    monkeypatch.delenv("CHAT_ANALYZER_NO_OPEN", raising=False)  # keep opt-out off
+
     def boom(*args, **kwargs):
         raise OSError("no browser available")
 
@@ -168,6 +184,7 @@ def test_open_report_degrade(monkeypatch, tmp_path):
 def test_open_report_success(monkeypatch, tmp_path):
     import webbrowser
 
+    monkeypatch.delenv("CHAT_ANALYZER_NO_OPEN", raising=False)  # keep opt-out off
     calls = []
 
     def fake_open(url):
@@ -196,8 +213,66 @@ def test_skip_note_surfacing(tmp_path, monkeypatch):
     assert "Skipped" not in out2
 
 
+def test_no_open_opt_out(tmp_path, monkeypatch):
+    """CHAT_ANALYZER_NO_OPEN=1 returns False without touching webbrowser."""
+    import webbrowser
+
+    def boom(*args, **kwargs):
+        raise AssertionError("webbrowser must not be touched under the opt-out")
+
+    monkeypatch.setenv("CHAT_ANALYZER_NO_OPEN", "1")
+    monkeypatch.setattr(webbrowser, "open", boom)
+    assert open_report(tmp_path / "chat_report.html") is False
+
+
 def test_tabs_and_insights(tmp_path):
     out = _write(tmp_path).read_text(encoding="utf-8")
     for tab_id in ("overview", "participants", "flow", "words", "sentiment"):
         assert f'id="tab-{tab_id}"' in out, tab_id
     assert "Most messages land on Monday." in out
+
+
+def test_narrative_tab_renders(tmp_path):
+    """The 'What's going on' tab renders observations + summary (B2)."""
+    out = _write(tmp_path).read_text(encoding="utf-8")
+    assert 'id="tab-narrative"' in out
+    assert "What's going on" in out
+    assert "Possibly Alice drives this conversation forward." in out
+    assert "confidence: medium" in out
+    assert "driver" in out
+    # B1: a present narrative block always names the tier it actually ran.
+    assert "Tier A (statistical inference, speculative)" in out
+
+
+def test_narrative_tier_b_lead(tmp_path):
+    """A Tier B narrative block shows its generative lead (B1/B2)."""
+    res = _results()
+    res["narrative"] = {
+        "tier": "B",
+        "speculative": True,
+        "observations": [],
+        "narrative_summary": "A conversational story.",
+        "status": {"nlp_available": True, "tier_b_generated": True},
+    }
+    src = tmp_path / "a.txt"
+    src.write_text("x\n", encoding="utf-8")
+    cwd = Path.cwd()
+    try:
+        os.chdir(tmp_path)
+        out = write_report(res, src).read_text(encoding="utf-8")
+    finally:
+        os.chdir(cwd)
+    assert "Tier B enabled (local generative model)" in out
+    assert "A conversational story." in out
+
+
+def test_narrative_missing_key_renders(tmp_path, monkeypatch):
+    """Old results without a narrative key still render without crashing."""
+    src = tmp_path / "a.txt"
+    src.write_text("x\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    res = _results()
+    res.pop("narrative", None)
+    out = write_report(res, src).read_text(encoding="utf-8")
+    assert 'id="tab-narrative"' in out
+    assert "Analyzing the flow of this conversation." in out

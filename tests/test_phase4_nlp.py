@@ -178,6 +178,13 @@ def test_emotion_summary_with_mocked_nlp():
     assert "emotion" in results["charts"]
     assert results["charts"]["emotion"].startswith("data:image/png;base64,")
 
+    # B2/B5 (Tier B auto when the gate is on): the mocked flan-t5-small
+    # digest summarization fills the narrative paragraph + status flags.
+    narrative = results["narrative"]
+    assert narrative["status"]["nlp_available"] is True
+    assert narrative["status"]["tier_b_generated"] is True
+    assert narrative["narrative_summary"].strip()  # "A test summary."
+
 
 def test_basic_run_without_nlp():
     """Test B (gate OFF): silent basic run — emotion/summary None (D-02/D-06)."""
@@ -189,6 +196,14 @@ def test_basic_run_without_nlp():
     assert results["stats"]["total_messages"] == 27
     assert results["participants"]
     assert results["sentiment"]["distribution"]
+
+    # B1: Tier A ran, and the status notice honestly reports the gate is off.
+    narrative = results["narrative"]
+    assert narrative["tier"] == "A"
+    assert narrative["status"] == {
+        "nlp_available": False,
+        "tier_b_generated": False,
+    }
 
 
 def test_report_contains_emotion_and_summary_tabs(tmp_path, monkeypatch):
@@ -207,6 +222,8 @@ def test_report_contains_emotion_and_summary_tabs(tmp_path, monkeypatch):
     assert 'id="tab-emotion"' in html
     assert 'id="tab-summary"' in html
     assert "A test summary." in html
+    assert 'id="tab-narrative"' in html
+    assert "Tier B enabled" in html
 
     with _mocked_nlp(gate_on=False):
         basic = run_pipeline(DATA / "whatsapp_sample.txt", _console())

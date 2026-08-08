@@ -48,6 +48,7 @@ def _run_forced(
     """Run the CLI with NLP forced OFF and the auto-open browser suppressed."""
     env = dict(os.environ)
     env["BROWSER"] = "__none__"  # webbrowser.get() raises -> open_report degrades
+    env["CHAT_ANALYZER_NO_OPEN"] = "1"  # never pop a browser (B3 opt-out)
     env["CHAT_ANALYZER_FORCE_NLP"] = "0"  # deterministic basic path (Pitfall 5)
     return subprocess.run(
         args,

@@ -47,9 +47,11 @@ def _cli_cmd(*args: str, console: bool = True) -> list[str]:
 def _run(
     args: list[str], stdin_text: str | None = None, cwd: Path | None = None
 ) -> subprocess.CompletedProcess:
-    """Run the CLI, suppressing the auto-open browser (D-09 degrade path)."""
+    """Run the CLI, suppressing auto-open + NLP downloads for determinism."""
     env = dict(os.environ)
     env["BROWSER"] = "__none__"  # webbrowser.get() raises -> open_report degrades
+    env["CHAT_ANALYZER_NO_OPEN"] = "1"  # never pop a browser (B3 opt-out)
+    env["CHAT_ANALYZER_FORCE_NLP"] = "0"  # never download models in tests (WR-05)
     return subprocess.run(
         args,
         input=stdin_text,
@@ -128,16 +130,29 @@ def test_report_written_next_to_input(tmp_path):
 
 
 def test_report_card_wellformed(tmp_path):
-    """Test 4 (ROADMAP crit 2+3): 5 tabs, >= 4 charts, utf-8 declaration."""
+    """Test 4 (ROADMAP crit 2+3): 6 tabs, >= 4 charts, utf-8 declaration."""
     dst = _copy_sample(tmp_path, "whatsapp_sample.txt")
     res = _run(_cli_cmd(str(dst), console=True), cwd=tmp_path)
 
     assert res.returncode == 0, res.stdout + res.stderr
     html = (tmp_path / "whatsapp_sample_report.html").read_text(encoding="utf-8")
-    for tab in ("overview", "participants", "flow", "words", "sentiment"):
+    for tab in ("overview", "participants", "flow", "words", "sentiment", "narrative"):
         assert f'id="tab-{tab}"' in html, f"missing tab: {tab}"
+    assert "What's going on" in html
     assert html.count("data:image/png;base64,") >= 4, "fewer than 4 charts"
     assert '<meta charset="utf-8">' in html
+
+
+def test_nlp_status_notice(tmp_path):
+    """Test 11 (B1): the always-visible status notice + tip on a base install."""
+    dst = _copy_sample(tmp_path, "whatsapp_sample.txt")
+    res = _run(_cli_cmd(str(dst), console=True), cwd=tmp_path)
+
+    assert res.returncode == 0, res.stdout + res.stderr
+    out = res.stdout + res.stderr
+    assert "NLP not installed - basic analysis only" in out
+    assert "Tip: richer insights need the NLP extra" in out
+    assert out.count("pip install chat-analyzer-pro[nlp]") == 1
 
 
 def test_interactive_path(tmp_path):

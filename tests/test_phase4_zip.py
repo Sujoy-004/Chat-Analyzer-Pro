@@ -40,6 +40,7 @@ def _run_forced(args: list[str], cwd: Path) -> subprocess.CompletedProcess:
 
     env = dict(os.environ)
     env["BROWSER"] = "__none__"
+    env["CHAT_ANALYZER_NO_OPEN"] = "1"
     env["CHAT_ANALYZER_FORCE_NLP"] = "0"
     return subprocess.run(
         args,

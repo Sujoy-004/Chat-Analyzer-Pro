@@ -60,6 +60,17 @@ def test_whatsapp_e2e(monkeypatch):
         assert uri.startswith("data:image/png;base64,")
     assert results["insights"] and all(isinstance(i, str) and i for i in results["insights"])
 
+    # B2/B1: the narrative block is ALWAYS present (Tier A), and its status
+    # reflects the pinned-off gate — never a silent claim of deep analysis.
+    narrative = results["narrative"]
+    assert narrative["tier"] == "A"
+    assert narrative["speculative"] is True
+    assert isinstance(narrative["observations"], list)
+    assert narrative["status"] == {
+        "nlp_available": False,
+        "tier_b_generated": False,
+    }
+
 
 def test_telegram_e2e():
     """The Telegram sample produces a complete AnalysisResults."""
@@ -67,6 +78,7 @@ def test_telegram_e2e():
     assert results["source"] == "telegram"
     assert results["parse"]["parsed_messages"] == 5
     assert results["stats"]["total_messages"] == 5
+    assert "observations" in results["narrative"]
 
 
 def test_all_skipped_raises_friendly():
