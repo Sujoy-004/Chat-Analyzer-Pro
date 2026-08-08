@@ -200,6 +200,11 @@ def main(
             menu_shown = False
             if (not nlp_on) and sys.stdin.isatty():
                 menu_shown = True
+                # A1: warn BEFORE the menu offers a multi-GB download that
+                # torch extraction could never finish (WinError 206).
+                long_path = nlp_gate.windows_long_path_message()
+                if long_path is not None:
+                    console.print(f"[WARN] {long_path}")
                 choice = _nlp_menu(console)
                 if choice in ("1", "2"):
                     # D-05/Pitfall 4: announce name + size BEFORE the install

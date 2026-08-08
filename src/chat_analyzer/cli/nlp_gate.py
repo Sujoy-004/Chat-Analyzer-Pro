@@ -44,6 +44,13 @@ TIER_B_MODEL_ID = "google/flan-t5-small"
 TIER_B_MODEL_SIZE_MB = 340   # approx flan-t5-small total disk (~308 MB weights)
 
 _FORCE_NLP = "CHAT_ANALYZER_FORCE_NLP"
+_ALLOW_LONG_PATH = "CHAT_ANALYZER_ALLOW_LONG_PATH"
+
+# Windows MAX_PATH guard (A1): torch 2.x wheel extraction crashes with
+# WinError 206 when the venv's site-packages path plus torch's own reserved
+# extraction depth crosses the 260-char limit.
+TORCH_PATH_RESERVE = 180
+WINDOWS_MAX_PATH = 260
 
 
 def model_cached(model_id: str) -> bool:
@@ -118,6 +125,58 @@ def _pip_install(args: list[str]) -> None:
         )
 
 
+def registry_long_paths_enabled() -> bool:
+    """True when the Windows LongPathsEnabled system flag is set (nt only).
+
+    Reads the LongPathsEnabled DWORD the README tells the user to enable;
+    when it is on, officially long paths are permitted and the MAX_PATH
+    guard must not warn or block.
+    """
+    if os.name != "nt":
+        return False
+    try:
+        import winreg
+
+        with winreg.OpenKey(
+            winreg.HKEY_LOCAL_MACHINE,
+            r"SYSTEM\CurrentControlSet\Control\FileSystem",
+        ) as key:
+            value, _ = winreg.QueryValueEx(key, "LongPathsEnabled")
+            return value == 1
+    except OSError:
+        return False
+
+
+def windows_long_path_message() -> str | None:
+    """Instructive warning when the venv path is too deep for torch on Windows.
+
+    Returns None on non-Windows platforms, when the user has enabled Windows'
+    LongPathsEnabled flag, when the CHAT_ANALYZER_ALLOW_LONG_PATH override is
+    set to "1", or when the site-packages path leaves enough headroom under
+    the 260-char MAX_PATH limit. Otherwise returns a short ASCII remediation
+    string (WinError 206) — callers print or raise it so the user relocates
+    before a multi-GB download. The reserve is heuristic (a global Python3xx
+    user-site install is not measured), which is why the override exists.
+    """
+    if os.name != "nt":
+        return None
+    if os.environ.get(_ALLOW_LONG_PATH) == "1":
+        return None
+    if registry_long_paths_enabled():
+        return None
+    site_packages = Path(sys.prefix) / "Lib" / "site-packages"
+    if len(str(site_packages)) + TORCH_PATH_RESERVE <= WINDOWS_MAX_PATH:
+        return None
+    return (
+        "This Python environment lives at a deep path, so the torch "
+        "extraction will hit the Windows 260-character limit (WinError 206). "
+        "Either enable the LongPathsEnabled registry flag, or use the "
+        "reliable fix: create a short-path venv in your temp folder with "
+        "scripts/make_nlp_env.ps1 (for example %TEMP%\\chat-analyzer-nlp), "
+        "well under 260 characters."
+    )
+
+
 def install_nlp(cpu_only: bool = False) -> None:
     """Runtime install of the already-declared [nlp] extras (D-05).
 
@@ -132,11 +191,16 @@ def install_nlp(cpu_only: bool = False) -> None:
     degrades to basic analysis plus the hint line — never a frozen terminal
     (Pitfall 4).
     """
+    reason = windows_long_path_message()
+    if reason is not None:
+        raise RuntimeError(
+            reason + " Basic analysis still works without the NLP models."
+        )
     if cpu_only:
         # WR-01: --index-url REPLACES PyPI, so transformers would never
         # resolve from the PyTorch CPU wheel index. Install torch from the
         # CPU index first, then transformers from PyPI separately.
         _pip_install(["torch", "--index-url", _CPU_INDEX])
-        _pip_install(["transformers>=4.30,<6"])
+        _pip_install(["transformers>=4.30,<5.15"])
     else:
-        _pip_install(["torch", "transformers>=4.30,<6"])
+        _pip_install(["torch", "transformers>=4.30,<5.15"])
