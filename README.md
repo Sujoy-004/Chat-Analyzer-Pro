@@ -62,7 +62,7 @@ If the `chat-analyzer` command isn't found (for example, your Python scripts dir
 python -m chat_analyzer path/to/your-chat-export.txt
 ```
 
-There are no flags — one command does everything. The terminal shows progress as the analysis runs, then a summary of what it found. The report is always saved to the **current working directory** (the folder where you run the command) as `<chat_name>_report.html` and auto-opens in your browser (if the browser can't open, the absolute path is printed instead).
+No flags are required — one command does everything (the CLI adds only `--version` and typer's built-in `--help` for introspection). The terminal shows progress as the analysis runs, then a summary of what it found. The report is always saved to the **current working directory** (the folder where you run the command) as `<chat_name>_report.html` and auto-opens in your browser (if the browser can't open, the absolute path is printed instead).
 
 The tool detects automatically whether the NLP models are installed and never picks a tier silently: the terminal always prints an **NLP status line** (`NLP enabled` or `NLP not installed`), and the report's **"What's going on"** tab states which tier produced it. Set `CHAT_ANALYZER_NO_OPEN=1` to stop the report from auto-opening in a browser.
 
@@ -96,3 +96,35 @@ Relationship-health grades, emotion labels, and narrative observations are **sta
 ## Privacy
 
 Everything runs **entirely on your machine** — no accounts, no server, no telemetry. `pip install` pulls public model weights (downloaded on first use and cached locally); the model, your chat data, and the generated report never leave your device. The terminal messages say this on every NLP run.
+
+## Features
+
+One `chat-analyzer <chat-file>` command runs the whole pipeline — no configuration, no flags required (beyond the standard `--version` / `--help`):
+
+| Area | What it covers |
+|------|----------------|
+| Input formats | WhatsApp `.txt`, Telegram `.json`, and `.zip` archives; a multi-chat zip asks which chat to analyze (or all of them) |
+| Statistics | Message counts, participants, activity trends, top words and emojis |
+| Sentiment | VADER-based sentiment per message and across the conversation |
+| Relationship analysis | Relationship-health scoring and the conversation network (both always on) |
+| "What's going on" narrative | Heuristic, pandas-based observations (arc, who drives the chat, reciprocity, engagement) — every observation labelled speculative with a confidence tag |
+| NLP extra (`[nlp]`) | Emotion classification and a generative written summary driven by a small local model (flan-t5) |
+| Output | Terminal progress + summary, plus a self-contained single-file HTML report saved to the current directory |
+| Local-first | No accounts, no server, no telemetry; model weights downloadable on demand and cached locally |
+
+## Documentation
+
+Further docs live in the `docs/` directory:
+
+| Doc | Purpose |
+|-----|---------|
+| [GETTING-STARTED.md](docs/GETTING-STARTED.md) | Prerequisites, installation steps, and first-run setup |
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | System overview, components, and data flow |
+| [DEVELOPMENT.md](docs/DEVELOPMENT.md) | Development setup, build commands, code style, and the PR process |
+| [TESTING.md](docs/TESTING.md) | Test framework, how to run tests, and CI integration |
+
+## Project status
+
+v1.0 is complete — the full CLI pipeline (parse → analyze → terminal summary → HTML report) is implemented and verified. The test suite is green (210 tests, pytest) and the code base is clean under `ruff check` for `src/chat_analyzer` and `tests`.
+
+Distribution today is clone-and-install from source (see Quickstart above); the package is not yet published to PyPI.
