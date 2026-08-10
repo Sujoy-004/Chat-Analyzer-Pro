@@ -3,7 +3,7 @@
 
 Chat-Analyzer-Pro is tested with **pytest** (the dev extra in `pyproject.toml`
 declares `pytest>=7.4`, `pytest-cov>=4.1`, and `ruff>=0.16.1`). The suite has
-**210 tests across 18 files**. Wall-clock-slow tests (CLI subprocess spawns and
+**217 tests across 19 files**. Wall-clock-slow tests (CLI subprocess spawns and
 full pipeline/report renders) are gated behind the `slow` marker
 (`[tool.pytest.ini_options]` in `pyproject.toml`) so the fast suite stays lean
 for every commit.
@@ -46,8 +46,8 @@ All commands below ran from the repo root and were verified against the suite:
 
 | Command | What it runs |
 | --- | --- |
-| `python -m pytest` | Full suite — 210 tests (fast + slow). |
-| `python -m pytest -m "not slow"` | Fast suite only — 185 tests (this is the CI default). |
+| `python -m pytest` | Full suite — 217 tests (fast + slow). |
+| `python -m pytest -m "not slow"` | Fast suite only — 192 tests (this is the CI default). |
 | `python -m pytest -m "slow"` | Slow suite only — 25 wall-clock tests (CLI subprocess spawns, full pipeline + report renders). |
 | `python -m pytest tests/test_phase2_telegram.py` | A single test file. |
 | `python -m pytest tests/test_phase2_whatsapp.py::test_exact_fixture_counts` | A single test function. |
@@ -97,6 +97,7 @@ report run never writes into the repo tree.
 | Network graph | `tests/test_phase4_alwayson.py` | Density float, `network` chart key with a base64 PNG URI in the report. |
 | Narrative (Tier A) | `tests/test_narrative.py` | Arc/driver/reciprocity/engagement observation kinds, hedged summary, question-ratio extractors (Banglish + English wh-words), empty/single-sender/NaN-sender degradation. |
 | Visualization | `tests/test_analysis.py` | Real `ChatVisualizer` timeline + heatmap return matplotlib `Figure` objects (Agg backend pinned). |
+| Interactive charts (ECharts) | `tests/test_interactive_charts.py` | Real `build_chart_specs` on a synthetic canonical chat DataFrame — all six always-on specs (timeline/activity/participants/sentiment/health/network) are returned and each is JSON-serializable (`json.dumps(..., allow_nan=False)`); the network spec is true 3D (`scatter3D` + `lines3D` on `grid3D`, auto-rotate, degree-sized nodes); `build_emotion_spec` pie shape; `write_report` renders interactive chart divs + `CHART_SPECS` when specs exist; PNG fallback when the spec builder raises or a spec is non-serializable; a `</script>` payload in a participant name is `|tojson`-escaped and never survives into the inlined JS. |
 | HTML report | `tests/test_phase2_report.py`, `tests/test_phase2_cli.py`, `tests/test_phase4_nlp.py`, `tests/test_phase4_alwayson.py` | Single-file self-containment (no external refs), `utf-8` + emoji integrity, content escaping (`<script>` payload & `Alice <3 Bob` sender), filename sanitization, report lands in cwd, auto-open degrade & `CHAT_ANALYZER_NO_OPEN`, skip-note surfacing, tab structure (overview/participants/flow/words/sentiment/narrative, health, network, emotion, summary), Tier A/B narrative rendering. |
 | CLI (end-to-end) | `tests/test_phase1_smoke.py`, `tests/test_phase2_cli.py`, `tests/test_phase4_cli.py` | `chat-analyzer` console script + `python -m chat_analyzer` fallback, `--help`/`--version`, prompt happy path + invalid-path re-prompt, stage narration order, `"Messages: 27"` smoke token, friendly exit-1 taxonomy (missing file / wrong format / unparseable) with no tracebacks, NLP hint line and tty download menu, `CHAT_ANALYZER_FORCE_NLP` determinism. |
 | ZIP export input | `tests/test_phase4_zip.py`, `tests/test_phase4_zip_media.py` | Single/multi-transcript zips (non-tty auto-select-ALL merge), empty/corrupted zip exit-1 messages, interactive transcript selection, media file counting (`max` of `<Media omitted>` markers vs zip media members). |

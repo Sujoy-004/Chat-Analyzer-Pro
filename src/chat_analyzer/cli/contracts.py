@@ -25,7 +25,9 @@ class ParseReport:
 class AnalysisResults(TypedDict):
     """The complete analysis payload produced by run_pipeline.
 
-    charts maps chart name -> base64 PNG data URI. report_path is filled by
+    charts maps chart name -> base64 PNG data URI. charts_json maps chart
+    name -> ECharts option dict (interactive); when a chart's JSON build
+    fails, write_report falls back to charts' PNG. report_path is filled by
     main.py after report_html.write_report succeeds. health and network hold
     serializable scalars extracted by adapters.py from the always-on analysis
     modules (D-07/D-07b) — never the raw prepared_data DataFrame or the
@@ -48,5 +50,6 @@ class AnalysisResults(TypedDict):
     emotion: dict[str, Any] | None
     summary: dict[str, Any] | None
     charts: dict[str, str]
+    charts_json: dict[str, dict]
     insights: list[str]
     report_path: str

@@ -64,6 +64,8 @@ python -m chat_analyzer path/to/your-chat-export.txt
 
 No flags are required — one command does everything (the CLI adds only `--version` and typer's built-in `--help` for introspection). The terminal shows progress as the analysis runs, then a summary of what it found. The report is always saved to the **current working directory** (the folder where you run the command) as `<chat_name>_report.html` and auto-opens in your browser (if the browser can't open, the absolute path is printed instead).
 
+Every chart in the report is **interactive ECharts** (the runtime is inlined, so the file stays fully offline): hover for tooltips, scroll or drag to zoom into the timeline, sentiment and health trends, and a true **3D drag-to-rotate conversation network**. Any chart that can't be built still renders its static PNG, so everything always shows. Because the JavaScript is embedded, a report is larger than before — **~1.7 MB is normal** for the single-file format.
+
 The tool detects automatically whether the NLP models are installed and never picks a tier silently: the terminal always prints an **NLP status line** (`NLP enabled` or `NLP not installed`), and the report's **"What's going on"** tab states which tier produced it. Set `CHAT_ANALYZER_NO_OPEN=1` to stop the report from auto-opening in a browser.
 
 **Inputs:** a WhatsApp `.txt`, a Telegram `.json`, or a `.zip` export archive (WhatsApp "Export chat" and Telegram "Export Telegram data" can both produce one). When a `.zip` contains several chat transcripts, the tool lists them and lets you choose which to analyze (press Enter to analyze all). Media files inside the zip (images, videos, stickers) are ignored — only the conversation text is analyzed.
@@ -109,7 +111,7 @@ One `chat-analyzer <chat-file>` command runs the whole pipeline — no configura
 | Relationship analysis | Relationship-health scoring and the conversation network (both always on) |
 | "What's going on" narrative | Heuristic, pandas-based observations (arc, who drives the chat, reciprocity, engagement) — every observation labelled speculative with a confidence tag |
 | NLP extra (`[nlp]`) | Emotion classification and a generative written summary driven by a small local model (flan-t5) |
-| Output | Terminal progress + summary, plus a self-contained single-file HTML report saved to the current directory |
+| Output | Terminal progress + summary, plus a self-contained single-file HTML report (~1.7 MB, offline) with interactive ECharts — hover tooltips, dataZoom zoom-to-detail, a 3D drag-to-rotate network — and static PNG chart fallbacks |
 | Local-first | No accounts, no server, no telemetry; model weights downloadable on demand and cached locally |
 
 ## Documentation

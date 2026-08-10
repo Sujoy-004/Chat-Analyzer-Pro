@@ -146,7 +146,8 @@ def test_report_card_wellformed(tmp_path):
     for tab in ("overview", "participants", "flow", "words", "sentiment", "narrative"):
         assert f'id="tab-{tab}"' in html, f"missing tab: {tab}"
     assert "What's going on" in html
-    assert html.count("data:image/png;base64,") >= 4, "fewer than 4 charts"
+    assert html.count("echarts.init") >= 1, "interactive ECharts runtime missing"
+    assert 'id="chart-timeline"' in html, "missing interactive timeline chart"
     assert '<meta charset="utf-8">' in html
 
 

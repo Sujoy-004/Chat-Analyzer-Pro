@@ -71,7 +71,9 @@ chat export file
 │  terminal: "Messages: N" line (main.py), ASCII summary panel       │
 │            (render.py, rich), stage narration (pipeline.py)         │
 │  file:     <stem>_report.html in cwd (report_html.py, jinja2,      │
-│            base64 PNG data URIs, autoescape)                       │
+│            autoescape) — base64 PNG data URIs + interactive         │
+│            ECharts specs (cli/chart_json.py), vendored JS           │
+│            bundles inlined from assets/ (importlib.resources)       │
 │  browser:  best-effort auto-open (CHAT_ANALYZER_NO_OPEN=1 opt-out) │
 └────────────────────────────────────────────────────────────────────┘
 ```
@@ -97,6 +99,7 @@ Every module that exists in `src/chat_analyzer/`, with its responsibility:
 | `cli/adapters.py` | `adapt(...)` — the ONLY place that knows each analysis module's internal dict shape; extracts serializable scalars; `build_insights()` generates the narrative lead-in sentences |
 | `cli/render.py` | Terminal end-of-run rendering: skipped/system notes, rich ASCII "Summary" panel (no charts in the terminal) |
 | `cli/report_html.py` | Single-file HTML report: jinja2 autoescape template, sanitized `<stem>_report.html` written to cwd, best-effort browser open (`CHAT_ANALYZER_NO_OPEN=1`) |
+| `cli/chart_json.py` | `build_chart_specs()` (timeline/activity/participants/sentiment/health/network) + `build_emotion_spec()` — ECharts option dicts behind the `charts_json` contract; strictly JSON-serializable, never raises |
 | `cli/zip_input.py` | `.zip` export support: transcript discovery, interactive transcript selection, zip-level media-file counting, merged parse |
 | `cli/nlp_gate.py` | Silent NLP availability probe (torch+transformers importable), locked model constants, `model_cached()`, guarded `install_nlp()`, Windows `MAX_PATH` guard |
 | `ingest/__init__.py` | Package marker |
@@ -179,6 +182,7 @@ template:
 | `emotion`/`summary` | **None when the NLP gate is OFF** (silent degrade); serial blocks when on |
 | `narrative` | always present — Tier A observations; Tier B `narrative_summary` when generated |
 | `charts` | `{name: "data:image/png;base64,…"}` — six always, `"emotion"` when NLP on |
+| `charts_json` | `{name: ECharts option dict}` — interactive specs for the same charts (`"emotion"` when NLP on); a chart with no buildable spec renders its PNG from `charts` instead |
 | `insights` | up to 11 narrative lead-in sentences |
 | `report_path` | filled by `main.py` after the HTML write |
 
@@ -272,11 +276,30 @@ decision log):
 - The Jinja2 template is an inline module constant; `autoescape` is
   **explicitly enabled** via `select_autoescape(["html","xml"])` because chat
   content is untrusted input (plain jinja2 defaults to `False`).
-- Chart images are `data:image/png;base64,…` data URIs, **validated at the
-  boundary** (only URIs with the `data:image/png;base64,` prefix reach the
-  template — no `|safe` filter needed).
+- Charts are **interactive ECharts** by default — hover tooltips, `dataZoom`
+  (inside + slider) zoom-to-detail on the timeline/sentiment/health lines,
+  per-cell heatmap tooltips, and a true **3D network** (`scatter3D` +
+  `lines3D` on `grid3D`, drag-to-rotate with `autoRotate`). WebGL-less
+  browsers get the static PNG network instead.
+- `echarts.min.js` (~1 MB) and `echarts-gl.min.js` (~0.6 MB) are **vendored**
+  in `src/chat_analyzer/assets/` (shipped via the wheel's `artifacts` glob)
+  and **inlined** at render time with `importlib.resources` — the report stays
+  a single offline file, no CDN, and grows to ~1.6–2 MB (expected). A missing
+  bundle degrades to `""` and the report still renders the PNGs.
+- Chart images are `data:image/png;base64,…` data URIs (the **fallback** when
+  a chart has no interactive spec), **validated at the boundary** (only URIs
+  with the `data:image/png;base64,` prefix reach the template — no `|safe`
+  filter needed).
+- Interactive specs come from `cli/chart_json.py` (the `charts_json`
+  contract) and are injected via Jinja `|tojson` (escapes `<`, `&`, etc.);
+  every inlined bundle is scrubbed for `</script`/`<!--` so chat content can
+  never escape the inline `<script>`. Boundary validation
+  (`_validate_charts_json`) drops any spec that cannot JSON round-trip, which
+  re-triggers its PNG fallback.
 - Chart encoding failures degrade to an empty string (`_safe_chart`) — a
-  crash in one plot can never kill the report.
+  crash in one plot can never kill the report. Spec building never raises
+  either (`build_chart_specs` logs and omits a failing chart, which falls
+  back to PNG).
 - Filenames are sanitized with an explicit invalid-char regex
   (`[<>:"/\\|?*\x00-\x1f\x7f]`), falling back to `chat_analysis` when empty.
 - Written with UTF-8 (explicit `utf-8` encoding, never platform default).
@@ -340,6 +363,7 @@ model + side size before construction.
 | CLI | typer, rich | typer app + rich Console/Progress/Status/Panel; ASCII-first |
 | Data | pandas, numpy | canonical DataFrame everywhere |
 | Charts | matplotlib (Agg backend), seaborn | figure-returning wrappers encoded to base64 PNG |
+| Interactive charts | echarts + echarts-gl (vendored `assets/`, inlined) | option specs via `cli/chart_json.py`; PNG figures stay the fallback |
 | Word cloud | wordcloud | lazy import inside `plot_wordcloud`; degrades to a text note |
 | Sentiment | vaderSentiment | base install; consensus path |
 | Graph | networkx | directed interaction graph, centrality, communities |
@@ -348,7 +372,7 @@ model + side size before construction.
 | PDF / images | reportlab, Pillow | `reporting/pdf_report.py` — shipped, not wired into CLI (v2) |
 | NLP (optional) | torch, transformers, sentencepiece | `[nlp]` extra; lazy imports |
 | Dev/test | pytest, pytest-cov, ruff | `[dev]` extra; CI-quality gates |
-| Not shipped | plotext (dropped), Streamlit (deleted), plotly | charts exist only in the HTML report |
+| Not shipped | plotext (dropped), Streamlit (deleted), plotly (ECharts used instead) | charts exist only in the HTML report |
 
 ## What's not implemented yet
 

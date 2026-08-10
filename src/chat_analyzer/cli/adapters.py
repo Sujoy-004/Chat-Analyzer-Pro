@@ -32,12 +32,13 @@ def adapt(
     emotion=None,
     summary=None,
     narrative=None,
+    charts_json=None,
 ) -> AnalysisResults:
     """Assemble the AnalysisResults contract from the analysis module dicts.
 
-    health/network/emotion/summary/narrative are keyword-only with None
-    defaults (reconciliation note #2) so Phase 2 direct-call tests stay
-    green. The always-on narrative block (B2) is present on every result —
+    health/network/emotion/summary/narrative/charts_json are keyword-only
+    with None defaults (reconciliation note #2) so Phase 2 direct-call tests
+    stay green. The always-on narrative block (B2) is present on every result —
     a default empty Tier-A-shaped dict when the caller passes nothing.
     """
     total_messages = len(df)
@@ -155,6 +156,7 @@ def adapt(
         summary=summary_block,
         narrative=narrative_block,
         charts=dict(charts),
+        charts_json=dict(charts_json or {}),
         insights=build_insights(
             stats,
             participant_dict,

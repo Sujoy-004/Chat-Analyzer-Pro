@@ -121,10 +121,16 @@ def _write(tmp_path: Path) -> Path:
 
 def test_single_file_no_external_refs(tmp_path):
     out = _write(tmp_path).read_text(encoding="utf-8")
-    assert "http://" not in out
-    assert "https://" not in out
+    # D-08 self-containment: the single page LOADS nothing at runtime — the
+    # ECharts bundles are inlined <script> and charts are base64 PNG data
+    # URIs, so no element references an external resource. Inert URL
+    # constants inside the vendored minified bundles (SVG namespaces, map
+    # attribution strings) are never fetched and are allowed.
     assert "<script src" not in out
+    assert 'src="http' not in out
+    assert 'url("http' not in out
     assert "data:image/png;base64," in out
+    assert "echarts.init" in out
 
 
 def test_charset_and_utf8_emoji(tmp_path):

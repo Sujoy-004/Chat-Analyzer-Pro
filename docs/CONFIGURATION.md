@@ -136,6 +136,13 @@ The terminal prints an **NLP status line** on every run ("NLP enabled..." or
   `my-chat_report.html`).
 - **Format**: a single self-contained HTML file — all charts/assets are
   base64-embedded; the file is written UTF-8 (`report_html.py:296`).
+- **Interactive charts**: charts render as interactive ECharts — hover
+  tooltips, dataZoom zoom-to-detail on the timeline/sentiment/health trends,
+  and a 3D drag-to-rotate conversation network — driven by `charts_json`
+  specs (`cli/chart_json.py`). The ECharts bundles are inlined into the file,
+  so it stays single-file and offline (a **~1.7 MB** size is normal). Any
+  chart without a buildable spec — or any WebGL-less browser — falls back to
+  its static PNG; nothing is ever missing.
 - **Auto-open**: after writing, the report opens in the default browser unless
   `CHAT_ANALYZER_NO_OPEN=1`; if the browser can't open, the absolute path is
   printed instead. It also honors the `BROWSER` env var (CI sets

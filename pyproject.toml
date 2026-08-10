@@ -35,6 +35,7 @@ chat-analyzer = "chat_analyzer.cli:app"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/chat_analyzer"]
+artifacts = ["src/chat_analyzer/assets/*"]
 
 [tool.pytest.ini_options]
 markers = [

@@ -147,7 +147,12 @@ open, the report's absolute path is printed instead. Set
 `CHAT_ANALYZER_NO_OPEN=1` to suppress auto-opening.
 
 The report is a single self-contained HTML file — all charts and assets are
-embedded, so you can share it or archive it as-is.
+embedded, so you can share it or archive it as-is. Its charts are
+**interactive ECharts**: hover for tooltips, scroll or drag to zoom into the
+timeline, sentiment and health trends, and a true **3D drag-to-rotate
+conversation network**. The embedded runtime keeps the file offline; a report
+size of **~1.7 MB** is normal. Any chart that can't be built falls back to
+its static image, so the report always shows all charts.
 
 ## Common setup issues
 

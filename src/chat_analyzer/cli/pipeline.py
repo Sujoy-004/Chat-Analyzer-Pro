@@ -23,6 +23,7 @@ import io
 import logging
 from pathlib import Path
 
+from chat_analyzer.cli.chart_json import build_chart_specs, build_emotion_spec
 from chat_analyzer.cli.contracts import AnalysisResults, ParseReport
 from chat_analyzer.ingest.ingestion import messages_to_dataframe
 
@@ -249,6 +250,11 @@ def run_pipeline(path: Path, console) -> AnalysisResults:
                     "health": _safe_chart(viz.plot_relationship_health_trend(health_trend_df)),
                     "network": _safe_chart(network_figure(df)),
                 }
+
+                # Interactive ECharts specs for the same charts (charts_json).
+                # A spec failing to build degrades to the PNG above — each
+                # chart is skipped individually and never kills the report.
+                charts_json = build_chart_specs(df, df_sent, health_trend_df, network_res)
             if captured.getvalue():
                 logger.debug("Captured analysis-stage output:\n%s", captured.getvalue())
 
@@ -304,6 +310,9 @@ def run_pipeline(path: Path, console) -> AnalysisResults:
                     )
                 if emotion_summary is not None:
                     charts["emotion"] = _safe_chart(emotion_figure(emotion_summary))
+                    emotion_spec = build_emotion_spec(emotion_summary)
+                    if emotion_spec:
+                        charts_json["emotion"] = emotion_spec
 
             with stage(console, progress, task_id, "Summarizing conversation"):
                 console.print(
@@ -389,6 +398,7 @@ def run_pipeline(path: Path, console) -> AnalysisResults:
             content,
             sent_summary,
             charts,
+            charts_json=charts_json,
             health=health_res,
             network=network_res,
             emotion=emotion_summary,
