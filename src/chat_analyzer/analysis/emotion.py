@@ -104,26 +104,8 @@ class EmotionAnalyzer:
         
         try:
             if self.pipeline is not None:
-                # transformers 4.x with top_k=None returns a FLAT list of
-                # {"label":.., "score":..} dicts for every class, while 5.x
-                # nests it one level deeper: [[{"label":..,"score":..}, ...]].
-                # Indexing incorrectly caught a dict/list before and a
-                # TypeError was swallowed by the except below, silently
-                # degrading every scored message to uniform 1/6 neutral
-                # scores. Normalize both shapes so real scores surface
-                # (C-… 5.x compat).
-                res = self.pipeline(text[:512])  # Limit to 512 chars for efficiency
-                if res and isinstance(res[0], list):
-                    res = res[0]
-
-                # Convert to our standard format
-                emotion_scores = {item['label']: float(item['score']) for item in res}
-
-                # Ensure all 6 emotions are present
-                for emotion in self.emotions:
-                    emotion_scores.setdefault(emotion, 0.0)
-
-                return emotion_scores
+                # Limit to 512 chars for efficiency
+                return self._parse_pipeline_result(self.pipeline(text[:512]))
             else:
                 # Fallback to rule-based detection
                 return self._rule_based_emotion(text)
@@ -131,7 +113,57 @@ class EmotionAnalyzer:
         except Exception as e:  # noqa: BLE001 - per-message scoring failure degrades to neutral scores, never crashes the batch
             print(f"⚠️ Error analyzing message: {e}")
             return self._get_neutral_emotions()
-    
+
+    def _parse_pipeline_result(self, res) -> dict[str, float]:
+        """Normalize a transformers per-message result to our standard score dict.
+
+        transformers 4.x with top_k=None returns a FLAT list of
+        {"label":.., "score":..} dicts for every class, while 5.x nests it
+        one level deeper: [[{"label":..,"score":..}, ...]]. Normalize both
+        shapes so real scores surface (C-… 5.x compat).
+        """
+        if res and isinstance(res[0], list):
+            res = res[0]
+
+        # Convert to our standard format
+        emotion_scores = {item['label']: float(item['score']) for item in res}
+
+        # Ensure all 6 emotions are present
+        for emotion in self.emotions:
+            emotion_scores.setdefault(emotion, 0.0)
+
+        return emotion_scores
+
+    def _is_scorable(self, text) -> bool:
+        """Whether a message would be scored instead of short-circuiting to neutral."""
+        if not text or not isinstance(text, str) or text.strip() == "":
+            return False
+        if "<Media omitted>" in text or "<media omitted>" in text.lower():
+            return False
+        return len(text.strip()) >= 3
+
+    def _score_batch(self, texts: list[str], batch_size: int) -> list[dict[str, float]]:
+        """Score texts in chunks of batch_size, degrading per-message on any
+        batched-call or parse failure so results stay identical to sequential."""
+        scored = []
+        size = max(1, batch_size)
+        for i in range(0, len(texts), size):
+            chunk = texts[i:i + size]
+            try:
+                batch_out = self.pipeline(chunk, batch_size=size, top_k=None)
+                if not isinstance(batch_out, list):
+                    raise TypeError("pipeline returned a non-list result")
+                if len(batch_out) == 1 and isinstance(batch_out[0], list) and len(batch_out[0]) == len(chunk):
+                    batch_out = batch_out[0]
+                if len(batch_out) != len(chunk):
+                    raise ValueError("pipeline returned a non-aligned result shape")
+                chunk_scores = [self._parse_pipeline_result(item) for item in batch_out]
+            except Exception as e:  # noqa: BLE001 - batched failure degrades to per-message scoring, never crashes the batch
+                print(f"⚠️ Batch failed ({e}), falling back to per-message...")
+                chunk_scores = [self.analyze_single_message(t) for t in chunk]
+            scored.extend(chunk_scores)
+        return scored
+
     def _get_neutral_emotions(self) -> dict[str, float]:
         """Return neutral emotion scores."""
         return {emotion: 1/len(self.emotions) for emotion in self.emotions}
@@ -206,13 +238,36 @@ class EmotionAnalyzer:
             df_copy[f'emotion_{emotion}'] = 0.0
         
         # Process messages
-        for idx, row in df_copy.iterrows():
-            message = row[text_column]
-            emotion_scores = self.analyze_single_message(message)
-            
-            # Add scores to dataframe
-            for emotion, score in emotion_scores.items():
-                df_copy.at[idx, f'emotion_{emotion}'] = score
+        if self.pipeline is not None:
+            # Batch path: group scorable rows, score them in batches of
+            # batch_size, and give skipped rows the neutral 1/6 scores.
+            pending = []
+            skipped = []
+            for idx, text in df_copy[text_column].items():
+                if self._is_scorable(text):
+                    pending.append((idx, str(text)[:512]))
+                else:
+                    skipped.append(idx)
+
+            scores_by_idx = {idx: self._get_neutral_emotions() for idx in skipped}
+
+            if pending:
+                scored = self._score_batch([t for _, t in pending], batch_size)
+                for (idx, _), scores in zip(pending, scored):
+                    scores_by_idx[idx] = scores
+
+            for idx, scores in scores_by_idx.items():
+                for emotion in self.emotions:
+                    df_copy.at[idx, f'emotion_{emotion}'] = scores.get(emotion, 0.0)
+        else:
+            # Rule-based fallback, unchanged per-message loop
+            for idx, row in df_copy.iterrows():
+                message = row[text_column]
+                emotion_scores = self.analyze_single_message(message)
+
+                # Add scores to dataframe
+                for emotion, score in emotion_scores.items():
+                    df_copy.at[idx, f'emotion_{emotion}'] = score
         
         # Add dominant emotion column
         emotion_cols = [f'emotion_{e}' for e in self.emotions]

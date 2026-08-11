@@ -217,8 +217,10 @@ class TestEmotionClassification(unittest.TestCase):
         `from transformers import pipeline`.
         """
 
-        def _classifier(text):
-            return self.LOVE_SCORES if 'love' in str(text).lower() else self.JOY_SCORES
+        def _classifier(texts, **kwargs):
+            def _score(text):
+                return self.LOVE_SCORES if 'love' in str(text).lower() else self.JOY_SCORES
+            return [_score(t) for t in texts]
 
         from chat_analyzer.analysis import emotion as _emotion_module
 
@@ -260,10 +262,11 @@ class TestEmotionClassification(unittest.TestCase):
         The real EmotionAnalyzer must normalize both shapes so scores are not
         silently degraded to uniform 1/6 neutral (C-… 5.x compat regression)."""
 
-        def _nested_classifier(text):
-            if 'love' in str(text).lower():
-                return [list(self.LOVE_SCORES)]
-            return [list(self.JOY_SCORES)]
+        def _nested_classifier(texts, **kwargs):
+            return [
+                [list(self.LOVE_SCORES)] if 'love' in str(t).lower() else [list(self.JOY_SCORES)]
+                for t in texts
+            ]
 
         from chat_analyzer.analysis import emotion as _emotion_module
 

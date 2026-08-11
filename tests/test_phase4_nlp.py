@@ -54,30 +54,34 @@ def _console() -> Console:
     return Console(file=io.StringIO(), force_terminal=False)
 
 
-def _fake_emotion_classifier(text):
+def _fake_emotion_classifier(texts, **kwargs):
     """Content-varied classifier: same faithful shape, dominant label varies
     per message so the distribution is non-uniform (the buggy [0] parse
     yields uniform 1/6 scores for every message and cannot pass Test A)."""
-    lowered = str(text).lower()
-    if "❤️" in lowered or "love" in lowered:
-        return [
-            {"label": "love", "score": 0.8},
-            {"label": "joy", "score": 0.1},
-            {"label": "sadness", "score": 0.02},
-            {"label": "anger", "score": 0.02},
-            {"label": "fear", "score": 0.02},
-            {"label": "surprise", "score": 0.04},
-        ]
-    if "sorry" in lowered or "sad" in lowered or "miss" in lowered:
-        return [
-            {"label": "sadness", "score": 0.8},
-            {"label": "joy", "score": 0.1},
-            {"label": "anger", "score": 0.02},
-            {"label": "fear", "score": 0.03},
-            {"label": "surprise", "score": 0.02},
-            {"label": "love", "score": 0.03},
-        ]
-    return FAITHFUL_SCORES
+
+    def _per_text(text):
+        lowered = str(text).lower()
+        if "❤️" in lowered or "love" in lowered:
+            return [
+                {"label": "love", "score": 0.8},
+                {"label": "joy", "score": 0.1},
+                {"label": "sadness", "score": 0.02},
+                {"label": "anger", "score": 0.02},
+                {"label": "fear", "score": 0.02},
+                {"label": "surprise", "score": 0.04},
+            ]
+        if "sorry" in lowered or "sad" in lowered or "miss" in lowered:
+            return [
+                {"label": "sadness", "score": 0.8},
+                {"label": "joy", "score": 0.1},
+                {"label": "anger", "score": 0.02},
+                {"label": "fear", "score": 0.03},
+                {"label": "surprise", "score": 0.02},
+                {"label": "love", "score": 0.03},
+            ]
+        return FAITHFUL_SCORES
+
+    return [_per_text(t) for t in texts]
 
 
 def _fake_summarizer(text, **kwargs):

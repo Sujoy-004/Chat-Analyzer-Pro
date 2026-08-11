@@ -44,20 +44,17 @@ def identify_conversation_starters(df: pd.DataFrame, gap_threshold_minutes: int 
     df['time_diff'] = df['datetime'].diff()
     df['time_diff_minutes'] = df['time_diff'].dt.total_seconds() / 60
     df['prev_sender'] = df['sender'].shift(1)
-    df['is_conversation_starter'] = False
+    
+    # Mark conversation starters based on gaps or date changes (vectorized).
+    # A gap above the threshold OR a calendar-day change starts a new
+    # conversation. Row 0 is always a starter: its NaN gap compares False,
+    # but its date-change comparison against the shifted NaT is True.
+    different_day = df['datetime'].dt.normalize() != df['datetime'].dt.normalize().shift()
+    gap_ok = df['time_diff_minutes'] > gap_threshold_minutes
+    df['is_conversation_starter'] = (gap_ok | different_day).fillna(False)
     
     # First message is always a conversation starter
     df.loc[0, 'is_conversation_starter'] = True
-    
-    # Mark conversation starters based on gaps or date changes
-    for i in range(1, len(df)):
-        current_time = df.loc[i, 'datetime']
-        prev_time = df.loc[i-1, 'datetime']
-        time_gap_minutes = (current_time - prev_time).total_seconds() / 60
-        different_day = current_time.date() != prev_time.date()
-        
-        if time_gap_minutes > gap_threshold_minutes or different_day:
-            df.loc[i, 'is_conversation_starter'] = True
     
     return df
 
@@ -121,20 +118,17 @@ def analyze_response_patterns(df: pd.DataFrame) -> dict[str, Any]:
     # Get valid responses (excluding conversation starters and same-sender continuations)
     response_df = df[df['is_conversation_starter'] == False].copy()
     
-    response_analysis = []
-    for i, row in response_df.iterrows():
-        prev_sender = row['prev_sender']
-        current_sender = row['sender']
-        response_time = row['time_diff_minutes']
-        
-        # Valid response: different sender with valid response time
-        if prev_sender != current_sender and pd.notna(response_time):
-            response_analysis.append({
-                'responder': current_sender,
-                'responded_to': prev_sender,
-                'response_time_minutes': response_time,
-                'datetime': row['datetime']
-            })
+    # Valid response: different sender with valid response time (vectorized).
+    # Preserves the exact row order and field values of the old iterrows loop.
+    valid = (
+        (response_df['prev_sender'] != response_df['sender'])
+        & response_df['time_diff_minutes'].notna()
+    )
+    response_analysis = response_df[valid].rename(columns={
+        'sender': 'responder',
+        'prev_sender': 'responded_to',
+        'time_diff_minutes': 'response_time_minutes',
+    })[['responder', 'responded_to', 'response_time_minutes', 'datetime']].to_dict('records')
     
     if not response_analysis:
         return {'error': 'No valid responses found'}
@@ -211,11 +205,9 @@ def calculate_dominance_scores(df: pd.DataFrame) -> dict[str, Any]:
         avg_lengths = pd.Series()
     
     # 3. Conversation control patterns
-    conversation_endings = []
-    for i in range(len(df)):
-        # If next message is a conversation starter or we're at the end
-        if i == len(df) - 1 or (i < len(df) - 1 and df.loc[i+1, 'is_conversation_starter']):
-            conversation_endings.append(df.loc[i, 'sender'])
+    next_starter = df['is_conversation_starter'].shift(-1, fill_value=False)
+    is_ending = next_starter | (np.arange(len(df)) == len(df) - 1)
+    conversation_endings = df.loc[is_ending, 'sender'].tolist()
     
     ending_counts = pd.Series(conversation_endings).value_counts()
     if len(ending_counts) >= 2:
@@ -225,23 +217,11 @@ def calculate_dominance_scores(df: pd.DataFrame) -> dict[str, Any]:
     
     # 4. Message burst patterns
     df_copy = df.copy()
-    df_copy['is_burst'] = False
-    df_copy['burst_length'] = 1
-    
-    current_sender = None
-    burst_length = 0
-    
-    for i in range(len(df_copy)):
-        if df_copy.loc[i, 'sender'] == current_sender:
-            burst_length += 1
-            df_copy.loc[i, 'burst_length'] = burst_length
-            if burst_length > 1:
-                df_copy.loc[i, 'is_burst'] = True
-                if i > 0 and df_copy.loc[i-1, 'burst_length'] == 1:
-                    df_copy.loc[i-1, 'is_burst'] = True
-        else:
-            current_sender = df_copy.loc[i, 'sender']
-            burst_length = 1
+    sender = df_copy['sender']
+    run_id = (sender != sender.shift()).cumsum()
+    df_copy['burst_length'] = sender.groupby(run_id).cumcount() + 1
+    run_size = sender.groupby(run_id).transform('size')
+    df_copy['is_burst'] = run_size >= 2
     
     burst_stats = df_copy.groupby('sender').agg({
         'is_burst': 'sum',
@@ -1066,7 +1046,8 @@ def _plot_original_dashboard(analysis_results: dict[str, Any], figsize: tuple[in
 def analyze_relationship_health(
     df: pd.DataFrame,
     gap_threshold_minutes: int = 60,
-    include_gamification: bool = True
+    include_gamification: bool = True,
+    include_rolling_health: bool = True
 ) -> dict[str, Any]:
     """
     Complete relationship health analysis pipeline with gamification features.
@@ -1075,6 +1056,7 @@ def analyze_relationship_health(
         df: DataFrame with columns: datetime, sender, message, (optional: message_length)
         gap_threshold_minutes: Time gap to consider new conversation start
         include_gamification: Whether to include Day 14 gamification features
+        include_rolling_health: Whether to include the rolling health score series
         
     Returns:
         Complete relationship health analysis results with gamification
@@ -1116,7 +1098,8 @@ def analyze_relationship_health(
         
         if 'message' in df_prepared.columns:
             results['emoji_personality'] = analyze_emoji_personality(df_prepared)
-        
+    
+    if include_rolling_health:
         # Add rolling health score
         results['rolling_health'] = calculate_rolling_health_score(df_prepared)
     

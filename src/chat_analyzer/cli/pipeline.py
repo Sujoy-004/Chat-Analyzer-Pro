@@ -221,7 +221,7 @@ def run_pipeline(path: Path, console) -> AnalysisResults:
                     analyze_relationship_health,
                 )
 
-                health_res = analyze_relationship_health(df)
+                health_res = analyze_relationship_health(df, include_gamification=False)
                 network_res = analyze_network(df)
 
                 from chat_analyzer.utils.visualization import ChatVisualizer

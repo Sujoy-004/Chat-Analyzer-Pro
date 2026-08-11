@@ -211,6 +211,9 @@ generated_reports/
 # Personal deferred-notes scratchpad (never committed, never pushed)
 DEFERRED.md
 
+# Code-review findings scratchpad (never committed, never pushed)
+REVIEW.md
+
 # Database files
 *.db
 *.sqlite
