@@ -214,6 +214,9 @@ DEFERRED.md
 # Code-review findings scratchpad (never committed, never pushed)
 REVIEW.md
 
+# Agent instructions (local-only, never tracked)
+AGENTS.md
+
 # Database files
 *.db
 *.sqlite
