@@ -103,6 +103,16 @@ function initCharts() {
     try {
       _charts[key] = echarts.init(el);
       _charts[key].setOption(option);
+      if (key === 'sentiment') {
+        _charts[key].setOption({
+          tooltip: {
+            valueFormatter: function(v) {
+              var n = Number(Array.isArray(v) ? v[v.length - 1] : v);
+              return isNaN(n) ? '' : n.toFixed(3);
+            }
+          }
+        });
+      }
     } catch (e) { _charts[key] = null; }
   }
 }
@@ -236,6 +246,7 @@ TEMPLATE = """<!DOCTYPE html>
   <div class="panel" id="tab-sentiment">
     <div class="card">
       <p class="lead">{{ insights[4] }}</p>
+      <p class="narrative-summary">Each day's average sentiment score: 0 = neutral, +1 = positive, &minus;1 = negative (red dashed = 7-day trend).</p>
       {% if charts_json.sentiment %}<div id="chart-sentiment" class="chart"></div>{% else %}{% if charts.sentiment %}<img class="chart" alt="Sentiment over time" src="{{ charts.sentiment }}">{% endif %}{% endif %}
       <table>
         <tr><th>Sentiment</th><th>Messages</th></tr>

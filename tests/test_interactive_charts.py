@@ -45,11 +45,15 @@ def chat_df() -> pd.DataFrame:
 
 
 def _health_trend_df() -> pd.DataFrame:
-    """The rolling-health Trend DataFrame shape (date renamed to timestamp)."""
+    """The rolling-health Trend DataFrame shape (date renamed to timestamp).
+
+    Values are on the production 0..1 scale — the interactive spec scales them
+    ×100 (WS-2), so the >50 guard below genuinely catches a missing ×100.
+    """
     return pd.DataFrame(
         {
             "timestamp": pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"]),
-            "health_score": [80.0, 72.5, 90.0],
+            "health_score": [0.8, 0.725, 0.9],
             "grade": ["B", "B", "A"],
         }
     )
@@ -89,12 +93,19 @@ def test_build_chart_specs_keys_serializable(chat_df):
     assert descending == sorted(descending, reverse=True)
 
     sentiment = specs["sentiment"]
-    assert sentiment["yAxis"]["min"] == -1 and sentiment["yAxis"]["max"] == 1
-    assert [s["name"] for s in sentiment["series"]] == ["VADER compound", "7-day avg"]
+    assert sentiment["yAxis"]["min"] == "dataMin" and sentiment["yAxis"]["max"] == "dataMax"
+    assert [s["name"] for s in sentiment["series"]] == [
+        "Sentiment (daily average)",
+        "Sentiment trend (7-day average)",
+    ]
+    assert sentiment["series"][1]["lineStyle"]["color"] == "#d62728"
 
     health_spec = specs["health"]
     assert health_spec["yAxis"]["name"] == "health score"
     assert health_spec["series"][0]["markLine"]["data"] == [{"yAxis": 50}]
+    # WS-2: 0..1 fixture values are scaled ×100 onto the 0..100 axis — the >50
+    # guard fails if the ×100 fix regresses.
+    assert all(v > 50 for v in health_spec["series"][0]["data"])
 
 
 def test_network_spec_is_3d(chat_df):

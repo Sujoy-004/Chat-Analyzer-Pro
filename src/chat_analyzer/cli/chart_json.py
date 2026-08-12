@@ -252,14 +252,14 @@ def _build_sentiment(df_sent: pd.DataFrame) -> dict | None:
         },
         "yAxis": {
             "type": "value",
-            "min": -1,
-            "max": 1,
+            "min": "dataMin",
+            "max": "dataMax",
             "splitNumber": 4,
-            "name": "compound",
+            "name": "Sentiment (-1 .. +1)",
         },
         "series": [
             {
-                "name": "VADER compound",
+                "name": "Sentiment (daily average)",
                 "type": "line",
                 "data": [_float_or_none(v) for v in daily.values],
                 "showSymbol": False,
@@ -268,12 +268,12 @@ def _build_sentiment(df_sent: pd.DataFrame) -> dict | None:
                 "emphasis": {"focus": "series"},
             },
             {
-                "name": "7-day avg",
+                "name": "Sentiment trend (7-day average)",
                 "type": "line",
                 "data": [_float_or_none(v) for v in moving_avg.values],
                 "showSymbol": False,
                 "smooth": True,
-                "lineStyle": {"type": "dashed", "width": 2},
+                "lineStyle": {"type": "dashed", "width": 2, "color": "#d62728"},
                 "emphasis": {"focus": "series"},
             },
         ],
@@ -299,7 +299,10 @@ def _build_health(health_trend_df: pd.DataFrame) -> dict | None:
         return None
     ts = pd.to_datetime(health_trend_df["timestamp"])
     dates = [pd.Timestamp(t).strftime("%Y-%m-%d") for t in ts[valid]]
-    values = [_float_or_none(v) for v in score[valid]]
+    # WS-2 (Option A): scores are 0..1 but the axis is 0..100 — scale ×100 so
+    # the line sits correctly and matches the PNG fallback's rendered span.
+    values = [v * 100 if v is not None else None
+              for v in (_float_or_none(x) for x in score[valid])]
     return {
         "tooltip": {"trigger": "axis"},
         "grid": _LINE_GRID,
