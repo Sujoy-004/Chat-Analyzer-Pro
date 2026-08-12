@@ -161,7 +161,7 @@ def _reset_emotion_singletons():
 
 
 def test_emotion_summary_with_mocked_nlp():
-    """Test A (gate ON): emotion + summary render from the real modules."""
+    """Test A (gate ON): emotion + Tier B narrative render from the real modules."""
     with _mocked_nlp(gate_on=True):
         results = run_pipeline(DATA / "whatsapp_sample.txt", _console())
 
@@ -175,10 +175,6 @@ def test_emotion_summary_with_mocked_nlp():
     avg = emotion["average_scores"]
     assert len(set(avg.values())) >= 2, "average emotion scores must not be uniform"
 
-    summary = results["summary"]
-    assert summary is not None
-    assert summary["text"] and summary["text"].strip()
-
     assert "emotion" in results["charts"]
     assert results["charts"]["emotion"].startswith("data:image/png;base64,")
 
@@ -191,12 +187,11 @@ def test_emotion_summary_with_mocked_nlp():
 
 
 def test_basic_run_without_nlp():
-    """Test B (gate OFF): silent basic run — emotion/summary None (D-02/D-06)."""
+    """Test B (gate OFF): silent basic run - emotion None (D-02/D-06)."""
     with _mocked_nlp(gate_on=False):
         results = run_pipeline(DATA / "whatsapp_sample.txt", _console())
 
     assert results["emotion"] is None
-    assert results["summary"] is None
     assert results["stats"]["total_messages"] == 27
     assert results["participants"]
     assert results["sentiment"]["distribution"]
@@ -211,8 +206,9 @@ def test_basic_run_without_nlp():
 
 
 def test_report_contains_emotion_and_summary_tabs(tmp_path, monkeypatch):
-    """Test C: the HTML report carries the emotion + summary tabs — real
-    content with the gate ON, the pip-install unavailable note OFF."""
+    """Test C: the HTML report carries the emotion + narrative tabs - real
+    content with the gate ON, the pip-install unavailable note OFF. The Summary
+    tab is gone since WS-5 removed it entirely."""
     from chat_analyzer.cli.report_html import write_report
 
     src = tmp_path / "whatsapp_sample.txt"
@@ -224,7 +220,7 @@ def test_report_contains_emotion_and_summary_tabs(tmp_path, monkeypatch):
     report = write_report(results, src)
     html = report.read_text(encoding="utf-8")
     assert 'id="tab-emotion"' in html
-    assert 'id="tab-summary"' in html
+    assert 'id="tab-summary"' not in html
     assert "A test summary." in html
     assert 'id="tab-narrative"' in html
     assert "Tier B enabled" in html

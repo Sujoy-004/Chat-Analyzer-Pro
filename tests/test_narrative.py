@@ -86,13 +86,25 @@ class TestFixtureAArcAndDriver:
         """All observation kinds come from the documented stable set."""
         result = analyze_narrative(self._df_a())
         for obs in result["observations"]:
-            assert obs["kind"] in ("arc", "driver", "reciprocity", "engagement")
+            assert obs["kind"] in (
+                "snapshot",
+                "arc",
+                "driver",
+                "reciprocity",
+                "engagement",
+            )
             assert obs["confidence"] in {"high", "medium", "low"}
 
     def test_fixture_b_no_strong_driver_or_arc(self):
-        """Symmetric quick-reply chat (Fixture B) must NOT claim a driver/arc."""
+        """Symmetric quick-reply chat (Fixture B) must NOT claim a driver/arc.
+
+        The always-on snapshot baseline (WS-6) is factual and excluded from
+        the speculative-claim checks.
+        """
         result = analyze_narrative(self._df_b())
         for obs in result["observations"]:
+            if obs["kind"] == "snapshot":
+                continue
             assert obs["confidence"] not in {"high", "medium"}
             assert obs["kind"] not in {"driver", "arc"}
 
@@ -111,18 +123,28 @@ class TestFixtureAArcAndDriver:
         assert analyze_narrative(_make_df([("Rima", "a"), ("Rima", "b")]))["observations"] == []
 
     def test_nan_sender_never_crashes(self):
-        """NaN senders quietly degrade rather than crash or mislabel."""
+        """NaN senders quietly degrade rather than crash or mislabel.
+
+        WS-6: the factual snapshot baseline is always present; no speculative
+        observation may be emitted for a degenerate sender set.
+        """
         df = _make_df([("Alice", "hello"), ("Bob", "hey there")])
         df.loc[0, "sender"] = None
         result = analyze_narrative(df)
-        assert result["observations"] == []
-        assert result["narrative_summary"] == ""
+        assert all(obs["kind"] == "snapshot" for obs in result["observations"])
+        assert len(result["observations"]) == 1
+        assert result["narrative_summary"].startswith("Snapshot:")
 
     def test_outcome_metrics_and_hedged_tone(self):
-        """narrative_summary is a hedged non-empty sentence for a modest chat."""
+        """narrative_summary leads with the factual snapshot (WS-6); every
+        speculative observation stays hedged."""
         result = analyze_narrative(self._df_a())
         assert result["narrative_summary"]
-        assert _hedged(result["narrative_summary"])
+        assert result["observations"][0]["kind"] == "snapshot"
+        assert result["observations"][0]["confidence"] == "high"
+        for obs in result["observations"]:
+            if obs["kind"] != "snapshot":
+                assert _hedged(obs["text"])
         assert set(result) == {
             "observations",
             "narrative_summary",
