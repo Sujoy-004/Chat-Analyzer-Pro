@@ -30,13 +30,12 @@ def adapt(
     health=None,
     network=None,
     emotion=None,
-    summary=None,
     narrative=None,
     charts_json=None,
 ) -> AnalysisResults:
     """Assemble the AnalysisResults contract from the analysis module dicts.
 
-    health/network/emotion/summary/narrative/charts_json are keyword-only
+    health/network/emotion/narrative/charts_json are keyword-only
     with None defaults (reconciliation note #2) so Phase 2 direct-call tests
     stay green. The always-on narrative block (B2) is present on every result —
     a default empty Tier-A-shaped dict when the caller passes nothing.
@@ -130,12 +129,11 @@ def adapt(
     health_block = _build_health_block(health) if health is not None else None
     network_block = _build_network_block(network) if network is not None else None
 
-    # --- emotion + summary (gated, D-07c / ANAL-06 / ANAL-08) -------------
+    # --- emotion (gated, D-07c / ANAL-06) ----------------------------------
     # None when the silent availability probe says the NLP models are not
     # usable (D-02/D-06); the report then renders its unavailable note
     # instead of the tabs' content.
     emotion_block = _build_emotion_block(emotion) if emotion is not None else None
-    summary_block = _build_summary_block(summary) if summary is not None else None
     narrative_block = _build_narrative_block(narrative)
 
     return AnalysisResults(
@@ -153,7 +151,6 @@ def adapt(
         health=health_block,
         network=network_block,
         emotion=emotion_block,
-        summary=summary_block,
         narrative=narrative_block,
         charts=dict(charts),
         charts_json=dict(charts_json or {}),
@@ -165,7 +162,6 @@ def adapt(
             health_block,
             network_block,
             emotion_block,
-            summary_block,
         ),
         report_path="",
     )
@@ -234,14 +230,6 @@ def _build_emotion_block(emotion: dict) -> dict:
     }
 
 
-def _build_summary_block(summary: dict) -> dict:
-    """Extract the summary text + message count from summarize_conversation."""
-    return {
-        "text": summary.get("summary") or "",
-        "messages_summarized": summary.get("messages_summarized") or 0,
-    }
-
-
 def _build_narrative_block(narrative: dict | None) -> dict:
     """Normalize the narrative dict into the AnalysisResults contract shape.
 
@@ -290,15 +278,14 @@ def build_insights(
     health=None,
     network=None,
     emotion=None,
-    summary=None,
 ) -> list[str]:
     """Narrative lead-ins, one per report tab (D-11).
 
     Natural-language sentences driven entirely by stats values — no hardcoded
     numbers, and never the string "None" (LOW #9: avg_response_time may be
     None on single-message chats). Health and network lead-ins slot in at tab
-    indices 5 and 6 (after the five Phase-2 tabs); emotion and summary at
-    indices 7 and 8; the duration and busiest-hour sentences follow them.
+    indices 5 and 6 (after the five Phase-2 tabs); emotion at index 7; the
+    duration and busiest-hour sentences follow them.
     """
     insights: list[str] = []
 
@@ -353,7 +340,7 @@ def build_insights(
         else:
             insights.append(f"The conversation network has density {density:.2f}.")
 
-    # --- emotion + summary lead-ins (D-11) — tab indices 7 and 8 ----------
+    # --- emotion lead-in (D-11) — tab index 7 ------------------------------
     # Gated: never emitted when the probe reported the models unavailable.
     emotion_dist = (emotion or {}).get("distribution") or {}
     dominant = (emotion or {}).get("dominant")
@@ -365,10 +352,6 @@ def build_insights(
             f"The dominant emotion is {dominant} "
             f"(appearing in {pct:.0f}% of messages)."
         )
-
-    summary_text = (summary or {}).get("text") or ""
-    if summary_text:
-        insights.append(f"Key takeaway: {summary_text[:120]}")
 
     insights.append(
         f"This conversation spans {stats.get('duration_days', 0)} days "

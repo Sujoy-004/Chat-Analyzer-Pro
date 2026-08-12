@@ -179,7 +179,6 @@ TEMPLATE = """<!DOCTYPE html>
   <button class="tab" data-tab="health" onclick="showTab('health')">Relationship Health</button>
   <button class="tab" data-tab="network" onclick="showTab('network')">Network</button>
   <button class="tab" data-tab="emotion" onclick="showTab('emotion')">Emotion</button>
-  <button class="tab" data-tab="summary" onclick="showTab('summary')">Summary</button>
   <button class="tab" data-tab="narrative" onclick="showTab('narrative')">What's going on</button>
 </nav>
 <main>
@@ -292,17 +291,6 @@ TEMPLATE = """<!DOCTYPE html>
       {% if emotion.dominant %}<p>Dominant emotion: {{ emotion.dominant }}</p>{% endif %}
       {% else %}
       <p>Emotion analysis unavailable. Install the optional NLP extras: <code>pip install chat-analyzer-pro[nlp]</code>.</p>
-      {% endif %}
-    </div>
-  </div>
-  <div class="panel" id="tab-summary">
-    <div class="card">
-      {% if summary %}
-      <p class="lead">{{ insights[8] }}</p>
-      <p>{{ summary.text }}</p>
-      {% if summary.messages_summarized %}<p>Summarized {{ summary.messages_summarized }} messages.</p>{% endif %}
-      {% else %}
-      <p>Conversation summary unavailable. Install the optional NLP extras: <code>pip install chat-analyzer-pro[nlp]</code>.</p>
       {% endif %}
     </div>
   </div>
@@ -438,7 +426,6 @@ def write_report(results: AnalysisResults, input_path: Path) -> Path:
         health=results.get("health", {}),
         network=results.get("network", {}),
         emotion=results.get("emotion", {}),
-        summary=results.get("summary", {}),
         narrative=narrative,
         echarts_js=_load_inline_asset("echarts.min.js"),
         echarts_gl_js=_load_inline_asset("echarts-gl.min.js"),

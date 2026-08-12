@@ -72,7 +72,7 @@ def stage(console, progress, task_id: int | None, label: str):
     stdout is piped/not a tty (CI, tests) this falls back to stage_status so
     narration still reaches captured output. Stage labels MUST stay exactly
     "Parsing chat" / "Computing insights" / "Analyzing emotions" /
-    "Summarizing conversation" — test_stage_narration_and_order asserts the
+    "Generating narrative" — test_stage_narration_and_order asserts the
     first two (plus main.py's "Writing report") verbatim.
     """
     if progress is None:
@@ -271,7 +271,6 @@ def run_pipeline(path: Path, console) -> AnalysisResults:
         # gate is OFF they are skipped silently — no error, no prompt, no hint
         # (D-02/D-06): the pipeline always prepares for NLP, availability decides.
         emotion_summary = None
-        conv_summary = None
         if nlp_on:
             with stage(console, progress, task_id, "Analyzing emotions"):
                 # D-05/Pitfall 4: announce model name + size BEFORE any
@@ -314,19 +313,10 @@ def run_pipeline(path: Path, console) -> AnalysisResults:
                     if emotion_spec:
                         charts_json["emotion"] = emotion_spec
 
-            with stage(console, progress, task_id, "Summarizing conversation"):
+            with stage(console, progress, task_id, "Generating narrative"):
                 console.print(
                     "[INFO] Models run locally on your device - "
                     "no chat data leaves this machine."
-                )
-                if not nlp_gate.model_cached(nlp_gate.SUMMARY_MODEL_ID):
-                    console.print(
-                        "[INFO] Downloading model weights on first "
-                        "run - this may take a few minutes."
-                    )
-                console.print(
-                    f"Summary model: {nlp_gate.SUMMARY_MODEL_ID} "
-                    f"(~{nlp_gate.SUMMARY_MODEL_SIZE_MB} MB)"
                 )
                 # Tier B narrative (B2, D-05/Pitfall 4): announce the small
                 # local model before any construction that could download it.
@@ -342,40 +332,31 @@ def run_pipeline(path: Path, console) -> AnalysisResults:
                 with contextlib.redirect_stdout(io.StringIO()) as captured_nlp:
                     try:
                         # Pitfall 7: construct ONLY now — the ctor downloads
-                        # t5-small (~231 MB); degrade instead of failing the run.
+                        # flan-t5-small; degrade instead of failing the run.
                         from chat_analyzer.analysis.summarizer import (
                             ConversationSummarizer,
                         )
-
-                        conv_summary = ConversationSummarizer().summarize_conversation(df)
 
                         # Tier B narrative (B2/B5): the same local T5 backend on
                         # the compact signal digest, not raw chat. Any failure
                         # degrades back to the Tier A observations already held
                         # in `narrative` — the run never crashes.
-                        try:
-                            tier_res = ConversationSummarizer(
-                                model_name=nlp_gate.TIER_B_MODEL_ID,
-                                max_length=90,
-                                min_length=20,
-                            ).summarize_conversation(_tier_b_digest(df, narrative))
-                            tier_text = str(tier_res.get("summary", "")).strip()
-                            if tier_text and not tier_text.lower().startswith("error"):
-                                narrative["narrative_summary"] = tier_text
-                                narrative_tier_b = True
-                        except Exception:
-                            logger.exception(
-                                "Tier B narrative failed; keeping Tier A observations"
-                            )
+                        tier_res = ConversationSummarizer(
+                            model_name=nlp_gate.TIER_B_MODEL_ID,
+                            max_length=90,
+                            min_length=20,
+                        ).summarize_conversation(_tier_b_digest(df, narrative))
+                        tier_text = str(tier_res.get("summary", "")).strip()
+                        if tier_text and not tier_text.lower().startswith("error"):
+                            narrative["narrative_summary"] = tier_text
+                            narrative_tier_b = True
                     except Exception:
-                        logger.exception("summarization failed; degrading to unavailable")
-                        conv_summary = {
-                            "summary": "Summary unavailable.",
-                            "messages_summarized": 0,
-                        }
+                        logger.exception(
+                            "Tier B narrative failed; keeping Tier A observations"
+                        )
                 if captured_nlp.getvalue():
                     logger.debug(
-                        "Captured summary-stage output:\n%s", captured_nlp.getvalue()
+                        "Captured narrative-stage output:\n%s", captured_nlp.getvalue()
                     )
 
         # B1: the always-visible status notice reflects the REAL gate state —
@@ -402,7 +383,6 @@ def run_pipeline(path: Path, console) -> AnalysisResults:
             health=health_res,
             network=network_res,
             emotion=emotion_summary,
-            summary=conv_summary,
             narrative=narrative,
         )
     finally:

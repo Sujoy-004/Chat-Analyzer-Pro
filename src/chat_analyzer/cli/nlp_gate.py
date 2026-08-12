@@ -38,8 +38,6 @@ logger = logging.getLogger(__name__)
 # (D-05, Pitfall 4).
 MODEL_ID = "bhadresh-savani/distilbert-base-uncased-emotion"
 EMOTION_MODEL_SIZE_MB = 255
-SUMMARY_MODEL_ID = "t5-small"
-SUMMARY_MODEL_SIZE_MB = 231
 TIER_B_MODEL_ID = "google/flan-t5-small"
 TIER_B_MODEL_SIZE_MB = 340   # approx flan-t5-small total disk (~308 MB weights)
 

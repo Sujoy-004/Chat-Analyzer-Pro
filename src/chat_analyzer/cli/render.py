@@ -56,12 +56,12 @@ def show_summary(results: AnalysisResults, console: Console) -> None:
     if not narrative or status.get("nlp_available") is False:
         console.print(
             "[INFO] NLP not installed - basic analysis only (the optional "
-            "NLP extras add emotion, summary and a written narrative)",
+            "NLP extras add emotion and a written narrative)",
             soft_wrap=True,
         )
     else:
         console.print(
-            "[INFO] NLP enabled - emotion, summary and narrative are active",
+            "[INFO] NLP enabled - emotion and narrative are active",
             soft_wrap=True,
         )
     narrative_summary = narrative.get("narrative_summary")
