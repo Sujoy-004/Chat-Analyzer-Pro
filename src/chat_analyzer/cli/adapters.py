@@ -14,6 +14,7 @@ from collections import Counter
 import pandas as pd
 
 from chat_analyzer.cli.contracts import AnalysisResults, ParseReport
+from chat_analyzer.utils.preprocessing import non_latin_message_share
 
 
 def adapt(
@@ -162,6 +163,7 @@ def adapt(
             health_block,
             network_block,
             emotion_block,
+            non_latin_share=non_latin_message_share(df),
         ),
         report_path="",
     )
@@ -191,6 +193,34 @@ def _build_health_block(health: dict) -> dict:
     }
 
 
+def _strongest_connection_summary(strongest) -> str | None:
+    """Tie-aware, honest wording for the top network edge (WS-3).
+
+    In a two-person chat both directions of a sender-switch tie at the same
+    count, so "strongest connection = A to B" is misleading — the direction
+    is arbitrary. Returns a plain sentence for the report/insights; None when
+    there is no usable strongest connection.
+    """
+    if not strongest:
+        return None
+    top = strongest[0]
+    if not (top.get("from") and top.get("to")):
+        return None
+    interactions = top.get("interactions")
+    if len(strongest) >= 2:
+        second = strongest[1]
+        if (
+            second.get("from") == top.get("to")
+            and second.get("to") == top.get("from")
+            and second.get("interactions") == interactions
+        ):
+            return f"Evenly matched: {interactions} turn-exchanges in each direction."
+    return (
+        f"The strongest connection is {top['from']} to {top['to']} "
+        f"({interactions} interactions)."
+    )
+
+
 def _build_network_block(network: dict) -> dict:
     """Extract serializable scalars from analyze_network (Pattern 3).
 
@@ -200,13 +230,15 @@ def _build_network_block(network: dict) -> dict:
     metrics = network.get("metrics") or {}
     patterns = network.get("patterns") or {}
     subgroups = network.get("subgroups") or {}
+    strongest = patterns.get("strongest_connections")
     return {
         "node_count": metrics.get("num_nodes"),
         "edge_count": metrics.get("num_edges"),
         "density": metrics.get("density"),
         "reciprocity": patterns.get("reciprocity_score")
         or metrics.get("reciprocity"),
-        "strongest_connections": patterns.get("strongest_connections"),
+        "strongest_connections": strongest,
+        "strongest_connection_summary": _strongest_connection_summary(strongest),
         "key_participants": network.get("key_participants") or {},
         "subgroup_count": len(subgroups),
     }
@@ -278,6 +310,8 @@ def build_insights(
     health=None,
     network=None,
     emotion=None,
+    *,
+    non_latin_share=None,
 ) -> list[str]:
     """Narrative lead-ins, one per report tab (D-11).
 
@@ -286,8 +320,18 @@ def build_insights(
     None on single-message chats). Health and network lead-ins slot in at tab
     indices 5 and 6 (after the five Phase-2 tabs); emotion at index 7; the
     duration and busiest-hour sentences follow them.
+
+    ``non_latin_share`` (WS-4): when ≥0.30 the sentiment and emotion lead-ins
+    are annotated with an English-only honesty disclaimer. Appended to the
+    existing sentences so fixed tab indices never shift.
     """
     insights: list[str] = []
+
+    non_latin = non_latin_share is not None and non_latin_share >= 0.30
+    NON_LATIN_DISCLAIMER = (
+        " This chat is substantially non-English; the emotion/sentiment "
+        "models are English-only, so these scores are approximate."
+    )
 
     busiest_day = stats.get("busiest_day")
     if busiest_day:
@@ -314,7 +358,10 @@ def build_insights(
     if dist:
         dominant = max(dist, key=dist.get)
         pct = float(dist[dominant]) / max(sum(dist.values()), 1) * 100
-        insights.append(f"The overall tone leans {dominant} ({pct:.0f}% of messages).")
+        tone = f"The overall tone leans {dominant} ({pct:.0f}% of messages)."
+        if non_latin:
+            tone += NON_LATIN_DISCLAIMER
+        insights.append(tone)
 
     # --- health + network lead-ins (D-11) — tab indices 5 and 6 -----------
     score = (health or {}).get("overall_score")
@@ -328,14 +375,11 @@ def build_insights(
         )
 
     density = (network or {}).get("density")
-    strongest = (network or {}).get("strongest_connections") or []
+    strongest_summary = (network or {}).get("strongest_connection_summary")
     if density is not None:
-        if strongest and strongest[0].get("from") and strongest[0].get("to"):
-            top = strongest[0]
+        if strongest_summary:
             insights.append(
-                f"The strongest connection is {top['from']} to {top['to']} "
-                f"({top['interactions']} interactions); the network has density "
-                f"{density:.2f}."
+                f"{strongest_summary} The network has density {density:.2f}."
             )
         else:
             insights.append(f"The conversation network has density {density:.2f}.")
@@ -348,10 +392,13 @@ def build_insights(
         pct = float(emotion_dist.get(dominant, 0)) / max(
             sum(emotion_dist.values()), 1
         ) * 100
-        insights.append(
+        emotion_lead = (
             f"The dominant emotion is {dominant} "
             f"(appearing in {pct:.0f}% of messages)."
         )
+        if non_latin:
+            emotion_lead += NON_LATIN_DISCLAIMER
+        insights.append(emotion_lead)
 
     insights.append(
         f"This conversation spans {stats.get('duration_days', 0)} days "

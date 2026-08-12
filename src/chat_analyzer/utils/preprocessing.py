@@ -245,6 +245,46 @@ def is_short_response(text: str, threshold: int = 10) -> bool:
     return len(text.strip()) < threshold
 
 
+# --- WS-4: non-Latin (non-English-script) detection --------------------------
+# The emotion/sentiment models are English-only. When a chat is substantially
+# written in a non-Latin script (Bengali, Chinese, Cyrillic, ...) the scores
+# are near-flat noise, so the report must say so honestly. Detection is a
+# single character-range scan — no model, no tokenizer.
+
+_LATIN_SCRIPT_MAX = 0x024F  # Latin Extended-B upper bound (U+0000–U+024F)
+
+
+def is_non_latin_heavy(text, ratio_threshold: float = 0.2) -> bool:
+    """
+    True when more than ``ratio_threshold`` of a message's non-space characters
+    fall outside the Latin script block (U+0000–U+024F). Bangla/Bengali,
+    Chinese, Cyrillic etc. count as non-Latin; emoji, punctuation and spaces
+    are ignored. Empty or non-str input is never flagged.
+    """
+    if not isinstance(text, str) or not text.strip():
+        return False
+    chars = [c for c in text if not c.isspace()]
+    if not chars:
+        return False
+    non_latin = sum(1 for c in chars if ord(c) > _LATIN_SCRIPT_MAX)
+    return non_latin / len(chars) > ratio_threshold
+
+
+def non_latin_message_share(df, text_col: str = "message") -> float:
+    """
+    Share (0.0–1.0) of messages flagged non-Latin-heavy by
+    :func:`is_non_latin_heavy`. Returns 0.0 for a missing/empty column.
+    Single scan of the message column — no performance impact.
+    """
+    if df is None or getattr(df, "empty", True) or text_col not in df.columns:
+        return 0.0
+    total = int(len(df))
+    if not total:
+        return 0.0
+    flagged = sum(1 for msg in df[text_col] if is_non_latin_heavy(msg))
+    return flagged / total
+
+
 # Example usage
 if __name__ == "__main__":
     # Test preprocessing

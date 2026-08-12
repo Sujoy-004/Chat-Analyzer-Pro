@@ -113,7 +113,7 @@ function initCharts() {
           }
         });
       }
-    } catch (e) { _charts[key] = null; }
+    } catch (e) { _charts[key] = null; if (key === 'network') { fallbackNetwork(); } }
   }
 }
 function resizeVisibleCharts() {
@@ -273,6 +273,7 @@ TEMPLATE = """<!DOCTYPE html>
   <div class="panel" id="tab-network">
     <div class="card">
       <p class="lead">{{ insights[6] }}</p>
+      <p class="obs-meta">Edge weight = number of consecutive-sender turn exchanges; in two-person chats both directions are equal.</p>
       {% if charts_json.network %}<div id="chart-network" class="chart"></div>
       {% if charts.network %}<img id="img-network" class="chart" alt="Conversation network" src="{{ charts.network }}" style="display:none">{% endif %}
       {% else %}{% if charts.network %}<img class="chart" alt="Conversation network" src="{{ charts.network }}">{% endif %}{% endif %}
@@ -281,8 +282,8 @@ TEMPLATE = """<!DOCTYPE html>
         <tr><th>Nodes</th><td>{{ network.node_count }}</td></tr>
         <tr><th>Edges</th><td>{{ network.edge_count }}</td></tr>
         <tr><th>Density</th><td>{{ network.density }}</td></tr>
-        {% if network.strongest_connections %}
-        <tr><th>Strongest connection</th><td>{{ network.strongest_connections[0]['from'] }} &rarr; {{ network.strongest_connections[0]['to'] }}</td></tr>
+        {% if network.strongest_connection_summary %}
+        <tr><th>Strongest connection</th><td>{{ network.strongest_connection_summary }}</td></tr>
         {% endif %}
       </table>
       {% endif %}
