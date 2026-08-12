@@ -50,11 +50,9 @@ chat export file
                 │                                     │
                 ▼                                     ▼
 ┌──────────────────────────────┐   ┌──────────────────────────────────────┐
-│ emotion/summary stay None;    │   │  EmotionAnalyzer → emotion dict +     │
+│ emotion stays None;           │   │  EmotionAnalyzer → emotion dict +     │
 │ report renders "unavailable"  │   │    emotion chart (distilbert emotion) │
-└──────────────────────────────┘   │  ConversationSummarizer → summary     │
-                                   │    (t5-small)                          │
-                                   │  Tier B narrative (flan-t5-small over  │
+└──────────────────────────────┘   │  Tier B narrative (flan-t5-small over  │
                                    │    compact ASCII digest)               │
                                    └──────────────────────────────────────┘
                                 │
@@ -176,10 +174,10 @@ template:
 | `stats` | total, participant count/list, date range, duration, busiest day, peak hour, avg response, media count |
 | `participants` | per-sender `{messages, avg_message_length, share_pct}`, sorted desc |
 | `content` | top-15 words/emojis, total/unique word counts |
-| `sentiment` | distribution, avg VADER compound, by-sender, daily avg |
+| `sentiment` | distribution, avg compound, by-sender, daily avg |
 | `health` | **always-on** scalars (overall score, grade, components, initiator balance, avg response minutes, response balance, dominance) |
 | `network` | **always-on** scalars (nodes/edges/density/reciprocity, strongest connections, key participants, subgroup count) |
-| `emotion`/`summary` | **None when the NLP gate is OFF** (silent degrade); serial blocks when on |
+| `emotion` | **None when the NLP gate is OFF** (silent degrade); serial blocks when on |
 | `narrative` | always present — Tier A observations; Tier B `narrative_summary` when generated |
 | `charts` | `{name: "data:image/png;base64,…"}` — six always, `"emotion"` when NLP on |
 | `charts_json` | `{name: ECharts option dict}` — interactive specs for the same charts (`"emotion"` when NLP on); a chart with no buildable spec renders its PNG from `charts` instead |
@@ -229,15 +227,14 @@ no assumption the models are present:
   and size are printed **before** any `from_pretrained` call (announce-then-
   construct D-05 rule).
 - Gated stages degrade, they never crash: `EmotionAnalyzer` falls back to a
-  rule-based keyword classifier when the model load fails; a summarization
-  exception degrades to a `"Summary unavailable."` dict.
+  rule-based keyword classifier when the model load fails; the Tier B narrative
+  degrades to the Tier A lead when its model fails.
 
-When the gate is OFF, the emotion/summary stages are **skipped silently** —
-`emotion`/`summary` stay `None` in the contract and the report renders its
-`unavailable` note with an install hint. When the gate is ON, emotion
-(`distilbert-base-uncased-emotion`, ~255 MB), conversation summary
-(`t5-small`, ~231 MB) and the Tier B narrative (`google/flan-t5-small`,
-~340 MB) all run locally.
+When the gate is OFF, the emotion stage is **skipped silently** — `emotion`
+stays `None` in the contract and the report renders its `unavailable` note with
+an install hint. When the gate is ON, emotion
+(`distilbert-base-uncased-emotion`, ~255 MB) and the Tier B narrative
+(`google/flan-t5-small`, ~340 MB) both run locally.
 
 Interactive runs with NLP missing show the three-option download menu
 (1 = full torch ~3 GB, 2 = CPU-only torch ~0.6 GB default, 3 = no download);
@@ -322,7 +319,7 @@ decision log):
   strongest connections) — the DataFrame/DiGraph never leak into
   `AnalysisResults` (Jinja2-consumed).
 - **Always-on vs gated** — relationship health and network are always-on
-  (pandas/numpy/networkx/matplotlib only); emotion/summary are gated.
+  (pandas/numpy/networkx/matplotlib only); emotion is gated.
 - **One "Messages: N" smoke token**: printed once by `main.py` after
   `run_pipeline` (never again in `pipeline.py`/`render.py`) — pinned by the
   Phase-1 smoke test.
@@ -345,7 +342,6 @@ decision log):
 |---|---|---|
 | Sentiment | VADER via `vaderSentiment` (pinned `TRANSFORMERS_AVAILABLE = FALSE`), consensus over VADER label | same VADER path — CLI intentionally pins to VADER so pre-existing transformers in the env cannot trigger per-message HF inference |
 | Emotion | Not available — report tab shows the install hint | `EmotionAnalyzer` (distilbert emotion, 6 classes) → `emotion` block + chart |
-| Summary | Not available — report tab shows the install hint | `ConversationSummarizer` (t5-small) → `summary` block |
 | Narrative | Tier A heuristic observations always render | Tier A + Tier B generative paragraph (flan-t5-small over ASCII digest) |
 | Health/Network | Always-on (pandas/networkx) | Always-on (identical — no extra deps) |
 | Terminal behavior | runs basic, hints once at the end | models run locally, progress bar total = 4 |

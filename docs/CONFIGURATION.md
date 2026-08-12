@@ -37,13 +37,13 @@ There is no config file format. Behavior is controlled exclusively by:
    | Install command | What you get |
    | --- | --- |
    | `pip install -e .` | Base install — core analysis: parsing, stats, sentiment, relationship health, network graph, EDA, visualization, single-file HTML report. No emotion analysis: the emotion stage is gated behind the NLP availability check (`if nlp_on:`, `pipeline.py:269`), so on a base install it is skipped and the report shows "Emotion analysis unavailable" (`report_html.py:184`). |
-   | `pip install -e ".[nlp]"` | Adds `torch>=2.0`, `transformers>=4.30,<5.15`, `sentencepiece>=0.1.99`. Enables lazy-imported heavy features: emotion classification, conversation summarization, and the Tier B generative written narrative. |
+   | `pip install -e ".[nlp]"` | Adds `torch>=2.0`, `transformers>=4.30,<5.15`, `sentencepiece>=0.1.99`. Enables lazy-imported heavy features: emotion classification and the Tier B generative written narrative. |
    | `pip install -e ".[dev]"` | Adds `pytest>=7.4`, `pytest-cov>=4.1`, `ruff>=0.16.1` for development. |
    | `pip install -e ".[dev,nlp]"` | Combined dev + nlp extras (used by the CI `nlp` job). |
 
    Note: `sentencepiece` is declared in the `[nlp]` extra because transformers'
    `T5Tokenizer` requires it but does not install it automatically — without it
-   the summarizer would silently degrade (comment in `pyproject.toml:26-30`).
+   the Tier B narrative (flan-t5-small) would silently degrade (comment in `pyproject.toml:26-30`).
 
 2. **`src/chat_analyzer/cli/nlp_gate.py`** — the locked model constants (not
    user-configurable, documented here for reference):
@@ -51,7 +51,6 @@ There is no config file format. Behavior is controlled exclusively by:
    | Constant | Value |
    | --- | --- |
    | `MODEL_ID` | `bhadresh-savani/distilbert-base-uncased-emotion` (~255 MB) |
-   | `SUMMARY_MODEL_ID` | `t5-small` (~231 MB) |
    | `TIER_B_MODEL_ID` | `google/flan-t5-small` (~340 MB) |
 
    Model *weights* are not installed by pip — they download on first use and are

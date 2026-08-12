@@ -278,7 +278,7 @@ def non_latin_message_share(df, text_col: str = "message") -> float:
     """
     if df is None or getattr(df, "empty", True) or text_col not in df.columns:
         return 0.0
-    total = int(len(df))
+    total = len(df)
     if not total:
         return 0.0
     flagged = sum(1 for msg in df[text_col] if is_non_latin_heavy(msg))

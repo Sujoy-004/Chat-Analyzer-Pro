@@ -374,7 +374,7 @@ def _arc_signal(df: pd.DataFrame) -> dict[str, Any] | None:
 
 def _snapshot_observation(df: pd.DataFrame) -> dict[str, Any]:
     """Factual always-on baseline observation (WS-6): never hedged, never empty."""
-    total = int(len(df))
+    total = len(df)
     totals = df["sender"].value_counts()
     participants = int(df["sender"].nunique())
     days = 1
@@ -383,7 +383,7 @@ def _snapshot_observation(df: pd.DataFrame) -> dict[str, Any]:
             ts = pd.to_datetime(df["datetime"], errors="coerce").dropna()
             if not ts.empty:
                 days = max(int((ts.max() - ts.min()).days) + 1, 1)
-        except Exception:
+        except Exception:  # noqa: BLE001 - observation must never crash
             days = 1
     top_sender = totals.index[0]
     share = round(float(totals.iloc[0]) / total * 100, 1) if total else 0.0

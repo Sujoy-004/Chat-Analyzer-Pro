@@ -93,13 +93,13 @@ class TestNonLatinDisclaimerInInsights:
         leads = self._leads(0.5)
         assert leads[4].startswith("The overall tone leans")
         assert DISCLAIMER in leads[4]
-        emotion_lead = [l for l in leads if l.startswith("The dominant emotion")][0]
+        emotion_lead = next(l for l in leads if l.startswith("The dominant emotion"))
         assert DISCLAIMER in emotion_lead
 
     def test_no_disclaimer_when_share_is_low(self):
         leads = self._leads(0.1)
         assert DISCLAIMER not in leads[4]
-        emotion_lead = [l for l in leads if l.startswith("The dominant emotion")][0]
+        emotion_lead = next(l for l in leads if l.startswith("The dominant emotion"))
         assert DISCLAIMER not in emotion_lead
 
     def test_indices_stay_stable_with_disclaimer(self):
