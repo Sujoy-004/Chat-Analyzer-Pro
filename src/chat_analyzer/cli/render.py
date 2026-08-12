@@ -64,9 +64,14 @@ def show_summary(results: AnalysisResults, console: Console) -> None:
             "[INFO] NLP enabled - emotion and narrative are active",
             soft_wrap=True,
         )
-    narrative_summary = narrative.get("narrative_summary")
+    narrative_summary = (narrative.get("narrative_summary") or "").strip()
     if narrative_summary:
         console.print(
             f"[INFO] What's going on: {narrative_summary[:200]}",
+            soft_wrap=True,
+        )
+    else:
+        console.print(
+            "[INFO] What's going on: no strong signals detected in this chat.",
             soft_wrap=True,
         )

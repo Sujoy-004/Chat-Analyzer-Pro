@@ -14,9 +14,12 @@ only the Tier A path ran.
 Every observation text is speculative by design (DEFERRED §2.7, risk guard):
 it starts with a hedge ("Possibly", "May", "Might", "This could") and never
 states a bare factual claim. Confidence comes from a documented
-conservative table (see ``_confidence``).
+conservative table (see ``_confidence``). The one exception is the factual
+``snapshot`` baseline observation (kind ``snapshot``, WS-6), which is never
+hedged and always present.
 
 Observation kinds (stable, small set — DEFERRED §2.2):
+    snapshot                              — always-on factual baseline (WS-6)
     arc, driver, reciprocity, engagement   — emitted by Tier A
     sentiment, visibility                  — reserved for Tier B
 
@@ -42,7 +45,7 @@ import pandas as pd
 
 # --- Stable observation vocabulary ---------------------------------------------
 
-OBSERVATION_KINDS = ("arc", "driver", "reciprocity", "engagement", "sentiment", "visibility")
+OBSERVATION_KINDS = ("snapshot", "arc", "driver", "reciprocity", "engagement", "sentiment", "visibility")
 
 HEDGES = ("Possibly", "May", "Might", "This could")
 
@@ -369,6 +372,31 @@ def _arc_signal(df: pd.DataFrame) -> dict[str, Any] | None:
     }
 
 
+def _snapshot_observation(df: pd.DataFrame) -> dict[str, Any]:
+    """Factual always-on baseline observation (WS-6): never hedged, never empty."""
+    total = int(len(df))
+    totals = df["sender"].value_counts()
+    participants = int(df["sender"].nunique())
+    days = 1
+    if "datetime" in df.columns:
+        try:
+            ts = pd.to_datetime(df["datetime"], errors="coerce").dropna()
+            if not ts.empty:
+                days = max(int((ts.max() - ts.min()).days) + 1, 1)
+        except Exception:
+            days = 1
+    top_sender = totals.index[0]
+    share = round(float(totals.iloc[0]) / total * 100, 1) if total else 0.0
+    if participants >= 2:
+        text = (
+            f"Snapshot: {total} messages from {participants} participants "
+            f"over {days} days; {_ascii_safe(top_sender)} sent the most ({share}%)."
+        )
+    else:
+        text = f"Snapshot: {total} messages over {days} days from one participant."
+    return {"text": text, "kind": "snapshot", "confidence": "high"}
+
+
 def _build_observations(df: pd.DataFrame, signals: dict[str, Any] | None) -> list[dict[str, Any]]:
     """Compose hedged observations from the extractor signal set.
 
@@ -386,6 +414,7 @@ def _build_observations(df: pd.DataFrame, signals: dict[str, Any] | None) -> lis
         List of observation dicts: ``{"text", "kind", "confidence"}``.
     """
     observations: list[dict[str, Any]] = []
+    observations.append(_snapshot_observation(df))  # WS-6: never-empty baseline
 
     def override(key: str, default: Any) -> Any:
         if signals and key in signals:

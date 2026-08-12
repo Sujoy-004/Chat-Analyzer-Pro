@@ -107,6 +107,19 @@ def _tier_b_digest(df, narrative: dict):
     return pd.DataFrame(rows)
 
 
+_CODE_LIKE_TOKENS = ("[", "]", "int(", "input()", "def ", "import ", "for ", "=>", "->")
+
+
+def _acceptable_narrative_text(text: str) -> bool:
+    """WS-6 sanity gate for Tier B output: sane length, no code-like
+    tokens, must read as a sentence. Garbage is never surfaced."""
+    if not text or len(text) < 5 or len(text) > 250:
+        return False
+    if any(token in text for token in _CODE_LIKE_TOKENS):
+        return False
+    return text.rstrip()[-1:] in (".", "!", "?")
+
+
 def run_pipeline(path: Path, console) -> AnalysisResults:
     """Parse, analyze and assemble the full AnalysisResults for one export."""
     import matplotlib
@@ -347,7 +360,7 @@ def run_pipeline(path: Path, console) -> AnalysisResults:
                             min_length=20,
                         ).summarize_conversation(_tier_b_digest(df, narrative))
                         tier_text = str(tier_res.get("summary", "")).strip()
-                        if tier_text and not tier_text.lower().startswith("error"):
+                        if _acceptable_narrative_text(tier_text):
                             narrative["narrative_summary"] = tier_text
                             narrative_tier_b = True
                     except Exception:
