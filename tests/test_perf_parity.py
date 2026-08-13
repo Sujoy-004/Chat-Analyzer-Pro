@@ -17,6 +17,7 @@ These are FAST tests (no pytest.mark.slow).
 
 import math
 import os
+from datetime import timedelta
 
 # Headless-first (Pitfall 7): relationship_health imports matplotlib.pyplot
 # at module import; pin Agg BEFORE any pyplot import so figures are headless-safe.
@@ -28,7 +29,11 @@ from chat_analyzer.analysis.relationship_health import (
     analyze_relationship_health,
     analyze_response_patterns,
     calculate_dominance_scores,
+    calculate_initiator_ratio,
+    calculate_relationship_health_score,
+    calculate_rolling_health_score,
     identify_conversation_starters,
+    logger,
 )
 from chat_analyzer.cli.adapters import _build_health_block
 from chat_analyzer.ingest.ingestion import messages_to_dataframe
@@ -437,3 +442,89 @@ def test_nat_datetime_rows_marked_starter():
     out = identify_conversation_starters(df)
     nat_idx = out.index[out['datetime'].isna()][0]
     assert bool(out.loc[nat_idx, 'is_conversation_starter']) is True
+
+
+# ============================================================================
+# calculate_rolling_health_score parity: per-date windowing built by
+# concatenating pre-grouped date frames instead of full-df boolean masks.
+# The window row SET per date is provably identical (df is datetime-sorted;
+# groupby preserves within-group order; concat in ascending date order == the
+# boolean-filtered slice), so health_score/grade/message_count must match.
+# ============================================================================
+
+def _reference_rolling_health_score(
+    df: pd.DataFrame, window_days: int = 7, min_messages: int = 10
+) -> pd.DataFrame:
+    """The ORIGINAL boolean-mask rolling health implementation, captured
+    verbatim before the pre-grouped-date optimization."""
+    df = df.copy()
+    df['datetime'] = pd.to_datetime(df['datetime'])
+    df = df.sort_values('datetime')
+    
+    # Group by date
+    df['date'] = df['datetime'].dt.date
+    dates = sorted(df['date'].unique())
+    
+    health_scores = []
+    
+    for i, current_date in enumerate(dates):
+        window_start = current_date - timedelta(days=window_days)
+        window_df = df[(df['date'] >= window_start) & (df['date'] <= current_date)]
+        
+        if len(window_df) < min_messages:
+            continue
+        
+        try:
+            # Calculate metrics for this window
+            window_df = identify_conversation_starters(window_df.reset_index(drop=True))
+            initiator_metrics = calculate_initiator_ratio(window_df)
+            response_metrics = analyze_response_patterns(window_df)
+            dominance_metrics = calculate_dominance_scores(window_df)
+            health_score = calculate_relationship_health_score(
+                initiator_metrics, response_metrics, dominance_metrics
+            )
+            
+            health_scores.append({
+                'date': current_date,
+                'health_score': health_score['overall_health_score'],
+                'grade': health_score['grade'],
+                'message_count': len(window_df)
+            })
+        except Exception as e:  # noqa: BLE001 - a failing window is skipped, never allowed to crash the series
+            logger.warning(f"Failed to calculate health score for {current_date}: {e!s}")
+            continue
+    
+    return pd.DataFrame(health_scores)
+
+
+def _rolling_parity_fixture() -> pd.DataFrame:
+    """80 messages across 40 consecutive daily dates, 2 senders alternating per
+    day — every 7-day window holds >= 14 messages (dense above min_messages=10)."""
+    start = pd.Timestamp('2024-04-01 09:00:00')
+    messages = []
+    for d in range(40):
+        for h in range(2):
+            sender = 'Alice' if (d + h) % 2 == 0 else 'Bob'
+            messages.append({
+                'datetime': start + pd.Timedelta(days=d, hours=h),
+                'sender': sender,
+                'message': f'day {d} message {h}',
+            })
+    return messages_to_dataframe(messages)
+
+
+def test_rolling_health_pre_grouped_matches_original():
+    """Pre-grouped-date windowing is bit-identical to the boolean-mask loop."""
+    df = _rolling_parity_fixture()
+    for window_days, min_messages in ((7, 10), (14, 10), (7, 4)):
+        reference = _reference_rolling_health_score(df, window_days, min_messages)
+        new = calculate_rolling_health_score(df, window_days, min_messages)
+
+        assert not reference.empty, 'fixture must produce at least one scored window'
+        for col in ('date', 'health_score', 'grade', 'message_count'):
+            assert reference[col].equals(new[col]), (
+                f'window_days={window_days} min_messages={min_messages}: {col} differs'
+            )
+        assert reference.equals(new), (
+            f'window_days={window_days} min_messages={min_messages}: full frame differs'
+        )

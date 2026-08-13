@@ -379,18 +379,19 @@ def calculate_rolling_health_score(
     # Group by date
     df['date'] = df['datetime'].dt.date
     dates = sorted(df['date'].unique())
+    by_date = {d: g.reset_index(drop=True) for d, g in df.groupby('date')}
     
     health_scores = []
     
-    for i, current_date in enumerate(dates):
+    for current_date in dates:
         window_start = current_date - timedelta(days=window_days)
-        window_df = df[(df['date'] >= window_start) & (df['date'] <= current_date)]
+        window_df = pd.concat([by_date[d] for d in dates if window_start <= d <= current_date])
         
         if len(window_df) < min_messages:
             continue
         
         try:
-            # Calculate metrics for this window
+            # Calculate metrics for this window (unchanged — window rows identical)
             window_df = identify_conversation_starters(window_df.reset_index(drop=True))
             initiator_metrics = calculate_initiator_ratio(window_df)
             response_metrics = analyze_response_patterns(window_df)
