@@ -58,15 +58,12 @@ class ChatEDA:
         }
     
     def analyze_conversation_dynamics(self):
-        """Analyze conversation flow and response patterns"""
+        """Analyze conversation flow and response patterns (vectorized)."""
         # Response time calculation
         df_sorted = self.df.sort_values('datetime').reset_index(drop=True)
-        response_times = []
-        
-        for i in range(1, len(df_sorted)):
-            if df_sorted.iloc[i]['sender'] != df_sorted.iloc[i-1]['sender']:
-                time_diff = (df_sorted.iloc[i]['datetime'] - df_sorted.iloc[i-1]['datetime']).total_seconds() / 60
-                response_times.append(time_diff)
+        switch = df_sorted['sender'].ne(df_sorted['sender'].shift())
+        minutes = df_sorted['datetime'].diff().dt.total_seconds() / 60
+        response_times = minutes[switch & minutes.notna()].tolist()
         
         return {
             'response_times': response_times,
@@ -100,11 +97,14 @@ class ChatEDA:
             return ""
         return re.sub(r'[^\w\s]', ' ', text.lower())
     
-    def generate_comprehensive_summary(self):
-        """Generate comprehensive analysis summary"""
-        volume_analysis = self.analyze_message_volume()
-        dynamics_analysis = self.analyze_conversation_dynamics()
-        content_analysis = self.analyze_content()
+    def generate_comprehensive_summary(self, volume_analysis=None, dynamics_analysis=None, content_analysis=None):
+        """Generate comprehensive analysis summary (precomputed results may be passed in)."""
+        if volume_analysis is None:
+            volume_analysis = self.analyze_message_volume()
+        if dynamics_analysis is None:
+            dynamics_analysis = self.analyze_conversation_dynamics()
+        if content_analysis is None:
+            content_analysis = self.analyze_content()
         
         summary = {
             'dataset_info': {

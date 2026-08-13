@@ -209,10 +209,14 @@ def run_pipeline(path: Path, console) -> AnalysisResults:
                 from chat_analyzer.analysis.eda import ChatEDA
 
                 eda = ChatEDA(df)
-                summary = eda.generate_comprehensive_summary()
                 volume = eda.analyze_message_volume()
                 dynamics = eda.analyze_conversation_dynamics()
                 content = eda.analyze_content()
+                summary = eda.generate_comprehensive_summary(
+                    volume_analysis=volume,
+                    dynamics_analysis=dynamics,
+                    content_analysis=content,
+                )
 
                 from chat_analyzer.analysis.sentiment import (
                     add_sentiment_analysis,
