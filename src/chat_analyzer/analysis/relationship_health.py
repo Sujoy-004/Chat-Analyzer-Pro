@@ -356,6 +356,40 @@ def calculate_relationship_health_score(
 # DAY 9: ROLLING HEALTH SCORE TRACKER
 # ============================================================================
 
+# Parallelize the per-window metric loop for large chats: every 7-day window is
+# independent, so the O(dates) metric recompute becomes embarrassingly parallel.
+# Below this many candidate windows, multiprocessing spawn overhead exceeds the
+# win — keep the identical sequential loop (deterministic, cheap for small chats).
+_ROLLING_PARALLEL_MIN_DATES = 128
+
+# Workers are modest (2 P-cores + 8 E-cores on the target): more churns CPU and
+# memory without a faster fan-out.
+_ROLLING_PARALLEL_WORKERS = 4
+
+
+def _rolling_window_score(args) -> dict | None:
+    """Score ONE rolling-health window (worker entry for parallel path)."""
+    window_df, current_date, min_messages = args
+    if len(window_df) < min_messages:
+        return None
+    try:
+        window_df = identify_conversation_starters(window_df.reset_index(drop=True))
+        initiator_metrics = calculate_initiator_ratio(window_df)
+        response_metrics = analyze_response_patterns(window_df)
+        dominance_metrics = calculate_dominance_scores(window_df)
+        health_score = calculate_relationship_health_score(
+            initiator_metrics, response_metrics, dominance_metrics
+        )
+        return {
+            'date': current_date,
+            'health_score': health_score['overall_health_score'],
+            'grade': health_score['grade'],
+            'message_count': len(window_df),
+        }
+    except Exception as e:  # noqa: BLE001 - a failing window is skipped, never allowed to crash the series
+        return {'error': current_date, 'message': str(e)}
+
+
 def calculate_rolling_health_score(
     df: pd.DataFrame,
     window_days: int = 7,
@@ -381,34 +415,37 @@ def calculate_rolling_health_score(
     dates = sorted(df['date'].unique())
     by_date = {d: g.reset_index(drop=True) for d, g in df.groupby('date')}
     
-    health_scores = []
-    
+    # Build window frames once (parent side). Window build is O(dates^2) in the
+    # trivial date comparisons but ~2s even at ~1400 dates; the per-window metric
+    # recompute is the real cost and is what gets parallelized. Order preserved.
+    window_args = []
     for current_date in dates:
         window_start = current_date - timedelta(days=window_days)
         window_df = pd.concat([by_date[d] for d in dates if window_start <= d <= current_date])
-        
-        if len(window_df) < min_messages:
-            continue
-        
+        window_args.append((window_df, current_date, min_messages))
+    
+    if len(window_args) >= _ROLLING_PARALLEL_MIN_DATES:
         try:
-            # Calculate metrics for this window (unchanged — window rows identical)
-            window_df = identify_conversation_starters(window_df.reset_index(drop=True))
-            initiator_metrics = calculate_initiator_ratio(window_df)
-            response_metrics = analyze_response_patterns(window_df)
-            dominance_metrics = calculate_dominance_scores(window_df)
-            health_score = calculate_relationship_health_score(
-                initiator_metrics, response_metrics, dominance_metrics
-            )
-            
-            health_scores.append({
-                'date': current_date,
-                'health_score': health_score['overall_health_score'],
-                'grade': health_score['grade'],
-                'message_count': len(window_df)
-            })
-        except Exception as e:  # noqa: BLE001 - a failing window is skipped, never allowed to crash the series
-            logger.warning(f"Failed to calculate health score for {current_date}: {e!s}")
+            import multiprocessing as mp
+            from concurrent.futures import ProcessPoolExecutor
+
+            max_workers = min(_ROLLING_PARALLEL_WORKERS, mp.cpu_count() or 1)
+            with ProcessPoolExecutor(max_workers=max_workers) as pool:
+                scored = list(pool.map(_rolling_window_score, window_args, chunksize=16))
+        except Exception:
+            logger.exception("parallel rolling-health failed; using sequential")
+            scored = [_rolling_window_score(a) for a in window_args]
+    else:
+        scored = [_rolling_window_score(a) for a in window_args]
+    
+    health_scores = []
+    for r in scored:
+        if r is None:
             continue
+        if 'error' in r:
+            logger.warning(f"Failed to calculate health score for {r['error']}: {r['message']}")
+            continue
+        health_scores.append(r)
     
     return pd.DataFrame(health_scores)
 

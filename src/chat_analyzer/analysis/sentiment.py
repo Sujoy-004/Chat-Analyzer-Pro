@@ -25,20 +25,29 @@ except ImportError:
     if not _in_spawn_child():
         print("⚠️ VADER not available. Install with: pip install vaderSentiment")
 
-try:
-    from textblob import TextBlob
-    TEXTBLOB_AVAILABLE = True
-except ImportError:
-    TEXTBLOB_AVAILABLE = False
-    if not _in_spawn_child():
+# TextBlob is only used by the parent-side apply paths; workers never touch it,
+# so skip its nltk-pulling import inside spawn children (NI-04).
+if not _in_spawn_child():
+    try:
+        from textblob import TextBlob
+        TEXTBLOB_AVAILABLE = True
+    except ImportError:
+        TEXTBLOB_AVAILABLE = False
         print("⚠️ TextBlob not available. Install with: pip install textblob")
+else:
+    TEXTBLOB_AVAILABLE = False
 
-try:
-    from transformers import pipeline
-    TRANSFORMERS_AVAILABLE = True
-except ImportError:
+# Skip the deep transformers/torch import inside multiprocessing spawn children
+# entirely: workers only score with VADER, never the HF pipeline, so importing torch
+# per worker would add ~5-15s and hundreds of MB each (ME-01).
+if _in_spawn_child():
     TRANSFORMERS_AVAILABLE = False
-    if not _in_spawn_child():
+else:
+    try:
+        from transformers import pipeline
+        TRANSFORMERS_AVAILABLE = True
+    except ImportError:
+        TRANSFORMERS_AVAILABLE = False
         print("⚠️ Transformers not available. Install with: pip install transformers torch")
 
 class SentimentConfig:
@@ -182,6 +191,12 @@ def categorize_sentiment(score, positive_threshold=None, negative_threshold=None
 
 _VADER_PARALLEL_THRESHOLD = 20_000
 
+# Workers are capped at 4, not cpu_count: the target machine is a hybrid
+# 2P+8E-core laptop where >4 spawn workers neither score faster (~50s at 4
+# AND 8 workers) nor reduce memory/spawn churn — and it makes in-context
+# timings far less load-sensitive (ME-02).
+_VADER_PARALLEL_WORKERS = 4
+
 
 def _vader_score_batch(strings: list[str]) -> list[dict]:
     """Score a batch with a worker-local VADER analyzer (spawn-safe; do NOT use the
@@ -206,13 +221,19 @@ def _score_vader_parallel(series) -> list[dict]:
 
     scored: dict[str, dict] = {}
     neutral = {"compound": 0, "pos": 0, "neu": 1, "neg": 0}
+    if _vader_analyzer is None:
+        # HI-01: the original analyze_vader returns all-neutral when the analyzer is
+        # absent (e.g. add_sentiment_analysis(initialize_first=False), or init
+        # failure). Preserve that exact behavior on every row rather than scoring
+        # with worker-local analyzers.
+        return [dict(neutral) for _ in keys]
     if len(scorable) > _VADER_PARALLEL_THRESHOLD:
         try:
             import multiprocessing as mp
             from concurrent.futures import ProcessPoolExecutor
 
             chunks = [scorable[i:i + 10_000] for i in range(0, len(scorable), 10_000)]
-            max_workers = min(mp.cpu_count(), 8)
+            max_workers = min(_VADER_PARALLEL_WORKERS, mp.cpu_count() or 1)
             with ProcessPoolExecutor(max_workers=max_workers) as pool:
                 results = pool.map(_vader_score_batch, chunks, chunksize=1)
             for chunk, chunk_scores in zip(chunks, results):
@@ -224,7 +245,7 @@ def _score_vader_parallel(series) -> list[dict]:
             logging.getLogger(__name__).exception("parallel VADER failed; using sequential")
     for k in scorable:
         if k not in scored:
-            scored[k] = (_vader_analyzer.polarity_scores(k) if _vader_analyzer is not None else neutral)
+            scored[k] = _vader_analyzer.polarity_scores(k)
     return [scored.get(k) if k is not None else dict(neutral) for k in keys]
 
 

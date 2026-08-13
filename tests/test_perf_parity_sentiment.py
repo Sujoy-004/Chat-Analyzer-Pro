@@ -149,3 +149,25 @@ def test_parallel_path_matches_apply_reference(monkeypatch):
         actual = _sentiment.add_sentiment_analysis(df)
 
     _assert_vader_parity(actual, ref)
+
+
+def test_uninitialized_analyzer_returns_all_neutral(monkeypatch):
+    """HI-01 regression: when the analyzer is absent (initialize_first=False or
+    an init failure), the parallel path must reproduce the original all-neutral
+    output — never score with worker-local analyzers.
+
+    Threshold is forced to 1 so this exercises the ProcessPoolExecutor branch:
+    the pre-fix code scored with worker-local VADER analyzers in that branch and
+    would produce non-neutral rows here (ME-03)."""
+    df = _build_fixture()
+    monkeypatch.setattr(_sentiment, '_vader_analyzer', None)
+    monkeypatch.setattr(_sentiment, '_VADER_PARALLEL_THRESHOLD', 1)
+
+    with redirect_stdout(io.StringIO()):
+        actual = _sentiment.add_sentiment_analysis(df, initialize_first=False)
+
+    assert (actual['vader_compound'] == 0).all()
+    assert (actual['vader_pos'] == 0).all()
+    assert (actual['vader_neu'] == 1).all()
+    assert (actual['vader_neg'] == 0).all()
+    assert (actual['vader_sentiment'] == 'Neutral').all()

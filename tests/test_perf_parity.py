@@ -25,6 +25,7 @@ os.environ.setdefault("MPLBACKEND", "Agg")
 
 import pandas as pd
 
+import chat_analyzer.analysis.relationship_health as rel_health
 from chat_analyzer.analysis.relationship_health import (
     analyze_relationship_health,
     analyze_response_patterns,
@@ -527,4 +528,27 @@ def test_rolling_health_pre_grouped_matches_original():
             )
         assert reference.equals(new), (
             f'window_days={window_days} min_messages={min_messages}: full frame differs'
+        )
+
+
+def test_rolling_health_parallel_matches_sequential(monkeypatch):
+    """ME-04: the ProcessPoolExecutor branch (threshold forced to 1) is
+    bit-identical to the sequential branch (threshold forced huge).
+
+    The default 128-window threshold means no existing fixture exercises the
+    parallel path; forcing it low proves the spawn-safe workers produce the
+    same windows, scores, grades, and order on Windows.
+    """
+    df = _rolling_parity_fixture()
+    for window_days, min_messages in ((7, 10), (14, 10), (7, 4)):
+        monkeypatch.setattr(rel_health, '_ROLLING_PARALLEL_MIN_DATES', 10**9)
+        sequential = calculate_rolling_health_score(df, window_days, min_messages)
+
+        monkeypatch.setattr(rel_health, '_ROLLING_PARALLEL_MIN_DATES', 1)
+        parallel = calculate_rolling_health_score(df, window_days, min_messages)
+
+        assert not sequential.empty, 'fixture must produce at least one scored window'
+        assert sequential.equals(parallel), (
+            f'window_days={window_days} min_messages={min_messages}: '
+            'parallel branch differs from sequential branch'
         )

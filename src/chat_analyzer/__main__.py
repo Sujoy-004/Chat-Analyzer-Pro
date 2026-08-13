@@ -2,4 +2,5 @@
 
 from chat_analyzer.cli import app
 
-raise SystemExit(app())
+if __name__ == "__main__":
+    raise SystemExit(app())
