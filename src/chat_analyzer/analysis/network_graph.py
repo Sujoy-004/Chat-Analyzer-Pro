@@ -11,7 +11,6 @@ This module analyzes conversation networks in group chats, including:
 Designed for group chats with 3+ participants, but works with any size.
 """
 
-from collections import defaultdict
 from typing import Any
 
 import matplotlib
@@ -42,21 +41,16 @@ def build_interaction_network(df: pd.DataFrame, weight_threshold: int = 0) -> nx
     participants = df['sender'].unique()
     G.add_nodes_from(participants)
     
-    # Build edges based on reply patterns (consecutive messages)
-    interaction_counts = defaultdict(int)
-    
-    for i in range(1, len(df)):
-        prev_sender = df.iloc[i-1]['sender']
-        curr_sender = df.iloc[i]['sender']
-        
-        # If different senders, it's an interaction
-        if prev_sender != curr_sender:
-            interaction_counts[(prev_sender, curr_sender)] += 1
+    # Build edges based on reply patterns (consecutive messages) — vectorized.
+    prev = df['sender'].shift(1)
+    curr = df['sender']
+    switch = curr.ne(prev) & prev.notna()
+    counts = df.loc[switch].groupby([prev.loc[switch], curr.loc[switch]]).size()
     
     # Add edges with weights
-    for (from_node, to_node), weight in interaction_counts.items():
+    for (from_node, to_node), weight in counts.items():
         if weight > weight_threshold:
-            G.add_edge(from_node, to_node, weight=weight)
+            G.add_edge(from_node, to_node, weight=int(weight))
     
     return G
 
