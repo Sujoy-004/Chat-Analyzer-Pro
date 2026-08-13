@@ -205,6 +205,36 @@ def test_basic_run_without_nlp():
     }
 
 
+def test_nlp_enabled_override_forces_off(monkeypatch):
+    """PH2 tier 1: nlp_enabled=False forces NLP off even when the probe says
+    the packages are importable (the tier-1 choice must override install state)."""
+    from chat_analyzer.cli import nlp_gate
+
+    monkeypatch.setattr(nlp_gate, "nlp_available", lambda *a, **k: True)
+    results = run_pipeline(
+        DATA / "whatsapp_sample.txt", _console(), nlp_enabled=False
+    )
+
+    assert results["emotion"] is None
+    assert results["narrative"]["status"] == {
+        "nlp_available": False,
+        "tier_b_generated": False,
+    }
+
+
+def test_nlp_enabled_override_forces_on(monkeypatch):
+    """PH2 tier 2/3: nlp_enabled=True forces the emotion path even when the
+    probe would say unavailable (non-tty CHAT_ANALYZER_TIER=2/3 flow)."""
+    from chat_analyzer.cli import nlp_gate
+
+    monkeypatch.setattr(nlp_gate, "nlp_available", lambda *a, **k: False)
+    with _mocked_nlp(gate_on=True):
+        results = run_pipeline(DATA / "whatsapp_sample.txt", _console(), nlp_enabled=True)
+
+    assert results["emotion"] is not None
+    assert results["narrative"]["status"]["nlp_available"] is True
+
+
 def test_report_contains_emotion_and_summary_tabs(tmp_path, monkeypatch):
     """Test C: the HTML report carries the emotion + narrative tabs - real
     content with the gate ON, the pip-install unavailable note OFF. The Summary

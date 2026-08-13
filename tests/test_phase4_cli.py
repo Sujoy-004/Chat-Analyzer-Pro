@@ -1,9 +1,10 @@
-"""Phase 4 CLI UX tests: hint line, tty download menu, friendly-error taxonomy.
+"""Phase 4 CLI UX tests: hint line, tty tier menu, friendly-error taxonomy.
 
-Maps to 04-03-PLAN.md tasks 1-3 (D-04/D-05/D-06, D-13/D-14/D-15, CLI-04):
+Maps to 04-03-PLAN.md tasks 1-3 and the PH2 always-on tier menu (D-04/D-05/D-06,
+D-13/D-14/D-15, CLI-04):
 
-1.  Positional hint (D-06): NLP forced off -> exit 0, exactly one hint line,
-    no menu text, "Messages: 27" smoke token still present.
+1.  Positional hint (D-06): non-tty tier 1 (silent) -> exit 0, exactly one
+    hint line, no menu text, "Messages: 27" smoke token still present.
 2.  Piped no-arg hint (D-06): piped path (not a tty) -> hint line, no menu.
 3.  Missing file (D-13): positional nonexistent.txt -> exit 1, "File not
     found" + inline export instructions, no traceback.
@@ -13,12 +14,14 @@ Maps to 04-03-PLAN.md tasks 1-3 (D-04/D-05/D-06, D-13/D-14/D-15, CLI-04):
     "No messages could be parsed" + export instructions, no traceback.
 6.  Interactive re-prompt (D-15): piped bad suffix then valid path -> no
     exit 1, "Messages: 27", exit 0.
-7.  Menu on tty (D-04): in-process unit test of `_nlp_menu` -- all three
-    options render and the patched choice is returned.
+7.  Tier menu on tty (PH2): in-process unit test of `_tier_menu` -- all three
+    options render in the new wording, default is 1, and the patched choice
+    is returned.
 
-CHAT_ANALYZER_FORCE_NLP=0 forces the basic path deterministically (RESEARCH
-Pitfall 5: the dev machine has transformers but no cached emotion model, so
-the raw probe could vary by machine; the env hook removes the flake).
+All subprocess runs force a non-tty stdin (input="") so the PH2 tier
+resolution takes the silent tier-1 path deterministically (RESEARCH Pitfall 5:
+a real tty would block on the menu prompt). CHAT_ANALYZER_FORCE_NLP=0 is kept
+as the legacy override and maps to tier 1.
 """
 
 import os
@@ -47,14 +50,18 @@ def _cli_cmd(*args: str, console: bool = True) -> list[str]:
 def _run_forced(
     args: list[str], stdin_text: str | None = None, cwd: Path | None = None
 ) -> subprocess.CompletedProcess:
-    """Run the CLI with NLP forced OFF and the auto-open browser suppressed."""
+    """Run the CLI with NLP forced OFF and the auto-open browser suppressed.
+
+    stdin is always a pipe (input="") so the subprocess is non-interactive:
+    the PH2 tier menu never appears and the silent tier-1 hint path is taken.
+    """
     env = dict(os.environ)
     env["BROWSER"] = "__none__"  # webbrowser.get() raises -> open_report degrades
     env["CHAT_ANALYZER_NO_OPEN"] = "1"  # never pop a browser (B3 opt-out)
     env["CHAT_ANALYZER_FORCE_NLP"] = "0"  # deterministic basic path (Pitfall 5)
     return subprocess.run(
         args,
-        input=stdin_text,
+        input=stdin_text if stdin_text is not None else "",
         text=True,
         encoding="utf-8",
         errors="replace",
@@ -151,13 +158,78 @@ def test_interactive_reprompts_on_bad_file(tmp_path):
 
 
 def test_menu_renders_three_options_on_tty():
-    """Test 7 (D-04): the 3-option menu renders on a tty when NLP is missing.
+    """Test 7 (PH2): the 3-option tier menu renders with the new wording.
 
     Subprocess tests cannot fake a tty without a pty, so this is an in-process
-    unit test of the module-level `_nlp_menu` function: the availability probe
-    is forced off, stdin claims to be a tty, the menu's prompt answers "3",
-    and the rendered console output shows all three options.
+    unit test of the module-level `_tier_menu`: the menu's prompt answers "2",
+    and the rendered console output shows the three PH2 tier options with the
+    new wording (default choice is 1, checked via the prompt default).
     """
+    from rich.console import Console
+
+    import chat_analyzer.cli.main as cli_main
+
+    out = StringIO()
+    console = Console(file=out, width=120)
+
+    with unittest.mock.patch.object(cli_main.typer, "prompt", return_value="2"):
+        choice = cli_main._tier_menu(console)
+
+    rendered = out.getvalue()
+    assert "NLP tier:" in rendered
+    assert "1) Without NLP" in rendered
+    assert "2) Minimal (~0.6 GB)" in rendered
+    assert "3) Full-fledged (~3 GB)" in rendered
+    assert choice == "2"
+
+
+def test_tier_menu_default_is_one(monkeypatch):
+    """PH2: the tier menu defaults to 1 (Without NLP) — typer.prompt default."""
+    from rich.console import Console
+
+    import chat_analyzer.cli.main as cli_main
+
+    out = StringIO()
+    console = Console(file=out, width=120)
+    captured: dict = {}
+
+    def _fake_prompt(text, default=None, **kwargs):
+        captured["default"] = default
+        return default
+
+    with monkeypatch.context() as m:
+        m.setattr(cli_main.typer, "prompt", _fake_prompt)
+        choice = cli_main._tier_menu(console)
+
+    assert captured["default"] == "1"
+    assert choice == "1"
+
+
+def test_tier_from_env_override(monkeypatch):
+    """PH2: non-tty tier resolution honors CHAT_ANALYZER_TIER and the legacy
+    CHAT_ANALYZER_FORCE_NLP mapping, defaulting to silent tier 1."""
+    import chat_analyzer.cli.main as cli_main
+
+    monkeypatch.delenv("CHAT_ANALYZER_TIER", raising=False)
+    monkeypatch.delenv("CHAT_ANALYZER_FORCE_NLP", raising=False)
+    assert cli_main._tier_from_env() == "1"  # default silent tier 1
+
+    monkeypatch.setenv("CHAT_ANALYZER_TIER", "2")
+    assert cli_main._tier_from_env() == "2"
+    monkeypatch.setenv("CHAT_ANALYZER_TIER", "3")
+    assert cli_main._tier_from_env() == "3"
+    monkeypatch.setenv("CHAT_ANALYZER_TIER", "1")
+    assert cli_main._tier_from_env() == "1"  # accepted for explicitness
+
+    monkeypatch.delenv("CHAT_ANALYZER_TIER", raising=False)
+    monkeypatch.setenv("CHAT_ANALYZER_FORCE_NLP", "0")
+    assert cli_main._tier_from_env() == "1"  # legacy 0 -> tier 1
+    monkeypatch.setenv("CHAT_ANALYZER_FORCE_NLP", "1")
+    assert cli_main._tier_from_env() == "3"  # legacy 1 -> tier 3
+
+
+def test_ensure_tier_ready_proceeds(monkeypatch):
+    """PH2: a READY nlp_status() proceeds without installing."""
     from rich.console import Console
 
     import chat_analyzer.cli.main as cli_main
@@ -165,16 +237,91 @@ def test_menu_renders_three_options_on_tty():
 
     out = StringIO()
     console = Console(file=out, width=120)
+    monkeypatch.setattr(nlp_gate, "nlp_status", lambda: ("READY", {}))
+    with (
+        unittest.mock.patch.object(nlp_gate, "install_nlp") as install,
+        unittest.mock.patch.object(nlp_gate, "download_models") as dl,
+    ):
+        ok = cli_main._ensure_nlp_for_tier("2", console)
+
+    assert ok is True
+    install.assert_not_called()
+    dl.assert_not_called()
+    assert "NLP ready" in out.getvalue()
+
+
+def test_ensure_tier_missing_installs_and_downloads(monkeypatch):
+    """PH2: a MISSING status installs the tier flavor then downloads models."""
+    from rich.console import Console
+
+    import chat_analyzer.cli.main as cli_main
+    from chat_analyzer.cli import nlp_gate
+
+    out = StringIO()
+    console = Console(file=out, width=120)
+    monkeypatch.setattr(nlp_gate, "nlp_status", lambda: ("MISSING", {}))
+    calls: list[str] = []
+
+    def _fake_install(cpu_only: bool):
+        calls.append(f"install cpu_only={cpu_only}")
+
+    def _fake_download():
+        calls.append("download")
+
+    monkeypatch.setattr(nlp_gate, "install_nlp", _fake_install)
+    monkeypatch.setattr(nlp_gate, "download_models", _fake_download)
+
+    ok = cli_main._ensure_nlp_for_tier("2", console)
+    assert ok is True
+    assert calls == ["install cpu_only=True", "download"]
+
+    ok = cli_main._ensure_nlp_for_tier("3", console)
+    assert calls == [
+        "install cpu_only=True",
+        "download",
+        "install cpu_only=False",
+        "download",
+    ]
+
+
+def test_ensure_tier_outdated_prompts_tty(monkeypatch):
+    """PH2: OUTDATED on a tty prompts update-or-keep; 'n' keeps current."""
+    from rich.console import Console
+
+    import chat_analyzer.cli.main as cli_main
+    from chat_analyzer.cli import nlp_gate
+
+    out = StringIO()
+    console = Console(file=out, width=120)
+    monkeypatch.setattr(nlp_gate, "nlp_status", lambda: ("OUTDATED", {}))
+    monkeypatch.setattr(cli_main.sys.stdin, "isatty", lambda: True)
+
+    with unittest.mock.patch.object(cli_main.typer, "prompt", return_value="n"):
+        ok = cli_main._ensure_nlp_for_tier("2", console)
+    assert ok is True
+    assert "continuing with current install" not in out.getvalue()
+    assert "NLP ready" not in out.getvalue()
+
+
+def test_ensure_tier_outdated_non_tty_keeps_current(monkeypatch):
+    """PH2: OUTDATED on non-tty cannot prompt — proceeds with current install."""
+    from rich.console import Console
+
+    import chat_analyzer.cli.main as cli_main
+    from chat_analyzer.cli import nlp_gate
+
+    out = StringIO()
+    console = Console(file=out, width=120)
+    monkeypatch.setattr(nlp_gate, "nlp_status", lambda: ("OUTDATED", {}))
+    monkeypatch.setattr(cli_main.sys.stdin, "isatty", lambda: False)
 
     with (
-        unittest.mock.patch.object(cli_main.sys.stdin, "isatty", return_value=True),
-        unittest.mock.patch.object(nlp_gate, "nlp_available", return_value=False),
-        unittest.mock.patch.object(cli_main.typer, "prompt", return_value="3"),
+        unittest.mock.patch.object(nlp_gate, "update_nlp") as upd,
+        unittest.mock.patch.object(nlp_gate, "download_models") as dl,
     ):
-        choice = cli_main._nlp_menu(console)
+        ok = cli_main._ensure_nlp_for_tier("2", console)
 
-    rendered = out.getvalue()
-    assert "torch (~3GB)" in rendered
-    assert "CPU-only torch" in rendered
-    assert "No download" in rendered
-    assert choice == "3"
+    assert ok is True
+    upd.assert_not_called()
+    dl.assert_not_called()
+    assert "continuing with current install" in out.getvalue()

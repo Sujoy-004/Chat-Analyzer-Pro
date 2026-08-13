@@ -120,7 +120,7 @@ def _acceptable_narrative_text(text: str) -> bool:
     return text.rstrip()[-1:] in (".", "!", "?")
 
 
-def run_pipeline(path: Path, console) -> AnalysisResults:
+def run_pipeline(path: Path, console, nlp_enabled: bool | None = None) -> AnalysisResults:
     """Parse, analyze and assemble the full AnalysisResults for one export."""
     import matplotlib
 
@@ -133,7 +133,10 @@ def run_pipeline(path: Path, console) -> AnalysisResults:
     # total matches the stages the pipeline actually runs.
     from chat_analyzer.cli import nlp_gate
 
-    nlp_on = nlp_gate.nlp_available(nlp_gate.MODEL_ID)
+    # PH2 tier menu: the CLI resolves the tier in main.py and passes a forced
+    # nlp_enabled here (True/False). None keeps the old auto-detect probe so
+    # direct/test callers stay deterministic without touching the environment.
+    nlp_on = nlp_gate.nlp_available(nlp_gate.MODEL_ID) if nlp_enabled is None else nlp_enabled
 
     # D-12: live determinate progress bar on a real terminal; off-tty the
     # stage() helper degrades to stage_status's plain '[OK]' lines (Pitfall 8).

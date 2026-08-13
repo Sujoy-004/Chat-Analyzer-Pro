@@ -9,19 +9,25 @@ export into terminal insights plus a self-contained HTML report.
   goes through `_analyze_path`; ValueError re-prompts (D-06).
 - `--version` (D-03): typer 0.27 has no built-in version flag — the eager
   callback closes the gap.
-- Always-integrated NLP (D-01/D-02/D-04/D-06): a silent availability check at
-  startup decides the UX. Interactive tty runs with NLP missing get the
-  D-04 3-option download menu (dispatched to the guarded installer);
-  positional and piped runs never prompt and print a single D-06 hint line.
+- Always-on NLP tier menu (PH2): EVERY interactive run (positional or in the
+  no-arg loop) shows the 3-option tier menu regardless of install state —
+  tier 1 forces NLP off, tiers 2/3 make the chosen tier ready before
+  analyzing (`_ensure_nlp_for_tier`). Non-interactive runs never prompt:
+  `CHAT_ANALYZER_TIER` env override, else silent tier 1 + the hint line.
 
 The heavy analysis modules are imported lazily inside `_analyze_path` so that
-`--help`/`--version` stay instant (research Anti-Pattern 2).
+`--help`/`--version` stay instant (research Anti-Pattern 2). nlp_gate itself
+is lightweight (stdlib + guarded huggingface_hub import) and safe to import
+eagerly.
 """
 
+import os
 import sys
 from pathlib import Path
 
 import typer
+
+from chat_analyzer.cli import nlp_gate
 
 app = typer.Typer(
     add_completion=False,
@@ -81,26 +87,99 @@ def _version_callback(value: bool) -> None:
         raise typer.Exit()
 
 
-def _nlp_menu(console) -> str:
-    """Show the D-04 3-option download menu and return the choice.
+def _tier_menu(console) -> str:
+    """Show the 3-option NLP tier menu and return the choice.
 
-    Only ever called on a real tty with NLP missing — the caller gates on
-    `sys.stdin.isatty()` and the availability probe. Option 2 (CPU-only,
-    ~0.6 GB) is the default (D-04, T-04-13); option 3 (no download) is
-    always available. Returns one of "1"/"2"/"3".
+    Shown on EVERY interactive run, regardless of current install state (PH2).
+    Default is 1 (without NLP). Returns one of "1"/"2"/"3".
     """
-    console.print("NLP extras are not installed. Choose how to proceed:")
-    console.print("  1) Download full torch (~3GB) - best quality")
-    console.print("  2) Download CPU-only torch + model (~0.6GB)")
-    console.print("  3) No download - run basic analysis")
+    console.print("NLP tier:")
+    console.print("  1) Without NLP")
+    console.print("  2) Minimal (~0.6 GB)")
+    console.print("  3) Full-fledged (~3 GB)")
     while True:
-        choice = typer.prompt("Choice", default="2").strip()
+        choice = typer.prompt("Choice", default="1").strip()
         if choice in ("1", "2", "3"):
             return choice
         console.print("[WARN] Please choose 1, 2, or 3.")
 
 
-def _analyze_path(path: Path) -> None:
+def _tier_from_env() -> str:
+    """Non-interactive tier resolution (PH2).
+
+    CHAT_ANALYZER_TIER=1|2|3 wins when set (1 accepted for explicitness).
+    Legacy CHAT_ANALYZER_FORCE_NLP maps 0->1 and 1->3 so existing automation
+    and tests stay valid. Default is silent tier 1 (no NLP).
+    """
+    env_tier = os.environ.get("CHAT_ANALYZER_TIER")
+    if env_tier in ("1", "2", "3"):
+        return env_tier
+    force = os.environ.get("CHAT_ANALYZER_FORCE_NLP")
+    if force == "1":
+        return "3"
+    return "1"
+
+
+def _announce_install(console, cpu_only: bool) -> None:
+    """D-05/Pitfall 4: announce name + size BEFORE the install and model
+    download start — never a frozen terminal. Called once before any pip run."""
+    flavor = "CPU-only (~0.6 GB)" if cpu_only else "full (~3 GB)"
+    console.print(
+        "[INFO] Installing NLP extras: torch + transformers "
+        f"({flavor}), then model {nlp_gate.MODEL_ID} "
+        f"(~{nlp_gate.EMOTION_MODEL_SIZE_MB} MB) and "
+        f"{nlp_gate.TIER_B_MODEL_ID} (~{nlp_gate.TIER_B_MODEL_SIZE_MB} MB)"
+    )
+
+
+def _ensure_nlp_for_tier(tier: str, console) -> bool:
+    """Make sure the chosen tier (2/3) is ready; True means NLP can run.
+
+    Resolves nlp_gate.nlp_status():
+    - READY   -> announce, proceed.
+    - MISSING -> announce + install (tier flavor) + download both models.
+    - OUTDATED-> prompt "Update now / Go with current"; update on request,
+                otherwise proceed with what's installed (pipeline downloads
+                missing weights on first use as today).
+    Any install/download failure degrades to basic analysis (returns False)
+    with the friendly hint — never a frozen terminal (Pitfall 4).
+    """
+    status, _ = nlp_gate.nlp_status()
+    cpu_only = tier == "2"
+    if status == "READY":
+        console.print("[INFO] NLP ready.")
+        return True
+    if status == "MISSING":
+        _announce_install(console, cpu_only)
+        try:
+            nlp_gate.install_nlp(cpu_only=cpu_only)
+            nlp_gate.download_models()
+        except RuntimeError as exc:
+            typer.echo(f"[WARN] {exc}", err=True)
+            console.print("[INFO] Continuing with basic analysis.")
+            return False
+        console.print("[INFO] NLP ready.")
+        return True
+    # OUTDATED
+    if sys.stdin.isatty():
+        choice = typer.prompt("Update NLP packages/models now?", default="n").strip().lower()
+        if choice in ("y", "yes", "update"):
+            _announce_install(console, cpu_only)
+            try:
+                nlp_gate.update_nlp(cpu_only=cpu_only)
+                nlp_gate.download_models()
+            except RuntimeError as exc:
+                typer.echo(f"[WARN] {exc}", err=True)
+                console.print("[INFO] Continuing with basic analysis.")
+                return False
+            console.print("[INFO] NLP ready.")
+    else:
+        # Non-interactive (piped/CI): cannot prompt — proceed with current.
+        console.print("[INFO] NLP out of date; continuing with current install.")
+    return True
+
+
+def _analyze_path(path: Path, nlp_enabled: bool) -> None:
     """Run the full pipeline for one export and render the report."""
     from rich.console import Console
 
@@ -109,7 +188,7 @@ def _analyze_path(path: Path) -> None:
     from chat_analyzer.cli.report_html import open_report, write_report
 
     console = Console()
-    results = run_pipeline(path, console)
+    results = run_pipeline(path, console, nlp_enabled=nlp_enabled)
 
     # D-05 / CRITICAL #1 — the smoke-contract count line, printed ONCE here
     # so the token appears in both positional and interactive stdout
@@ -145,14 +224,30 @@ def main(
         except (AttributeError, ValueError):
             pass
 
-    # D-02: silent startup availability check — no prompt, no hint here.
-    # Computed once and shared by the menu gate and the hint lines (04-03).
     from rich.console import Console
 
-    from chat_analyzer.cli import nlp_gate
-
-    nlp_on = nlp_gate.nlp_available(nlp_gate.MODEL_ID)
     console = Console()
+
+    def _resolve_nlp() -> tuple[bool, bool]:
+        """Return (nlp_enabled, menu_shown) for the current run (PH2).
+
+        tty -> always show the tier menu; non-tty -> CHAT_ANALYZER_TIER env or
+        silent tier 1. Tier 2/3 call _ensure_nlp_for_tier to make NLP ready.
+        """
+        if sys.stdin.isatty():
+            # A1: warn BEFORE the menu offers a multi-GB download that torch
+            # extraction could never finish (WinError 206).
+            long_path = nlp_gate.windows_long_path_message()
+            if long_path is not None:
+                console.print(f"[WARN] {long_path}")
+            tier = _tier_menu(console)
+            if tier == "1":
+                return False, True
+            return _ensure_nlp_for_tier(tier, console), True
+        tier = _tier_from_env()
+        if tier == "1":
+            return False, False
+        return _ensure_nlp_for_tier(tier, console), False
 
     if chat_file is not None:
         if not chat_file.is_file():
@@ -165,17 +260,17 @@ def main(
             )
             raise typer.Exit(code=1)
         try:
-            _analyze_path(chat_file)
+            nlp_enabled, menu_shown = _resolve_nlp()
+            _analyze_path(chat_file, nlp_enabled=nlp_enabled)
         except ValueError as exc:
             # MEDIUM #4 — a malformed file (zero parsed rows, bad export,
             # unsupported format) exits 1 with a friendly, instructive line,
             # never a traceback (D-13/D-14, T-04-11).
             typer.echo(_friendly_error(chat_file, exc), err=True)
             raise typer.Exit(code=1) from None
-        # D-06: single hint line after the report path, never before the
-        # "Messages: N" smoke token (ASCII only, no emoji). soft_wrap keeps
-        # the hint one line even on a narrow non-tty console (tests, pipes).
-        if not nlp_on:
+        # D-06: single hint line after the report path, only when the user
+        # never saw the menu (silent non-tty tier 1). ASCII only, no emoji.
+        if not nlp_enabled and not menu_shown:
             console.print(
                 "[INFO] Tip: richer insights need the NLP extra - "
                 "pip install chat-analyzer-pro\\[nlp]",
@@ -195,39 +290,15 @@ def main(
             )
             continue
         try:
-            # D-04: the download menu shows ONLY on a real tty with NLP
-            # missing (a piped run cannot answer a menu — D-06 hint instead).
-            menu_shown = False
-            if (not nlp_on) and sys.stdin.isatty():
-                menu_shown = True
-                # A1: warn BEFORE the menu offers a multi-GB download that
-                # torch extraction could never finish (WinError 206).
-                long_path = nlp_gate.windows_long_path_message()
-                if long_path is not None:
-                    console.print(f"[WARN] {long_path}")
-                choice = _nlp_menu(console)
-                if choice in ("1", "2"):
-                    # D-05/Pitfall 4: announce name + size BEFORE the install
-                    # and model download start — never a frozen terminal.
-                    console.print(
-                        "[INFO] Installing NLP extras: torch + transformers "
-                        "(~0.6 GB CPU / ~3 GB full), then model "
-                        f"{nlp_gate.MODEL_ID} (~{nlp_gate.EMOTION_MODEL_SIZE_MB} MB)"
-                    )
-                    try:
-                        nlp_gate.install_nlp(cpu_only=(choice == "2"))
-                        nlp_on = True  # install succeeded; pipeline may load models
-                    except RuntimeError as exc:
-                        typer.echo(f"[WARN] {exc}", err=True)
-                        console.print("[INFO] Continuing with basic analysis.")
-            _analyze_path(path)
+            nlp_enabled, menu_shown = _resolve_nlp()
+            _analyze_path(path, nlp_enabled=nlp_enabled)
         except ValueError as exc:
             # D-15 — friendly message with export instructions, then loop
             # back to re-prompt (never exits on a bad file).
             typer.echo(_friendly_error(path, exc), err=True)
             continue
-        # D-06 hint for the piped/no-menu path: the user never saw the menu.
-        if (not nlp_on) and (not menu_shown):
+        # D-06 hint for the silent non-tty path: the user never saw the menu.
+        if not nlp_enabled and not menu_shown:
             console.print(
                 "[INFO] Tip: richer insights need the NLP extra - "
                 "pip install chat-analyzer-pro\\[nlp]",

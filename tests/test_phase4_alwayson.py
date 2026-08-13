@@ -48,6 +48,7 @@ def _run(args: list[str], cwd: Path) -> subprocess.CompletedProcess:
     env["CHAT_ANALYZER_NO_OPEN"] = "1"  # never pop a browser (B3 opt-out)
     return subprocess.run(
         args,
+        input="",  # non-tty stdin: the PH2 tier menu never appears (silent tier 1)
         text=True,
         encoding="utf-8",
         errors="replace",

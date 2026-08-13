@@ -92,6 +92,73 @@ def nlp_available(model_id: str = MODEL_ID) -> bool:
     return True
 
 
+# [nlp] extras pins mirrored from pyproject.toml (PH2 tier resolution). Do NOT
+# drift: keep in sync with `[project.optional-dependencies].nlp`.
+_PACKAGE_PINS = {
+    "torch": ">=2.0",
+    "transformers": ">=4.30,<5.15",
+    "sentencepiece": ">=0.1.99",
+}
+
+
+def nlp_installed_versions() -> dict[str, str | None]:
+    """Installed versions of the [nlp] packages (or None when not installed).
+
+    Used by the tier-2/3 environment resolution; never raises.
+    """
+    from importlib.metadata import PackageNotFoundError, version
+
+    out: dict[str, str | None] = {}
+    for pkg in _PACKAGE_PINS:
+        try:
+            out[pkg] = version(pkg)
+        except PackageNotFoundError:
+            out[pkg] = None
+    return out
+
+
+def nlp_versions_satisfied() -> dict[str, bool]:
+    """True per package when its installed version satisfies the pinned range."""
+    from packaging.specifiers import SpecifierSet
+
+    installed = nlp_installed_versions()
+    return {
+        pkg: (installed.get(pkg) is not None and installed[pkg] in SpecifierSet(pin))
+        for pkg, pin in _PACKAGE_PINS.items()
+    }
+
+
+def nlp_models_cached() -> bool:
+    """True when BOTH model weight sets are in the local HF cache."""
+    return model_cached(MODEL_ID) and model_cached(TIER_B_MODEL_ID)
+
+
+def nlp_status() -> tuple[str, dict]:
+    """Tier-2/3 environment resolution.
+
+    Returns (status, detail) with status in READY | OUTDATED | MISSING:
+    - MISSING — at least one [nlp] package is not installed.
+    - OUTDATED — all packages installed but a version falls outside the pins,
+      or the model weights are not cached (a fresh install is not ready until
+      the download step runs).
+    - READY — packages satisfy pins and both models are cached.
+    """
+    installed = nlp_installed_versions()
+    satisfied = nlp_versions_satisfied()
+    models_ok = nlp_models_cached()
+    detail = {
+        "installed_versions": installed,
+        "versions_satisfied": satisfied,
+        "models_cached": models_ok,
+    }
+
+    if any(v is None for v in installed.values()):
+        return "MISSING", detail
+    if not all(satisfied.values()) or not models_ok:
+        return "OUTDATED", detail
+    return "READY", detail
+
+
 _CPU_INDEX = "https://download.pytorch.org/whl/cpu"
 _INSTALL_TIMEOUT = 900
 
@@ -202,3 +269,46 @@ def install_nlp(cpu_only: bool = False) -> None:
         _pip_install(["transformers>=4.30,<5.15"])
     else:
         _pip_install(["torch", "transformers>=4.30,<5.15"])
+
+
+def update_nlp(cpu_only: bool = False) -> None:
+    """Upgrade the [nlp] packages to the pinned ranges at runtime (PH2).
+
+    Mirrors install_nlp but passes --upgrade so an OUTDATED install (a version
+    outside the pins) is brought back to the audited ranges. Same guarded
+    subprocess, same long-path guard, same RuntimeError contract.
+    """
+    reason = windows_long_path_message()
+    if reason is not None:
+        raise RuntimeError(
+            reason + " Basic analysis still works without the NLP models."
+        )
+    if cpu_only:
+        _pip_install(["--upgrade", "torch", "--index-url", _CPU_INDEX])
+        _pip_install(["--upgrade", "transformers>=4.30,<5.15"])
+    else:
+        _pip_install(["--upgrade", "torch", "transformers>=4.30,<5.15"])
+
+
+def download_models() -> None:
+    """Download BOTH locked model weight sets into the HF cache (PH2).
+
+    The tier selection is the consent point: choosing tier 2/3 downloads any
+    missing weights immediately, not deferred to first pipeline use. Sizes are
+    announced by the caller before this runs. Raises RuntimeError on failure so
+    the caller degrades to basic analysis.
+    """
+    try:
+        from huggingface_hub import snapshot_download
+    except ImportError as exc:
+        raise RuntimeError(
+            "huggingface_hub is unavailable — install the [nlp] extra: "
+            "pip install chat-analyzer-pro[nlp]"
+        ) from exc
+    try:
+        snapshot_download(MODEL_ID)
+        snapshot_download(TIER_B_MODEL_ID)
+    except Exception as exc:
+        raise RuntimeError(
+            f"Model download failed — run basic analysis, or retry later. ({exc})"
+        ) from exc

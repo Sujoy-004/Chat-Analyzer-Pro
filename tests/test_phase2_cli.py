@@ -56,7 +56,7 @@ def _run(
     env["CHAT_ANALYZER_FORCE_NLP"] = "0"  # never download models in tests (WR-05)
     return subprocess.run(
         args,
-        input=stdin_text,
+        input=stdin_text if stdin_text is not None else "",
         text=True,
         encoding="utf-8",
         errors="replace",

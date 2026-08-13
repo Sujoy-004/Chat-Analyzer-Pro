@@ -45,6 +45,7 @@ def _run_forced(args: list[str], cwd: Path) -> subprocess.CompletedProcess:
     env["CHAT_ANALYZER_FORCE_NLP"] = "0"
     return subprocess.run(
         args,
+        input="",  # non-tty stdin: the PH2 tier menu never appears (silent tier 1)
         text=True,
         encoding="utf-8",
         errors="replace",
