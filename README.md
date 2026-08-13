@@ -42,6 +42,8 @@ For emotion classification and an understanding conversation **generative** narr
 pip install -e ".[nlp]"   # quotes needed on some shells (e.g. zsh)
 ```
 
+You don't have to install them by hand: on an interactive run the tool's **NLP tier menu** can install them for you (see below).
+
 #### Deep mode on Windows (long paths)
 
 Installing the NLP extras on Windows downloads multi-gigabyte torch wheels. Windows caps file paths at 260 characters (`MAX_PATH`), and torch's extraction crashes with WinError 206 when the active virtual environment's `site-packages` folder sits at a deep path — the `Chat-Analyzer-Pro` checkout itself often qualifies.
@@ -70,24 +72,39 @@ The tool detects automatically whether the NLP models are installed and never pi
 
 **Inputs:** a WhatsApp `.txt`, a Telegram `.json`, or a `.zip` export archive (WhatsApp "Export chat" and Telegram "Export Telegram data" can both produce one). When a `.zip` contains several chat transcripts, the tool lists them and lets you choose which to analyze (press Enter to analyze all). Media files inside the zip (images, videos, stickers) are ignored — only the conversation text is analyzed.
 
-## What does the NLP download question mean?
+## What does the NLP tier menu mean?
 
-The first time you run the tool on an interactive terminal and the NLP models aren't installed, it asks one question about downloading them — it's only asked once. The options are:
+On **every** interactive run, the tool shows a 3-option NLP tier menu **before analyzing**, regardless of what's already installed — you choose how heavy the run should be:
 
-1. **Full torch (~3 GB)** — best quality
-2. **CPU-only torch + model (~0.6 GB)**
-3. **No download** — run basic analysis
+```
+NLP tier:
+  1) Without NLP
+  2) Minimal (~0.6 GB)
+  3) Full-fledged (~3 GB)
+Choice [1]:
+```
 
-If you choose no download, the tool runs basic analysis — every other feature still works, and you can install the extras any time with `pip install -e ".[nlp]"`.
+1. **Without NLP** — forces NLP off for *this* run (even if the extras are installed) and runs basic analysis: every other feature still works.
+2. **Minimal** — CPU-only torch (~0.6 GB) plus both models. Downloads anything missing, then analyzes with NLP on.
+3. **Full-fledged** — full torch (~3 GB) plus both models. Downloads anything missing, then analyzes with NLP on.
 
-If the tool can't ask (for example, when output is piped), it never prompts — it just prints a single hint line instead.
+Choosing tier 2 or 3 **is the consent point**: any missing packages are installed and any missing model weights are downloaded immediately (sizes are announced first), not deferred to first use. The tool makes sure your chosen tier is ready before it starts analyzing.
 
-## How the auto-detected tiers work
+**When the menu can't be shown** (output is piped, or the run is driven by a script/CI), the tool never prompts: it defaults to **tier 1** silently and prints a single hint line. Automation can pick a tier explicitly with the environment override:
 
-The tool silently checks — at startup — whether `torch` + `transformers` are installed. There are no flags to remember:
+- `CHAT_ANALYZER_TIER=1` — without NLP (explicit)
+- `CHAT_ANALYZER_TIER=2` — minimal
+- `CHAT_ANALYZER_TIER=3` — full-fledged
 
-- **NLP available** → everything runs automatically: emotion, the conversation summary, **and** the written narrative paragraph (a small local model, flan-t5-small, summarizing a compact *signal digest* of your chat — never raw messages).
-- **NLP not available** → you're offered the download menu (or, off a terminal, a hint line). If you decline, the **Tier A narrative** still runs: pandas-only heuristic observations. **Tier B** (the written paragraph) only appears once the models are installed.
+## How the tiers are enforced
+
+The tool checks — at startup — whether `torch` + `transformers` are installed and within the pinned versions, and whether both model weight sets are already cached:
+
+- **READY** → tier 2/3 proceeds immediately ("NLP ready").
+- **MISSING** → the packages install first (tier 2 = CPU-only torch, tier 3 = full torch), then both models download.
+- **OUTDATED** → a version is outside the pins or the weights aren't cached: on an interactive terminal it asks **Update now / Go with current**; on a pipe it proceeds with what's installed.
+
+- **Tier 1 / NLP off** → the **Tier A narrative** still runs: pandas-only heuristic observations ("What's going on"). **Tier B** (the written paragraph from a small local flan-t5-small model, summarizing a compact *signal digest* of your chat — never raw messages) only appears when NLP is enabled.
 
 The **"What's going on"** tab in the report and the terminal status line always tell you which analysis actually ran — nothing is silently skipped.
 
@@ -97,7 +114,7 @@ Relationship-health grades, emotion labels, and narrative observations are **sta
 
 ## Privacy
 
-Everything runs **entirely on your machine** — no accounts, no server, no telemetry. `pip install` pulls public model weights (downloaded on first use and cached locally); the model, your chat data, and the generated report never leave your device. The terminal messages say this on every NLP run.
+Everything runs **entirely on your machine** — no accounts, no server, no telemetry. `pip install` pulls public model weights (downloaded at tier selection, or on first use if you installed the extras manually, and cached locally); the model, your chat data, and the generated report never leave your device. The terminal messages say this on every NLP run.
 
 ## Features
 
