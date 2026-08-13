@@ -1,3 +1,4 @@
+import logging
 import warnings
 
 import matplotlib.pyplot as plt
@@ -5,27 +6,40 @@ import pandas as pd
 
 warnings.filterwarnings('ignore')
 
+
+def _in_spawn_child() -> bool:
+    """True when running in a multiprocessing spawn child (suppresses child-side import noise)."""
+    try:
+        from multiprocessing import parent_process
+        return parent_process() is not None
+    except ImportError:  # pragma: no cover
+        return False
+
+
 # Sentiment analysis imports
 try:
     from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
     VADER_AVAILABLE = True
 except ImportError:
     VADER_AVAILABLE = False
-    print("⚠️ VADER not available. Install with: pip install vaderSentiment")
+    if not _in_spawn_child():
+        print("⚠️ VADER not available. Install with: pip install vaderSentiment")
 
 try:
     from textblob import TextBlob
     TEXTBLOB_AVAILABLE = True
 except ImportError:
     TEXTBLOB_AVAILABLE = False
-    print("⚠️ TextBlob not available. Install with: pip install textblob")
+    if not _in_spawn_child():
+        print("⚠️ TextBlob not available. Install with: pip install textblob")
 
 try:
     from transformers import pipeline
     TRANSFORMERS_AVAILABLE = True
 except ImportError:
     TRANSFORMERS_AVAILABLE = False
-    print("⚠️ Transformers not available. Install with: pip install transformers torch")
+    if not _in_spawn_child():
+        print("⚠️ Transformers not available. Install with: pip install transformers torch")
 
 class SentimentConfig:
     """Configuration settings for sentiment analysis"""
@@ -166,6 +180,54 @@ def categorize_sentiment(score, positive_threshold=None, negative_threshold=None
     else:
         return 'Neutral'
 
+_VADER_PARALLEL_THRESHOLD = 20_000
+
+
+def _vader_score_batch(strings: list[str]) -> list[dict]:
+    """Score a batch with a worker-local VADER analyzer (spawn-safe; do NOT use the
+    module-global _vader_analyzer — it is None in child processes)."""
+    from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+
+    analyzer = SentimentIntensityAnalyzer()
+    return [analyzer.polarity_scores(s) for s in strings]
+
+
+def _score_vader_parallel(series) -> list[dict]:
+    """Deterministic dedupe + optional multiprocess VADER scoring, preserving row order.
+
+    Empty/NaN/whitespace rows short-circuit to the neutral dict exactly like the
+    per-message analyze_vader path. Every scorable string is scored once (dedupe is
+    exact: polarity_scores(str(text)) is a pure function of str(text)). Falls back to
+    sequential scoring on any worker failure.
+    """
+    keys = [None if (pd.isna(t) or str(t).strip() == "") else str(t) for t in series.tolist()]
+    unique = list(dict.fromkeys(keys))
+    scorable = [k for k in unique if k is not None]
+
+    scored: dict[str, dict] = {}
+    neutral = {"compound": 0, "pos": 0, "neu": 1, "neg": 0}
+    if len(scorable) > _VADER_PARALLEL_THRESHOLD:
+        try:
+            import multiprocessing as mp
+            from concurrent.futures import ProcessPoolExecutor
+
+            chunks = [scorable[i:i + 10_000] for i in range(0, len(scorable), 10_000)]
+            max_workers = min(mp.cpu_count(), 8)
+            with ProcessPoolExecutor(max_workers=max_workers) as pool:
+                results = pool.map(_vader_score_batch, chunks, chunksize=1)
+            for chunk, chunk_scores in zip(chunks, results):
+                for s, r in zip(chunk, chunk_scores):
+                    scored[s] = r
+        except Exception:
+            # Logging with .exception() satisfies BLE001 (traceback preserved);
+            # any worker failure degrades to the sequential path.
+            logging.getLogger(__name__).exception("parallel VADER failed; using sequential")
+    for k in scorable:
+        if k not in scored:
+            scored[k] = (_vader_analyzer.polarity_scores(k) if _vader_analyzer is not None else neutral)
+    return [scored.get(k) if k is not None else dict(neutral) for k in keys]
+
+
 def add_sentiment_analysis(df, message_col='message', initialize_first=True):
     """
     Add comprehensive sentiment analysis to DataFrame
@@ -184,10 +246,10 @@ def add_sentiment_analysis(df, message_col='message', initialize_first=True):
     print(f"🔍 Analyzing sentiment for {len(df)} messages...")
     df = df.copy()
     
-    # VADER Analysis
+    # VADER Analysis (dedupe + parallel for large chats; values identical to per-message apply)
     if VADER_AVAILABLE:
         print("Running VADER analysis...")
-        vader_results = df[message_col].apply(analyze_vader)
+        vader_results = _score_vader_parallel(df[message_col])
         df['vader_compound'] = [r['compound'] for r in vader_results]
         df['vader_pos'] = [r['pos'] for r in vader_results]
         df['vader_neu'] = [r['neu'] for r in vader_results]
