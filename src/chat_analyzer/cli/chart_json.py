@@ -48,6 +48,18 @@ _DATAZOOM = [
 
 _LINE_GRID = {"left": 64, "right": 24, "top": 36, "bottom": 76}
 
+# The six canonical emotions in fixed order + a fixed 6-color palette
+# (matplotlib tab10) so a series' color never depends on data order.
+_EMOTION_ORDER = ("joy", "sadness", "anger", "fear", "surprise", "love")
+_EMOTION_COLORS = (
+    "#1f77b4",
+    "#ff7f0e",
+    "#2ca02c",
+    "#d62728",
+    "#9467bd",
+    "#8c564b",
+)
+
 
 def build_chart_specs(
     df: pd.DataFrame,
@@ -61,7 +73,8 @@ def build_chart_specs(
     (the chart is omitted from the returned dict and write_report renders its
     base64 PNG fallback). Returns only JSON-serializable option dicts.
     Emotion is excluded: the gated NLP stage builds that spec separately via
-    build_emotion_spec when the models are available.
+    build_emotion_spec (and the quarterly line via build_emotion_timeline_spec)
+    when the models are available.
     """
     builders = (
         ("timeline", lambda: _build_timeline(df)),
@@ -110,6 +123,76 @@ def build_emotion_spec(emotion_summary: dict | None) -> dict | None:
         }
     except Exception:
         logger.warning("interactive chart emotion failed", exc_info=True)
+        return None
+
+
+def build_emotion_timeline_spec(emotion_summary: dict | None) -> dict | None:
+    """Quarterly mean emotion scores as one smooth line per emotion.
+
+    Consumes ``emotion_summary["quarterly"]`` — the per-quarter MEAN of the
+    six emotion scores (0-1 floats, sorted ascending) attached by the NLP
+    stage — and returns an ECharts line spec with the module's slider+inside
+    dataZoom so a long multi-year chat stays zoomable. None when no quarterly
+    data is available: the report then simply omits the chart div (PNG-free
+    degrade, same as the other builders). Never raises (Pitfall 6 spirit) and
+    every value is JSON-safe — scores go through _float_or_none (NaN/None
+    dropped per quarter) and quarters are str()'d. This builder only consumes
+    the summary dict; it never calls the emotion module's own getters.
+    """
+    try:
+        if not emotion_summary:
+            return None
+        quarterly = emotion_summary.get("quarterly")
+        if not quarterly:
+            return None
+        quarters: list[str] = []
+        series_data = {name: [] for name in _EMOTION_ORDER}
+        for entry in quarterly:
+            if not isinstance(entry, dict):
+                continue
+            quarter = entry.get("quarter")
+            scores = entry.get("scores")
+            if quarter is None or not isinstance(scores, dict):
+                continue
+            quarters.append(str(quarter))
+            for name in _EMOTION_ORDER:
+                series_data[name].append(_float_or_none(scores.get(name)))
+        if not quarters:
+            return None
+        return {
+            "tooltip": {"trigger": "axis"},
+            "legend": {"top": 0, "type": "scroll"},
+            "grid": {**_LINE_GRID, "top": 44},
+            "dataZoom": _DATAZOOM,
+            "xAxis": {
+                "type": "category",
+                "data": quarters,
+                "boundaryGap": False,
+                "axisLabel": {"rotate": 45, "hideOverlap": True},
+            },
+            "yAxis": {
+                "type": "value",
+                "min": 0,
+                "max": 1,
+                "splitNumber": 4,
+                "name": "mean score (0..1)",
+            },
+            "series": [
+                {
+                    "name": name,
+                    "type": "line",
+                    "data": series_data[name],
+                    "smooth": True,
+                    "symbol": "circle",
+                    "lineStyle": {"width": 2, "color": color},
+                    "itemStyle": {"color": color},
+                    "emphasis": {"focus": "series"},
+                }
+                for name, color in zip(_EMOTION_ORDER, _EMOTION_COLORS)
+            ],
+        }
+    except Exception:
+        logger.warning("interactive chart emotion-quarterly failed", exc_info=True)
         return None
 
 
