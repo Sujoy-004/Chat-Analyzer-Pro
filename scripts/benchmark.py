@@ -221,17 +221,27 @@ def _spawn_and_run(path: Path, tier: str, script: Path, log_path: Path | None) -
     env["PYTHONIOENCODING"] = "utf-8"
 
     started = time.perf_counter()
-    proc = subprocess.run(
-        [sys.executable, str(script), "--run-one", str(path), tier],
-        cwd=str(REPO_ROOT),
-        env=env,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        check=False,
-        timeout=1800,
-    )
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(script), "--run-one", str(path), tier],
+            cwd=str(REPO_ROOT),
+            env=env,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+            timeout=2400,
+        )
+    except subprocess.TimeoutExpired:
+        return {
+            "ok": False,
+            "file": str(path),
+            "tier": tier,
+            "error": f"worker timed out after {2400}s",
+            "seconds": 2400.0,
+            "wall_seconds": 2400.0,
+        }
     wall = round(time.perf_counter() - started, 3)
 
     record = None
@@ -273,6 +283,26 @@ def _record_fingerprint_after() -> dict:
         "cpu_load_after": windows_cpu_load_percent(),
         "free_gb_after": free_gb_c(),
     }
+
+
+def _write_results(
+    summary: dict,
+    results: list[dict],
+    missing: list[str],
+    started_wall: float,
+    json_path: Path,
+) -> None:
+    """Write the current benchmark state to the JSON results file.
+
+    Called after every completed run so a later interruption never loses the
+    runs already finished (the final call after all runs is authoritative).
+    """
+    summary.update(_record_fingerprint_after())
+    summary["busy_note"] = BUSY_NOTE
+    summary["total_wall_seconds"] = round(time.perf_counter() - started_wall, 1)
+    summary["inputs_missing_skipped"] = missing
+    summary["results"] = results
+    json_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
 
 
 def build_table(results: list[dict]) -> str:
@@ -424,6 +454,7 @@ def main(argv: list[str] | None = None) -> int:
         if log_path is not None:
             with log_path.open("a", encoding="utf-8") as fh:
                 fh.write(f"{label}: {status} in {elapsed:.1f}s\n")
+        _write_results(summary, results, sorted(missing), started_wall, json_path)
 
     summary.update(_record_fingerprint_after())
     summary["busy_note"] = BUSY_NOTE
