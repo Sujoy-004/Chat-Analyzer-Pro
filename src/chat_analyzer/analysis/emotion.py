@@ -60,6 +60,60 @@ _TIME_BUCKETS = 50
 # top_k=None (self.emotions is derived from this constant).
 EMOTION_LABELS = ("joy", "sadness", "anger", "fear", "surprise", "love")
 
+# Only parallelize unique-text scoring when there are MORE unique scorable
+# texts than this: small chats stay fully sequential (byte-identical, no
+# spawn churn).
+_EMOTION_PARALLEL_THRESHOLD = 20_000
+
+
+def _score_text_chunk(
+    texts: list[str], model_name: str, batch_size: int
+) -> list[tuple[str, dict]]:
+    """Score a chunk of unique texts inside a spawn child process.
+
+    Windows-spawn rule: module-level and takes ONLY JSON-able args (list of
+    str, str model id, int). The heavy pipeline is constructed INSIDE the
+    child — never passed in — and torch threads are capped to cpu_count // 3
+    so the pool does not oversubscribe the box. Uses the same 4.x/5.x shape
+    normalization as the parent's _score_batch (top_k=None flat vs nested
+    list). Any failure raises cleanly; the caller degrades to sequential.
+    """
+    import os
+
+    try:
+        import torch
+        from transformers import pipeline
+
+        torch.set_num_threads(max(1, (os.cpu_count() or 1) // 3))
+        scorer = pipeline(
+            "text-classification", model=model_name, top_k=None, device=-1
+        )
+        size = max(1, batch_size)
+        out: list[tuple[str, dict]] = []
+        for i in range(0, len(texts), size):
+            chunk = texts[i : i + size]
+            batch_out = scorer(chunk, batch_size=size, top_k=None)
+            if not isinstance(batch_out, list):
+                raise TypeError("pipeline returned a non-list result")
+            if (
+                len(batch_out) == 1
+                and isinstance(batch_out[0], list)
+                and len(batch_out[0]) == len(chunk)
+            ):
+                batch_out = batch_out[0]
+            if len(batch_out) != len(chunk):
+                raise ValueError("pipeline returned a non-aligned result shape")
+            out.extend(
+                (text, _parse_emotion_scores(item))
+                for text, item in zip(chunk, batch_out)
+            )
+        return out
+    except Exception:
+        # Log with .exception() satisfies BLE001 (traceback preserved); the
+        # caller catches the re-raised error and degrades to sequential.
+        logging.getLogger(__name__).exception("emotion worker chunk failed")
+        raise
+
 
 def _allocate_seats(counts: dict, cap: int) -> dict:
     """Deterministic largest-remainder allocation of ``cap`` seats.
@@ -378,18 +432,104 @@ class EmotionAnalyzer:
         return scored
 
     def _score_unique_texts(
-        self, pending: list[tuple], batch_size: int
+        self, pending: list[tuple], batch_size: int, workers: int | None = None
     ) -> dict[str, dict]:
-        """Dedupe + score the pending (idx, text) rows; returns {text: scores}.
+        """Dedupe + optional parallel scoring of the pending (idx, text) rows.
 
         Every UNIQUE text is scored once — emotion scoring is a pure function
         of the text — then mapped back to every row with that exact text, so
         the output is byte-identical to scoring every row individually. Rows
         keep their original order (the caller maps by (idx, text)).
+
+        Parallel only when a REAL transformers pipeline is present AND the
+        worker count resolves to >= 2 AND there are more unique texts than
+        _EMOTION_PARALLEL_THRESHOLD; any worker failure degrades to the
+        sequential _score_batch path (VADER precedent), so mocked-pipeline
+        tests keep exercising the sequential path untouched.
         """
         unique_texts = list(dict.fromkeys(t for _, t in pending))
+        workers = self._scoring_workers(workers)
+        if workers >= 2 and len(unique_texts) > _EMOTION_PARALLEL_THRESHOLD:
+            scored = self._score_unique_texts_parallel(
+                unique_texts, batch_size, workers
+            )
+            if scored is not None:
+                return scored
         scored_list = self._score_batch(unique_texts, batch_size)
         return dict(zip(unique_texts, scored_list))
+
+    def _is_real_pipeline(self) -> bool:
+        """True only for a genuine transformers pipeline (parallel-safe).
+
+        pytest mocks patch the module-level ``_emotion_analyzer`` /
+        ``_emotion_model_loaded`` (and/or ``transformers.pipeline``) with
+        plain callables — a function is NOT a ``transformers.Pipeline``
+        instance, so mocked tests keep running the sequential path untouched
+        (a mock is neither picklable nor backed by a real model).
+        """
+        try:
+            import transformers
+        except ImportError:
+            return False
+        try:
+            return isinstance(self.pipeline, transformers.Pipeline)
+        except Exception:  # noqa: BLE001 - exotic callables degrade to sequential
+            return False
+
+    def _scoring_workers(self, workers: int | None = None) -> int:
+        """Resolve the effective parallel worker count (0 = sequential).
+
+        The real-pipeline gate ALWAYS applies: parallel only for a genuine
+        transformers pipeline. An explicit ``workers`` argument (resolved by
+        the pipeline via nlp_gate) is gated the same way; None resolves the
+        CHAT_ANALYZER_EMOTION_WORKERS env knob via nlp_gate.emotion_worker_count.
+        """
+        if not self._is_real_pipeline():
+            return 0
+        if workers is None:
+            try:
+                from chat_analyzer.cli import nlp_gate
+
+                return nlp_gate.emotion_worker_count()
+            except Exception:
+                logger.exception("emotion worker resolution failed; using sequential")
+                return 0
+        return max(1, int(workers))
+
+    def _score_unique_texts_parallel(
+        self, unique_texts: list[str], batch_size: int, workers: int
+    ) -> dict[str, dict] | None:
+        """Map-reduce unique-text scoring across a process pool, or None on failure.
+
+        ``unique_texts`` is split into ``workers`` CONTIGUOUS fixed-order
+        chunks and each chunk is scored by a worker-local pipeline; the
+        flattened results restore the original unique order. Per-message
+        scores are pure functions of the text, so the returned {text: scores}
+        map is byte-identical regardless of worker count. Any exception
+        degrades to the sequential path (VADER precedent).
+        """
+        try:
+            import itertools
+            from concurrent.futures import ProcessPoolExecutor
+
+            step = (len(unique_texts) + workers - 1) // workers
+            chunks = [unique_texts[i * step : (i + 1) * step] for i in range(workers)]
+            chunks = [c for c in chunks if c]
+            scored: dict[str, dict] = {}
+            with ProcessPoolExecutor(max_workers=workers) as pool:
+                results = pool.map(
+                    _score_text_chunk,
+                    chunks,
+                    itertools.repeat(self.model_name),
+                    itertools.repeat(batch_size),
+                )
+                for chunk, chunk_pairs in zip(chunks, results):
+                    for text, scores in chunk_pairs:
+                        scored[text] = scores
+            return scored
+        except Exception:
+            logger.exception("parallel emotion scoring failed; using sequential")
+            return None
 
     def _get_neutral_emotions(self) -> dict[str, float]:
         """Return neutral emotion scores."""
@@ -445,7 +585,8 @@ class EmotionAnalyzer:
                         df: pd.DataFrame, 
                         text_column: str = 'message',
                         batch_size: int = 32,
-                        sample_cap: int | None = None) -> pd.DataFrame:
+                        sample_cap: int | None = None,
+                        workers: int | None = None) -> pd.DataFrame:
         """
         Analyze emotions for all messages in a DataFrame.
         
@@ -463,6 +604,13 @@ class EmotionAnalyzer:
                 failure degrades to exact scoring with the attrs marking the
                 sample as failed so the pipeline labels honestly — the
                 pipeline never crashes.
+            workers: Explicit parallel worker count (the pipeline resolves
+                it via nlp_gate.emotion_worker_count). None resolves the
+                CHAT_ANALYZER_EMOTION_WORKERS env knob internally. Parallel
+                only ever triggers for a REAL transformers pipeline with
+                >= 2 workers AND more than _EMOTION_PARALLEL_THRESHOLD
+                unique texts; the output is byte-identical to sequential
+                regardless.
             
         Returns:
             DataFrame with added emotion columns
@@ -519,7 +667,9 @@ class EmotionAnalyzer:
 
                 scores_by_idx = {idx: self._get_neutral_emotions() for idx in skipped}
                 if pending:
-                    scores_by_text = self._score_unique_texts(pending, batch_size)
+                    scores_by_text = self._score_unique_texts(
+                        pending, batch_size, workers
+                    )
                     for idx, text in pending:
                         scores_by_idx[idx] = scores_by_text[text]
 
@@ -548,7 +698,9 @@ class EmotionAnalyzer:
                 scores_by_idx = {idx: self._get_neutral_emotions() for idx in skipped}
 
                 if pending:
-                    scores_by_text = self._score_unique_texts(pending, batch_size)
+                    scores_by_text = self._score_unique_texts(
+                        pending, batch_size, workers
+                    )
                     for idx, text in pending:
                         scores_by_idx[idx] = scores_by_text[text]
 

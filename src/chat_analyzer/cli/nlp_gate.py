@@ -51,6 +51,14 @@ _ALLOW_LONG_PATH = "CHAT_ANALYZER_ALLOW_LONG_PATH"
 _EMOTION_SAMPLE_ENV = "CHAT_ANALYZER_EMOTION_SAMPLE"
 EMOTION_SAMPLE_DEFAULT = 50000
 
+# Parallel exact emotion scoring (large chats): the worker-count knob.
+# Exposed via CHAT_ANALYZER_EMOTION_WORKERS; "0"/"1" mean sequential (no
+# pool), positive integers are capped at 8 (each worker loads its own
+# ~255 MB model copy plus torch), anything else falls back to the default.
+# See emotion_worker_count below.
+_EMOTION_WORKERS_ENV = "CHAT_ANALYZER_EMOTION_WORKERS"
+EMOTION_WORKERS_DEFAULT = 3
+
 # Windows MAX_PATH guard (A1): torch 2.x wheel extraction crashes with
 # WinError 206 when the venv's site-packages path plus torch's own reserved
 # extraction depth crosses the 260-char limit.
@@ -99,6 +107,36 @@ def emotion_sample_cap() -> int | None:
     if cap < 1:  # covers "00", "-0", "-5" — any parses-to-<=0 value disables
         return None
     return cap
+
+
+def emotion_worker_count() -> int:
+    """Resolve the parallel emotion worker count from CHAT_ANALYZER_EMOTION_WORKERS.
+
+    Parallel exact scoring fans unique-text inference out to a process pool
+    on huge chats (each worker builds its own DistilBERT pipeline). The
+    environment controls the worker count:
+
+    - absent/empty      -> EMOTION_WORKERS_DEFAULT (3)
+    - "0"/"1"           -> 1 (sequential, no pool)
+    - positive integer  -> max(1, min(value, os.cpu_count() or 1, 8)) —
+      capped at 8 because every worker loads its own ~255 MB model copy
+      plus a torch runtime (RAM bound)
+    - anything else     -> EMOTION_WORKERS_DEFAULT (never raises)
+
+    Always returns >= 1; callers parallelize only when the value is >= 2.
+    """
+    raw = os.environ.get(_EMOTION_WORKERS_ENV, "").strip()
+    if raw == "":
+        return EMOTION_WORKERS_DEFAULT
+    if raw in ("0", "1"):
+        return 1
+    try:
+        value = int(raw)
+    except ValueError:
+        return EMOTION_WORKERS_DEFAULT
+    if value < 2:  # "00", "-0", "-5" — any parses-to-<2 value is not a usable pool
+        return EMOTION_WORKERS_DEFAULT
+    return max(1, min(value, os.cpu_count() or 1, 8))
 
 
 def nlp_available(model_id: str = MODEL_ID) -> bool:
