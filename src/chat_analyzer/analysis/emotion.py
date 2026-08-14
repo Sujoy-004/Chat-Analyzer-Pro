@@ -143,6 +143,17 @@ def _pick_in_sender(
             drawn = labels.to_series().sample(n=seats, random_state=_EMOTION_SAMPLE_RNG)
             return drawn.tolist()
 
+    # CR-01: qcut can silently succeed with ALL-NaN buckets when a sender's
+    # scorable datetimes collapse to <= 1 unique value (identical timestamps,
+    # or all-NaT datetimes that messages_to_dataframe keeps). pandas does not
+    # raise with duplicates="drop", so the except fallback above never fires;
+    # without this explicit check value_counts() would be {} and this sender
+    # would contribute ZERO rows — silently breaking the exactly-`seats`
+    # contract (worst case: an all-NaN pipeline summary over 0 scored rows).
+    if not buckets.notna().any():
+        drawn = labels.to_series().sample(n=seats, random_state=_EMOTION_SAMPLE_RNG)
+        return drawn.tolist()
+
     counts = buckets.value_counts().to_dict()
     alloc = _allocate_seats(counts, seats)
     picked: list = []
@@ -192,6 +203,18 @@ def _stratified_sample_indices(
         sender_mask = scorable_mask & (df["sender"] == sender)
         picked = _pick_in_sender(df, sender_mask, seats, global_edges)
         chosen[picked] = True
+
+    # CR-01 (defensive top-up): guarantee the exact-count contract even if
+    # seat allocation ever under-fills. Top up from the remaining scorable
+    # rows in original order, with the same random_state, so exactly
+    # min(cap, n_scorable) rows are always chosen.
+    target = min(cap, int(scorable_mask.sum()))
+    if int(chosen.sum()) < target:
+        remaining = df.index[scorable_mask & ~chosen]
+        top_up = remaining.to_series().sample(
+            n=target - int(chosen.sum()), random_state=_EMOTION_SAMPLE_RNG
+        )
+        chosen[top_up.to_numpy()] = True
     return chosen
 
 
