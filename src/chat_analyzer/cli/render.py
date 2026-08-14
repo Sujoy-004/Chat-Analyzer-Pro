@@ -64,6 +64,13 @@ def show_summary(results: AnalysisResults, console: Console) -> None:
             "[INFO] NLP enabled - emotion and narrative are active",
             soft_wrap=True,
         )
+    sample = (results.get("emotion") or {}).get("sample")
+    if sample and sample.get("sampled"):
+        console.print(
+            f"[INFO] Emotions based on a sample of {sample['scored']} "
+            f"of {sample['total']} messages.",
+            soft_wrap=True,
+        )
     narrative_summary = (narrative.get("narrative_summary") or "").strip()
     if narrative_summary:
         console.print(
