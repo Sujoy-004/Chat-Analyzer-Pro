@@ -320,13 +320,26 @@ class EmotionAnalyzer:
 
         return emotion_scores
 
-    def _is_scorable(self, text) -> bool:
+    @staticmethod
+    def _is_scorable(text) -> bool:
         """Whether a message would be scored instead of short-circuiting to neutral."""
         if not text or not isinstance(text, str) or text.strip() == "":
             return False
         if "<Media omitted>" in text or "<media omitted>" in text.lower():
             return False
         return len(text.strip()) >= 3
+
+    @staticmethod
+    def n_scorable(df: pd.DataFrame, text_column: str = "message") -> int:
+        """Count rows that analyze_emotions would actually model-score.
+
+        Uses the same ``_is_scorable`` rule as the sampled-path gate so the
+        pipeline's prompt/sample decision and the analyzer's
+        ``n_scorable > cap`` gate always agree (IN-01) — a frame with many
+        media-omitted or short messages has far fewer scorable rows than
+        ``len(df)``, and the prompt must not overstate the work.
+        """
+        return int(df[text_column].map(EmotionAnalyzer._is_scorable).sum())
 
     def _score_batch(self, texts: list[str], batch_size: int) -> list[dict[str, float]]:
         """Score texts in chunks of batch_size, degrading per-message on any
@@ -444,7 +457,7 @@ class EmotionAnalyzer:
                 # does the deterministic stratified sample kick in; otherwise
                 # the exact path below runs untouched.
                 scorable_mask = df_copy[text_column].map(self._is_scorable)
-                n_scorable = int(scorable_mask.sum())
+                n_scorable = self.n_scorable(df_copy, text_column)
                 if n_scorable > sample_cap:
                     try:
                         selected = _stratified_sample_indices(

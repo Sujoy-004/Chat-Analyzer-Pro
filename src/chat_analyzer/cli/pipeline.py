@@ -293,22 +293,28 @@ def run_pipeline(path: Path, console, nlp_enabled: bool | None = None) -> Analys
         emotion_summary = None
         if nlp_on:
             # Option C: sampled emotion scoring for large chats. Resolve the
-            # cap once; when the frame exceeds it, prompt on interactive
-            # terminals (default NO = exact) and AUTO-SAMPLE off-tty
-            # (piped/CI/tests). The exact path stays untouched below the cap.
+            # cap once; when the SCORABLE count exceeds it — the same
+            # _is_scorable rule the analyzer's n_scorable > cap gate uses
+            # (IN-01) — prompt on interactive terminals (default NO = exact)
+            # and AUTO-SAMPLE off-tty (piped/CI/tests). The exact path stays
+            # untouched below the cap.
             sample_cap = None
             emotion_sample_cap = nlp_gate.emotion_sample_cap()
-            if emotion_sample_cap is not None and len(df) > emotion_sample_cap:
-                if console.is_terminal:
-                    answer = console.input(
-                        f"{len(df)} messages — exact emotion scoring can take "
-                        f"~2 hours; sampled (up to {emotion_sample_cap}) takes "
-                        f"minutes. Sample? [y/N] "
-                    )
-                    if answer.strip().lower() in ("y", "yes"):
-                        sample_cap = emotion_sample_cap
-                else:
-                    sample_cap = emotion_sample_cap  # AUTO-SAMPLE (piped/CI)
+            if emotion_sample_cap is not None:
+                from chat_analyzer.analysis.emotion import EmotionAnalyzer
+
+                n_scorable = EmotionAnalyzer.n_scorable(df)
+                if n_scorable > emotion_sample_cap:
+                    if console.is_terminal:
+                        answer = console.input(
+                            f"{n_scorable} scorable messages — exact emotion "
+                            f"scoring can take ~2 hours; sampled (up to "
+                            f"{emotion_sample_cap}) takes minutes. Sample? [y/N] "
+                        )
+                        if answer.strip().lower() in ("y", "yes"):
+                            sample_cap = emotion_sample_cap
+                    else:
+                        sample_cap = emotion_sample_cap  # AUTO-SAMPLE (piped/CI)
             with stage(console, progress, task_id, "Analyzing emotions"):
                 # D-05/Pitfall 4: announce model name + size BEFORE any
                 # construction that triggers from_pretrained — and outside the
