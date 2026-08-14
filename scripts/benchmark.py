@@ -212,7 +212,13 @@ def _run_one_entry(argv: list[str]) -> int:
     return 0
 
 
-def _spawn_and_run(path: Path, tier: str, script: Path, log_path: Path | None) -> dict:
+def _spawn_and_run(
+    path: Path,
+    tier: str,
+    script: Path,
+    log_path: Path | None,
+    worker_timeout: int,
+) -> dict:
     """Run one (path, tier) in a fresh subprocess; return its record dict."""
     env = os.environ.copy()
     env["CHAT_ANALYZER_TIER"] = TIER_ENV[tier]
@@ -231,16 +237,16 @@ def _spawn_and_run(path: Path, tier: str, script: Path, log_path: Path | None) -
             encoding="utf-8",
             errors="replace",
             check=False,
-            timeout=2400,
+            timeout=worker_timeout,
         )
     except subprocess.TimeoutExpired:
         return {
             "ok": False,
             "file": str(path),
             "tier": tier,
-            "error": f"worker timed out after {2400}s",
-            "seconds": 2400.0,
-            "wall_seconds": 2400.0,
+            "error": f"worker timed out after {worker_timeout}s",
+            "seconds": float(worker_timeout),
+            "wall_seconds": float(worker_timeout),
         }
     wall = round(time.perf_counter() - started, 3)
 
@@ -379,6 +385,17 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Append one progress line per completed run to this file.",
     )
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        default=2400,
+        help="Per-run worker timeout in seconds (default 2400).",
+    )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Load prior results from --json and skip runs already measured OK.",
+    )
     args = parser.parse_args(argv)
 
     # Windows console encoding bootstrap (mirrors main.py): default CMD cp1252
@@ -414,22 +431,40 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     results: list[dict] = []
+    if args.resume and json_path.exists():
+        try:
+            prior = json.loads(json_path.read_text(encoding="utf-8"))
+            results = [r for r in prior.get("results") or [] if isinstance(r, dict)]
+        except (json.JSONDecodeError, OSError):
+            results = []
+    done_pairs = {(r["file"], r["tier"]) for r in results if r.get("ok")}
+    to_run = [(p, t) for p, t in existing if (str(p), t) not in done_pairs]
+    for p, t in existing:
+        if (str(p), t) in done_pairs:
+            print(f"[SKIP] Already measured OK: {Path(p).name} [{t}]")
+
     summary = _record_fingerprint()
     started_wall = time.perf_counter()
     print(
-        f"Benchmarking {len(existing)} (input, tier) runs across "
-        f"{len({p for p, _ in existing})} files."
+        f"Benchmarking {len(to_run)} (input, tier) runs across "
+        f"{len({p for p, _ in to_run})} files "
+        f"({len(done_pairs)} already measured, skipped)."
     )
     print(
         f"CPU load before: {summary['cpu_load_before']}% | "
         f"cores: {summary['cores']} | free on C: {summary['free_gb_before']} GiB"
     )
-    for path, tier in existing:
+    for path, tier in to_run:
         label = f"{Path(path).name} [{tier}]"
         print(f"\n=== START {label} ===")
         t0 = time.perf_counter()
-        record = _spawn_and_run(path, tier, script, log_path)
+        record = _spawn_and_run(path, tier, script, log_path, args.timeout)
         elapsed = time.perf_counter() - t0
+        results = [
+            r
+            for r in results
+            if not (r.get("file") == str(path) and r.get("tier") == tier)
+        ]
         results.append(record)
         status = (
             "OK"
