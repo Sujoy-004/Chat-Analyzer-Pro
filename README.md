@@ -96,6 +96,10 @@ Choosing tier 2 or 3 **is the consent point**: any missing packages are installe
 - `CHAT_ANALYZER_TIER=2` — minimal
 - `CHAT_ANALYZER_TIER=3` — full-fledged
 
+Emotion scoring on very large chats follows the same prompt-vs-automation split. When a tier 2/3 run exceeds the emotion sampling cap, an interactive terminal is asked `Sample? [y/N]` (default **No** = score every message exactly); on piped/CI runs it auto-samples instead. Sampling scores a deterministic, participant- and time-stratified subset — the same file always samples identically — and when it runs the terminal prints `Emotions based on a sample of N of M messages.` while the report shows *"Emotion scores based on a sample of N of M messages."* under the emotion table.
+
+- `CHAT_ANALYZER_EMOTION_SAMPLE=<n>` — emotion sampling cap (default **50000**): `0`, `off`, or `false` disables sampling (always exact); a positive integer sets the cap; anything else (garbage, or a value that parses to a non-positive integer) falls back to the default.
+
 ## How the tiers are enforced
 
 The tool checks — at startup — whether `torch` + `transformers` are installed and within the pinned versions, and whether both model weight sets are already cached:
@@ -107,6 +111,19 @@ The tool checks — at startup — whether `torch` + `transformers` are installe
 - **Tier 1 / NLP off** → the **Tier A narrative** still runs: pandas-only heuristic observations ("What's going on"). **Tier B** (the written paragraph from a small local flan-t5-small model, summarizing a compact *signal digest* of your chat — never raw messages) only appears when NLP is enabled.
 
 The **"What's going on"** tab in the report and the terminal status line always tell you which analysis actually ran — nothing is silently skipped.
+
+## Expected runtimes
+
+Real wall-clock times measured via `scripts/benchmark.py` on the author's Windows dev machine (12 cores) for the four benchmark chats, at full scale:
+
+| Chat size (~messages) | Tier 1 | Tier 2/3 (sampled for large chats) |
+|---|---|---|
+| 424,826 | ~10 min (~589 s) | ~33 min (~1,991 s) — **sampled** (50,000 of 424,826) |
+| 31,218 | ~2 min (~119 s) | ~14 min (~834 s) — exact |
+| 3,644 | ~46 s | ~2 min (~134 s) — exact |
+| 1,014 | ~19 s | ~1.5 min (~85 s) — exact |
+
+These are **conservative upper bounds**: the machine was not idle (VS Code and editors were running throughout), so a quiet machine runs faster. For chats above the sampling cap, the emotion stage scores a deterministic stratified sample instead of every message and the report and terminal label it — and exact (unsampled) tier 2/3 on a 424k chat is the pre-Option-C behavior, which takes hours; that wall is exactly why sampled mode exists (see `CHAT_ANALYZER_EMOTION_SAMPLE` above).
 
 ## On narrative honesty
 
@@ -144,6 +161,6 @@ Further docs live in the `docs/` directory:
 
 ## Project status
 
-v1.0 is complete — the full CLI pipeline (parse → analyze → terminal summary → HTML report) is implemented and verified. The test suite is green (210 tests, pytest) and the code base is clean under `ruff check` for `src/chat_analyzer` and `tests`.
+v1.0 is complete — the full CLI pipeline (parse → analyze → terminal summary → HTML report) is implemented and verified. The test suite is green (290 tests, pytest — fast, golden-parity, and emotion sampling-parity) and the code base is clean under `ruff check` for `src/chat_analyzer` and `tests`.
 
 Distribution today is clone-and-install from source (see Quickstart above); the package is not yet published to PyPI.

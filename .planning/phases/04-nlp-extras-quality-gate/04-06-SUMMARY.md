@@ -58,7 +58,7 @@ completed: 2026-08-14
 ## Accomplishments
 - Large-chat emotion analysis now bounds work: above the cap, exactly `cap` scorable messages are model-scored (stratified by sender + time, deterministic via `random_state=42`); everything else gets neutral 1/6 — no more full-corpus scoring of 500k-message exports
 - Exact-path invariance verified by regression tests: below/at cap output equals the sequential reference byte-for-byte (no `emotion_scored` column, no attrs) — the 04-02 parity suite passes untouched
-- `emotion_sample_cap()` env contract: absent/empty→50000, `0`/`off`/`false` (case-insensitive)→`None` (disable), positive int→int, garbage/non-positive→50000, never raises
+- `emotion_sample_cap()` env contract: absent/empty→50000, `0`/`off`/`false` (case-insensitive) and any value parsing to a non-positive int (e.g. `00`, `-5`)→`None` (disable), positive int→int, garbage→50000, never raises
 - Pipeline gating: interactive tty prompts (default NO = exact, y/yes = sampled); piped/CI/tests AUTO-SAMPLE without asking; sampling failures degrade to exact scoring with a `note` and `sampled=False`
 - Representative-sample tolerance proven: on a 240-message fixture, the 60-row sampled summary's per-class means and distribution shares stay within 0.15 of the exact summary
 
