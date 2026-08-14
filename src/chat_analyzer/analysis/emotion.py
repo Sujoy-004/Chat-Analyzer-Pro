@@ -54,6 +54,12 @@ _emotion_model_loaded = False
 _EMOTION_SAMPLE_RNG = 42
 _TIME_BUCKETS = 50
 
+# The six locked emotion labels — the fixed column order for the emotion_*
+# columns, the keys of every score dict, and the per-quarter key order that
+# get_emotion_quarterly reports. Matches the model's label order with
+# top_k=None (self.emotions is derived from this constant).
+EMOTION_LABELS = ("joy", "sadness", "anger", "fear", "surprise", "love")
+
 
 def _allocate_seats(counts: dict, cap: int) -> dict:
     """Deterministic largest-remainder allocation of ``cap`` seats.
@@ -218,6 +224,24 @@ def _stratified_sample_indices(
     return chosen
 
 
+def _parse_emotion_scores(res, emotion_labels=EMOTION_LABELS) -> dict[str, float]:
+    """Normalize a transformers per-message result to a standard score dict.
+
+    transformers 4.x with top_k=None returns a FLAT list of
+    {"label":.., "score":..} dicts for every class, while 5.x nests it
+    one level deeper: [[{"label":..,"score":..}, ...]]. Normalize both
+    shapes so real scores surface (C-… 5.x compat). Shared by the parent's
+    per-message/batch paths and the spawn-child worker so every path parses
+    results identically.
+    """
+    if res and isinstance(res[0], list):
+        res = res[0]
+    emotion_scores = {item["label"]: float(item["score"]) for item in res}
+    for emotion in emotion_labels:
+        emotion_scores.setdefault(emotion, 0.0)
+    return emotion_scores
+
+
 class EmotionAnalyzer:
     """
     Advanced emotion classification using HuggingFace transformers.
@@ -233,7 +257,7 @@ class EmotionAnalyzer:
         """
         self.model_name = model_name
         self.pipeline = None
-        self.emotions = ['joy', 'sadness', 'anger', 'fear', 'surprise', 'love']
+        self.emotions = list(EMOTION_LABELS)
         self._initialize_model()
     
     def _initialize_model(self):
@@ -308,17 +332,7 @@ class EmotionAnalyzer:
         one level deeper: [[{"label":..,"score":..}, ...]]. Normalize both
         shapes so real scores surface (C-… 5.x compat).
         """
-        if res and isinstance(res[0], list):
-            res = res[0]
-
-        # Convert to our standard format
-        emotion_scores = {item['label']: float(item['score']) for item in res}
-
-        # Ensure all 6 emotions are present
-        for emotion in self.emotions:
-            emotion_scores.setdefault(emotion, 0.0)
-
-        return emotion_scores
+        return _parse_emotion_scores(res, self.emotions)
 
     @staticmethod
     def _is_scorable(text) -> bool:
@@ -362,6 +376,20 @@ class EmotionAnalyzer:
                 chunk_scores = [self.analyze_single_message(t) for t in chunk]
             scored.extend(chunk_scores)
         return scored
+
+    def _score_unique_texts(
+        self, pending: list[tuple], batch_size: int
+    ) -> dict[str, dict]:
+        """Dedupe + score the pending (idx, text) rows; returns {text: scores}.
+
+        Every UNIQUE text is scored once — emotion scoring is a pure function
+        of the text — then mapped back to every row with that exact text, so
+        the output is byte-identical to scoring every row individually. Rows
+        keep their original order (the caller maps by (idx, text)).
+        """
+        unique_texts = list(dict.fromkeys(t for _, t in pending))
+        scored_list = self._score_batch(unique_texts, batch_size)
+        return dict(zip(unique_texts, scored_list))
 
     def _get_neutral_emotions(self) -> dict[str, float]:
         """Return neutral emotion scores."""
@@ -491,9 +519,9 @@ class EmotionAnalyzer:
 
                 scores_by_idx = {idx: self._get_neutral_emotions() for idx in skipped}
                 if pending:
-                    scored = self._score_batch([t for _, t in pending], batch_size)
-                    for (idx, _), scores in zip(pending, scored):
-                        scores_by_idx[idx] = scores
+                    scores_by_text = self._score_unique_texts(pending, batch_size)
+                    for idx, text in pending:
+                        scores_by_idx[idx] = scores_by_text[text]
 
                 for idx, scores in scores_by_idx.items():
                     for emotion in self.emotions:
@@ -520,9 +548,9 @@ class EmotionAnalyzer:
                 scores_by_idx = {idx: self._get_neutral_emotions() for idx in skipped}
 
                 if pending:
-                    scored = self._score_batch([t for _, t in pending], batch_size)
-                    for (idx, _), scores in zip(pending, scored):
-                        scores_by_idx[idx] = scores
+                    scores_by_text = self._score_unique_texts(pending, batch_size)
+                    for idx, text in pending:
+                        scores_by_idx[idx] = scores_by_text[text]
 
                 for idx, scores in scores_by_idx.items():
                     for emotion in self.emotions:
