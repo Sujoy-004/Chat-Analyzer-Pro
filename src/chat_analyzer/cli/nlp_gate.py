@@ -44,6 +44,12 @@ TIER_B_MODEL_SIZE_MB = 340   # approx flan-t5-small total disk (~308 MB weights)
 _FORCE_NLP = "CHAT_ANALYZER_FORCE_NLP"
 _ALLOW_LONG_PATH = "CHAT_ANALYZER_ALLOW_LONG_PATH"
 
+# Option C (sampled emotion inference for large chats): the deterministic
+# stratified-sample cap. Exposed via CHAT_ANALYZER_EMOTION_SAMPLE; "0"/"off"/
+# "false" disables sampling (always exact). See emotion_sample_cap below.
+_EMOTION_SAMPLE_ENV = "CHAT_ANALYZER_EMOTION_SAMPLE"
+EMOTION_SAMPLE_DEFAULT = 50000
+
 # Windows MAX_PATH guard (A1): torch 2.x wheel extraction crashes with
 # WinError 206 when the venv's site-packages path plus torch's own reserved
 # extraction depth crosses the 260-char limit.
@@ -62,6 +68,34 @@ def model_cached(model_id: str) -> bool:
     else:
         cache = Path.home() / ".cache" / "huggingface" / "hub"
     return (cache / ("models--" + model_id.replace("/", "--"))).exists()
+
+
+def emotion_sample_cap() -> int | None:
+    """Resolve the emotion sampling cap from CHAT_ANALYZER_EMOTION_SAMPLE.
+
+    Option C (sampled emotion inference for large chats): the pipeline caps
+    how many messages the DistilBERT emotion model scores on huge chats. The
+    environment controls the cap:
+
+    - absent/empty      -> EMOTION_SAMPLE_DEFAULT (50000)
+    - "0"/"off"/"false" -> None  (sampling disabled: always exact)
+    - positive integer  -> int(value)
+    - anything else     -> EMOTION_SAMPLE_DEFAULT (never raises)
+
+    Returns None to the pipeline when the user wants exact scoring always.
+    """
+    raw = os.environ.get(_EMOTION_SAMPLE_ENV, "").strip().lower()
+    if raw == "":
+        return EMOTION_SAMPLE_DEFAULT
+    if raw in ("0", "off", "false"):
+        return None
+    try:
+        cap = int(raw)
+    except ValueError:
+        return EMOTION_SAMPLE_DEFAULT
+    if cap <= 0:
+        return EMOTION_SAMPLE_DEFAULT
+    return cap
 
 
 def nlp_available(model_id: str = MODEL_ID) -> bool:
