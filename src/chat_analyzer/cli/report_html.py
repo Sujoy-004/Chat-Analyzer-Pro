@@ -28,7 +28,7 @@ _INVALID_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f\x7f]')
 
 _CHART_PREFIX = "data:image/png;base64,"
 
-# The seven report chart slots, in template order. A spec key missing from
+# The eight report chart slots, in template order. A spec key missing from
 # charts_json renders the chart's base64 PNG fallback instead.
 _CHART_KEYS = (
     "timeline",
@@ -38,6 +38,7 @@ _CHART_KEYS = (
     "health",
     "network",
     "emotion",
+    "emotion-quarterly",
 )
 
 
@@ -89,7 +90,7 @@ function fallbackNetwork() {
   if (el) { el.style.display = 'none'; }
   if (img) { img.style.display = ''; }
 }
-var _chartKeys = ['timeline', 'activity', 'participants', 'sentiment', 'health', 'network', 'emotion'];
+var _chartKeys = ['timeline', 'activity', 'participants', 'sentiment', 'health', 'network', 'emotion', 'emotion-quarterly'];
 var _charts = {};
 function initCharts() {
   if (!webglAvailable()) { fallbackNetwork(); }
@@ -294,6 +295,8 @@ TEMPLATE = """<!DOCTYPE html>
       {% if emotion %}
       <p class="lead">{{ insights[7] }}</p>
       {% if charts_json.emotion %}<div id="chart-emotion" class="chart"></div>{% else %}{% if charts.emotion %}<img class="chart" alt="Emotion distribution" src="{{ charts.emotion }}">{% endif %}{% endif %}
+      {% if charts_json['emotion-quarterly'] %}<div id="chart-emotion-quarterly" class="chart" style="height:420px"></div>{% endif %}
+      {% if emotion.sample and emotion.sample.sampled %}<p>Quarterly emotion scores based on a sample of {{ emotion.sample.scored }} of {{ emotion.sample.total }} messages.</p>{% endif %}
       <table>
         <tr><th>Emotion</th><th>Messages</th></tr>
         {% for label, count in emotion.distribution.items() %}
@@ -333,7 +336,8 @@ var CHART_SPECS = {
   sentiment: {{ charts_json.sentiment | tojson }},
   health: {{ charts_json.health | tojson }},
   network: {{ charts_json.network | tojson }},
-  emotion: {{ charts_json.emotion | tojson }}
+  emotion: {{ charts_json.emotion | tojson }},
+  'emotion-quarterly': {{ charts_json['emotion-quarterly'] | tojson }}
 };
 </script>
 <script>{{ init_js | safe }}</script>
