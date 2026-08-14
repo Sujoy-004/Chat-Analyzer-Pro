@@ -67,16 +67,20 @@ _EMOTION_PARALLEL_THRESHOLD = 20_000
 
 
 def _score_text_chunk(
-    texts: list[str], model_name: str, batch_size: int
+    texts: list[str],
+    model_name: str,
+    batch_size: int,
+    num_threads: int | None = None,
 ) -> list[tuple[str, dict]]:
     """Score a chunk of unique texts inside a spawn child process.
 
     Windows-spawn rule: module-level and takes ONLY JSON-able args (list of
     str, str model id, int). The heavy pipeline is constructed INSIDE the
-    child — never passed in — and torch threads are capped to cpu_count // 3
-    so the pool does not oversubscribe the box. Uses the same 4.x/5.x shape
-    normalization as the parent's _score_batch (top_k=None flat vs nested
-    list). Any failure raises cleanly; the caller degrades to sequential.
+    child — never passed in — and torch threads are clamped to the caller's
+    per-worker budget (cpu_count // workers) so the pool does not
+    oversubscribe the box. Uses the same 4.x/5.x shape normalization as the
+    parent's _score_batch (top_k=None flat vs nested list). Any failure
+    raises cleanly; the caller degrades to sequential.
     """
     import os
 
@@ -84,7 +88,8 @@ def _score_text_chunk(
         import torch
         from transformers import pipeline
 
-        torch.set_num_threads(max(1, (os.cpu_count() or 1) // 3))
+        threads = max(1, num_threads or ((os.cpu_count() or 1) // 3))
+        torch.set_num_threads(threads)
         scorer = pipeline(
             "text-classification", model=model_name, top_k=None, device=-1
         )
@@ -510,18 +515,21 @@ class EmotionAnalyzer:
         """
         try:
             import itertools
+            import os
             from concurrent.futures import ProcessPoolExecutor
 
             step = (len(unique_texts) + workers - 1) // workers
             chunks = [unique_texts[i * step : (i + 1) * step] for i in range(workers)]
             chunks = [c for c in chunks if c]
             scored: dict[str, dict] = {}
+            num_threads = max(1, (os.cpu_count() or 1) // workers)
             with ProcessPoolExecutor(max_workers=workers) as pool:
                 results = pool.map(
                     _score_text_chunk,
                     chunks,
                     itertools.repeat(self.model_name),
                     itertools.repeat(batch_size),
+                    itertools.repeat(num_threads),
                 )
                 for chunk, chunk_pairs in zip(chunks, results):
                     for text, scores in chunk_pairs:
