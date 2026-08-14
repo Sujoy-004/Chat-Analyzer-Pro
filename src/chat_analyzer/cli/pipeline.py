@@ -292,6 +292,23 @@ def run_pipeline(path: Path, console, nlp_enabled: bool | None = None) -> Analys
         # (D-02/D-06): the pipeline always prepares for NLP, availability decides.
         emotion_summary = None
         if nlp_on:
+            # Option C: sampled emotion scoring for large chats. Resolve the
+            # cap once; when the frame exceeds it, prompt on interactive
+            # terminals (default NO = exact) and AUTO-SAMPLE off-tty
+            # (piped/CI/tests). The exact path stays untouched below the cap.
+            sample_cap = None
+            emotion_sample_cap = nlp_gate.emotion_sample_cap()
+            if emotion_sample_cap is not None and len(df) > emotion_sample_cap:
+                if console.is_terminal:
+                    answer = console.input(
+                        f"{len(df)} messages — exact emotion scoring can take "
+                        f"~2 hours; sampled (up to {emotion_sample_cap}) takes "
+                        f"minutes. Sample? [y/N] "
+                    )
+                    if answer.strip().lower() in ("y", "yes"):
+                        sample_cap = emotion_sample_cap
+                else:
+                    sample_cap = emotion_sample_cap  # AUTO-SAMPLE (piped/CI)
             with stage(console, progress, task_id, "Analyzing emotions"):
                 # D-05/Pitfall 4: announce model name + size BEFORE any
                 # construction that triggers from_pretrained — and outside the
@@ -318,8 +335,20 @@ def run_pipeline(path: Path, console, nlp_enabled: bool | None = None) -> Analys
                         )
 
                         emo_analyzer = EmotionAnalyzer()
-                        df_emo = emo_analyzer.analyze_emotions(df)
-                        emotion_summary = emo_analyzer.get_emotion_summary(df_emo)
+                        df_emo = emo_analyzer.analyze_emotions(
+                            df, sample_cap=sample_cap
+                        )
+                        if df_emo.attrs.get("emotion_sample"):
+                            # Option C: the summary is computed over the
+                            # SCORED sample rows only, and the sample metadata
+                            # rides along so adapters/render/report can label
+                            # "based on a sample of N of M messages".
+                            emotion_summary = emo_analyzer.get_emotion_summary(
+                                df_emo[df_emo["emotion_scored"]]
+                            )
+                            emotion_summary["sampled"] = df_emo.attrs["emotion_sample"]
+                        else:
+                            emotion_summary = emo_analyzer.get_emotion_summary(df_emo)
                     except Exception:
                         logger.exception("emotion analysis failed; degrading to None")
                         emotion_summary = None
