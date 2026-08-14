@@ -341,8 +341,9 @@ def run_pipeline(path: Path, console, nlp_enabled: bool | None = None) -> Analys
                         )
 
                         emo_analyzer = EmotionAnalyzer()
+                        workers = nlp_gate.emotion_worker_count()
                         df_emo = emo_analyzer.analyze_emotions(
-                            df, sample_cap=sample_cap
+                            df, sample_cap=sample_cap, workers=workers
                         )
                         if df_emo.attrs.get("emotion_sample"):
                             # Option C: the summary is computed over the
@@ -367,6 +368,29 @@ def run_pipeline(path: Path, console, nlp_enabled: bool | None = None) -> Analys
                     emotion_spec = build_emotion_spec(emotion_summary)
                     if emotion_spec:
                         charts_json["emotion"] = emotion_spec
+                    # Quarterly aggregation (contract for chart_json's
+                    # build_emotion_timeline_spec — the parallel agent's
+                    # builder). Computed over the same rows the summary used:
+                    # the sampled branch's frame carries emotion_scored,
+                    # which the aggregator honors, so labels and quarterly
+                    # values agree.
+                    emotion_summary["quarterly"] = emo_analyzer.get_emotion_quarterly(
+                        df_emo
+                    )
+                    try:
+                        from chat_analyzer.cli.chart_json import (
+                            build_emotion_timeline_spec,
+                        )
+
+                        tspec = build_emotion_timeline_spec(emotion_summary)
+                        if tspec:
+                            charts_json["emotion-quarterly"] = tspec
+                    except Exception:
+                        # The builder may not exist yet (parallel agent) or
+                        # may fail on odd summaries — the spec is best-effort.
+                        logger.exception(
+                            "emotion quarterly timeline spec failed; skipping"
+                        )
 
             with stage(console, progress, task_id, "Generating narrative"):
                 console.print(

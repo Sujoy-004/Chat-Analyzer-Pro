@@ -786,7 +786,15 @@ class EmotionAnalyzer:
             }
         
         return summary
-    
+
+    def get_emotion_quarterly(self, df_emo: pd.DataFrame) -> list[dict]:
+        """Per-quarter emotion aggregation for the report timeline chart.
+
+        Thin method wrapper over the module-level ``get_emotion_quarterly``
+        — the contract consumed by chart_json.build_emotion_timeline_spec.
+        """
+        return get_emotion_quarterly(df_emo)
+
     def find_most_emotional_messages(self, 
                                      df: pd.DataFrame, 
                                      emotion: str | None = None,
@@ -841,6 +849,42 @@ class EmotionAnalyzer:
 
 
 # Convenience functions for quick analysis
+def get_emotion_quarterly(df_emo: pd.DataFrame) -> list[dict]:
+    """Per-quarter MEAN of the six emotion_* columns, oldest quarter first.
+
+    Contract consumed by chart_json.build_emotion_timeline_spec: returns
+    ``[{"quarter": "2026Q1", "scores": {"joy": 0.12, ...}}, ...]`` with every
+    score rounded to 6 decimals. Quarters with no rows are skipped and the
+    list is sorted by quarter ascending (Period groupby order). When the
+    frame carries an ``emotion_scored`` column (sampled mode) only the SCORED
+    rows are aggregated, so report labels and quarterly values agree. Pure,
+    deterministic, never raises — returns [] when the frame is empty or
+    ``datetime`` is missing.
+    """
+    if df_emo is None or df_emo.empty or "datetime" not in df_emo.columns:
+        return []
+    try:
+        frame = df_emo
+        if "emotion_scored" in frame.columns:
+            frame = frame[frame["emotion_scored"]]
+        if frame.empty:
+            return []
+        emotion_cols = [f"emotion_{e}" for e in EMOTION_LABELS]
+        quarter = pd.to_datetime(frame["datetime"]).dt.to_period("Q")
+        grouped = frame.groupby(quarter)[emotion_cols].mean()
+        return [
+            {
+                "quarter": str(period),
+                "scores": {
+                    e: round(float(row[f"emotion_{e}"]), 6) for e in EMOTION_LABELS
+                },
+            }
+            for period, row in grouped.iterrows()
+        ]
+    except Exception:  # noqa: BLE001 - never raises (pipeline defensive contract)
+        return []
+
+
 def quick_emotion_analysis(df: pd.DataFrame, 
                            text_column: str = 'message',
                            plot: bool = True) -> tuple[pd.DataFrame, dict]:
