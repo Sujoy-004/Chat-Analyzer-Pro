@@ -40,6 +40,7 @@ from io import StringIO
 # matplotlib; pin Agg BEFORE any pyplot import so figures are headless-safe.
 os.environ.setdefault("MPLBACKEND", "Agg")
 
+import pandas as pd
 import pytest
 from rich.console import Console
 
@@ -450,3 +451,169 @@ def test_sampling_disabled_via_env_stays_exact(tmp_path, monkeypatch):
         out = analyzer.analyze_emotions(df, sample_cap=None)
     assert "emotion_scored" not in out.columns
     assert "emotion_sample" not in out.attrs
+
+
+# --- i. degenerate datetimes (CR-01 regression) ------------------------------
+
+
+def _degenerate_fixture_df(n=240, all_nat=False):
+    """Sampled-mode fixture where every datetime collapses to <= 1 unique
+    value: all-identical timestamps, or all-NaT — the CR-01 degenerate-qcut
+    case that used to silently undercount (down to 0 scored rows)."""
+    rows = []
+    for i in range(n):
+        rows.append({
+            "datetime": None if all_nat else "2024-01-01T09:00:00",
+            "sender": "Alice" if i % 2 == 0 else "Bob",
+            "message": f"message number {i} with enough words here",
+        })
+    if all_nat:
+        # messages_to_dataframe drops rows with no parseable datetime, so the
+        # all-NaT frame is built directly (the degenerate column is the point).
+        df = pd.DataFrame(rows)
+        df["datetime"] = pd.to_datetime(df["datetime"])
+        return df
+    return messages_to_dataframe(rows)
+
+
+def test_all_identical_datetimes_scores_exactly_cap_rows():
+    """CR-01 regression: a sender whose timestamps are all identical must
+    still fill its seats via the plain deterministic fallback — never a
+    silent undercount."""
+    analyzer = _make_analyzer()
+    df = _degenerate_fixture_df(240, all_nat=False)
+    cap = 50
+    with redirect_stdout(StringIO()):
+        out = analyzer.analyze_emotions(df, sample_cap=cap)
+
+    scored = out["emotion_scored"]
+    n_scorable = EmotionAnalyzer.n_scorable(df)
+    assert int(scored.sum()) == min(cap, n_scorable), (
+        "degenerate datetimes must not silently drop the sender's seats"
+    )
+    attrs = out.attrs["emotion_sample"]
+    assert attrs["sampled"] is True
+    assert attrs["scored"] == int(scored.sum())
+    # the summary over the scored rows is complete — no all-NaN averages
+    summary = analyzer.get_emotion_summary(out[out["emotion_scored"]])
+    for emotion in EMOTIONS:
+        assert not pd.isna(summary["average_emotion_scores"][emotion]), (
+            f"{emotion} mean is NaN on degenerate datetimes"
+        )
+
+
+def test_all_nat_datetimes_scores_exactly_cap_rows():
+    """CR-01 regression: an all-NaT datetime column must not collapse the
+    sample to 0 scored rows plus an all-NaN summary."""
+    analyzer = _make_analyzer()
+    df = _degenerate_fixture_df(240, all_nat=True)
+    cap = 50
+    with redirect_stdout(StringIO()):
+        out = analyzer.analyze_emotions(df, sample_cap=cap)
+
+    scored = out["emotion_scored"]
+    n_scorable = EmotionAnalyzer.n_scorable(df)
+    assert int(scored.sum()) == min(cap, n_scorable)
+    attrs = out.attrs["emotion_sample"]
+    assert attrs["sampled"] is True
+    assert attrs["scored"] == int(scored.sum())
+    summary = analyzer.get_emotion_summary(out[out["emotion_scored"]])
+    for emotion in EMOTIONS:
+        assert not pd.isna(summary["average_emotion_scores"][emotion])
+
+
+def test_sampled_without_datetime_column():
+    """No datetime column -> the plain deterministic sample path, still
+    exactly cap rows scored."""
+    analyzer = _make_analyzer()
+    df = _big_fixture_df(240).drop(columns=["datetime"])
+    cap = 50
+    with redirect_stdout(StringIO()):
+        out = analyzer.analyze_emotions(df, sample_cap=cap)
+    assert int(out["emotion_scored"].sum()) == cap
+    attrs = out.attrs["emotion_sample"]
+    assert attrs["sampled"] is True
+    assert attrs["scored"] == cap
+
+
+def test_sampled_without_sender_column():
+    """No sender column -> plain deterministic sample, exactly cap rows."""
+    analyzer = _make_analyzer()
+    df = _big_fixture_df(240).drop(columns=["sender"])
+    cap = 50
+    with redirect_stdout(StringIO()):
+        out = analyzer.analyze_emotions(df, sample_cap=cap)
+    assert int(out["emotion_scored"].sum()) == cap
+    assert out.attrs["emotion_sample"]["sampled"] is True
+    assert out.attrs["emotion_sample"]["scored"] == cap
+
+
+def test_sampling_internal_failure_degrades_to_exact(monkeypatch):
+    """Any internal sampling failure must degrade to exact scoring with honest
+    sampled:False attrs — never a crash, never a misleading sample label."""
+
+    def _boom(*args, **kwargs):
+        raise RuntimeError("sampling machinery exploded")
+
+    monkeypatch.setattr(_emotion_module, "_stratified_sample_indices", _boom)
+    analyzer = _make_analyzer()
+    df = _big_fixture_df(240)
+    with redirect_stdout(StringIO()):
+        out = analyzer.analyze_emotions(df, sample_cap=50)
+
+    attrs = out.attrs["emotion_sample"]
+    assert attrs["sampled"] is False
+    assert attrs["scored"] == len(df)  # every row was scored exactly
+    assert attrs["cap"] == 50
+    assert "note" in attrs
+    # the full-frame summary is complete — no NaN averages
+    summary = analyzer.get_emotion_summary(out)
+    for emotion in EMOTIONS:
+        assert not pd.isna(summary["average_emotion_scores"][emotion])
+
+
+def test_topup_invariant_imbalanced_degenerate_times():
+    """CR-01 top-up invariant: imbalanced senders with degenerate times still
+    score exactly min(cap, n_scorable) rows."""
+    rows = []
+    base = datetime(2024, 1, 1, 9, 0, 0)  # noqa: DTZ001 - naive fixture base
+    for i in range(200):
+        sender = "Alice" if i < 180 else "Bob"
+        # Alice's 180 rows share ONE timestamp (degenerate qcut); Bob's rows
+        # are distinct timestamps.
+        dt = "2024-01-01T09:00:00" if i < 180 else base + timedelta(minutes=i)
+        rows.append({
+            "datetime": dt,
+            "sender": sender,
+            "message": f"message {i} with plenty of words here",
+        })
+    df = messages_to_dataframe(rows)
+    analyzer = _make_analyzer()
+    cap = 50
+    with redirect_stdout(StringIO()):
+        out = analyzer.analyze_emotions(df, sample_cap=cap)
+
+    n_scorable = int(out["message"].map(analyzer._is_scorable).sum())
+    assert n_scorable == 200
+    assert int(out["emotion_scored"].sum()) == min(cap, n_scorable)
+    attrs = out.attrs["emotion_sample"]
+    assert attrs["scored"] == min(cap, n_scorable)
+    assert attrs["sampled"] is True
+
+
+def test_cap_one_single_sender():
+    """cap=1 with a single sender still scores exactly one row."""
+    rows = []
+    base = datetime(2024, 1, 1, 9, 0, 0)  # noqa: DTZ001 - naive fixture base
+    for i in range(100):
+        rows.append({
+            "datetime": base + timedelta(minutes=i),
+            "sender": "Alice",
+            "message": f"message {i} with enough words here",
+        })
+    df = messages_to_dataframe(rows)
+    analyzer = _make_analyzer()
+    with redirect_stdout(StringIO()):
+        out = analyzer.analyze_emotions(df, sample_cap=1)
+    assert int(out["emotion_scored"].sum()) == 1
+    assert out.attrs["emotion_sample"]["sampled"] is True
