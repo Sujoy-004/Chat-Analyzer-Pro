@@ -313,8 +313,11 @@ def test_emotion_sample_cap_env_parsing(monkeypatch):
     monkeypatch.setenv(env, "garbage")
     assert nlp_gate.emotion_sample_cap() == 50000  # garbage -> default, no crash
 
-    monkeypatch.setenv(env, "-5")
-    assert nlp_gate.emotion_sample_cap() == 50000  # non-positive -> default
+    for nonpos in ("-5", "00", "-0"):
+        monkeypatch.setenv(env, nonpos)
+        assert nlp_gate.emotion_sample_cap() is None, (
+            f"{nonpos!r} (parses to <= 0) must disable, same as '0'"
+        )
 
 
 # --- pipeline mocks (g/h) --------------------------------------------------

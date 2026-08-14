@@ -46,7 +46,8 @@ _ALLOW_LONG_PATH = "CHAT_ANALYZER_ALLOW_LONG_PATH"
 
 # Option C (sampled emotion inference for large chats): the deterministic
 # stratified-sample cap. Exposed via CHAT_ANALYZER_EMOTION_SAMPLE; "0"/"off"/
-# "false" disables sampling (always exact). See emotion_sample_cap below.
+# "false" and any value parsing to <= 0 disable sampling (always exact). See
+# emotion_sample_cap below.
 _EMOTION_SAMPLE_ENV = "CHAT_ANALYZER_EMOTION_SAMPLE"
 EMOTION_SAMPLE_DEFAULT = 50000
 
@@ -79,6 +80,8 @@ def emotion_sample_cap() -> int | None:
 
     - absent/empty      -> EMOTION_SAMPLE_DEFAULT (50000)
     - "0"/"off"/"false" -> None  (sampling disabled: always exact)
+    - any non-positive integer ("00", "-0", "-5") -> None (sampling disabled,
+      consistent with "0")
     - positive integer  -> int(value)
     - anything else     -> EMOTION_SAMPLE_DEFAULT (never raises)
 
@@ -93,8 +96,8 @@ def emotion_sample_cap() -> int | None:
         cap = int(raw)
     except ValueError:
         return EMOTION_SAMPLE_DEFAULT
-    if cap <= 0:
-        return EMOTION_SAMPLE_DEFAULT
+    if cap < 1:  # covers "00", "-0", "-5" — any parses-to-<=0 value disables
+        return None
     return cap
 
 
