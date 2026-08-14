@@ -249,7 +249,10 @@ def _build_emotion_block(emotion: dict) -> dict:
 
     The module's summary dict has no dominant_emotion key — the dominant
     label is derived here from the distribution (the adapter is the only
-    place that knows the module's dict shape).
+    place that knows the module's dict shape). ``sample`` carries the Option C
+    sampling metadata (scored/total/cap) so render/report can label the
+    results "based on a sample of N of M messages"; None when exact scoring
+    ran.
     """
     dist = emotion.get("emotion_distribution") or {}
     dominant = emotion.get("dominant_emotion")
@@ -259,6 +262,7 @@ def _build_emotion_block(emotion: dict) -> dict:
         "distribution": dist,
         "dominant": dominant,
         "average_scores": emotion.get("average_emotion_scores") or {},
+        "sample": emotion.get("sampled"),
     }
 
 
