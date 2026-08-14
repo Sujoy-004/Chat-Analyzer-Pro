@@ -301,6 +301,7 @@ TEMPLATE = """<!DOCTYPE html>
         {% endfor %}
       </table>
       {% if emotion.dominant %}<p>Dominant emotion: {{ emotion.dominant }}</p>{% endif %}
+      {% if emotion.sample and emotion.sample.sampled %}<p>Emotion scores based on a sample of {{ emotion.sample.scored }} of {{ emotion.sample.total }} messages.</p>{% endif %}
       {% else %}
       <p>Emotion analysis unavailable. Install the optional NLP extras: <code>pip install chat-analyzer-pro[nlp]</code>.</p>
       {% endif %}
