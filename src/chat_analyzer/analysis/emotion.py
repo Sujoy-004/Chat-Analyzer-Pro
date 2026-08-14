@@ -17,12 +17,30 @@ Usage:
     analyzer = EmotionAnalyzer()
     df_with_emotions = analyzer.analyze_emotions(df)
     summary = analyzer.get_emotion_summary(df_with_emotions)
+
+Sampled path (Option C — large chats):
+    analyze_emotions(df, sample_cap=50000) caps how many messages the
+    DistilBERT model actually scores. When more scorable messages exist than
+    the cap, a DETERMINISTIC stratified sample is scored instead: seats are
+    allocated across senders proportionally (largest-remainder), then across
+    ~50 time buckets per sender, with random_state=42 draws everywhere — the
+    same frame + cap always yields the same sample, so sampled results are
+    reproducible across runs. Non-selected rows keep the neutral 1/6 scores,
+    the returned frame gains an `emotion_scored` boolean column and a
+    `df.attrs["emotion_sample"]` metadata dict, and dominant_emotion /
+    emotion_confidence are still computed over the full frame. The pipeline
+    computes its summary over the scored sample rows only and labels the
+    report/terminal "based on a sample of N of M messages". Below the cap
+    (or with sample_cap=None) behavior is byte-for-byte the exact path.
 """
 
+import logging
 import warnings
 
 import numpy as np
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 warnings.filterwarnings('ignore')
 import matplotlib  # binds the name for the emotion_figure return annotation
@@ -30,6 +48,151 @@ import matplotlib  # binds the name for the emotion_figure return annotation
 # Global analyzer instance for reuse
 _emotion_analyzer = None
 _emotion_model_loaded = False
+
+# Option C sampled path: fixed RNG seed (determinism across runs) and the
+# number of time buckets used to stratify each sender's rows.
+_EMOTION_SAMPLE_RNG = 42
+_TIME_BUCKETS = 50
+
+
+def _allocate_seats(counts: dict, cap: int) -> dict:
+    """Deterministic largest-remainder allocation of ``cap`` seats.
+
+    Each group with > 0 messages keeps at least one seat whenever the cap
+    permits; leftover seats are refilled round-robin to the groups with the
+    largest fractional remainder, tie-broken by group name. Allocations never
+    exceed a group's own count and always sum to ``cap`` — a pure function of
+    (counts, cap), so the sample is reproducible.
+    """
+    total = sum(counts.values())
+    if total <= 0 or cap <= 0:
+        return {}
+    alloc = {g: min(counts[g], max(1, (counts[g] * cap) // total)) for g in counts}
+    if sum(alloc.values()) > cap:
+        # more groups than seats — drop the per-group floor entirely
+        alloc = {g: (counts[g] * cap) // total for g in counts}
+    seats = cap - sum(alloc.values())
+    order = sorted(counts, key=lambda g: (-((counts[g] * cap) % total), g))
+    i = 0
+    while seats > 0:
+        g = order[i % len(order)]
+        if alloc[g] < counts[g]:
+            alloc[g] += 1
+            seats -= 1
+        i += 1
+    return alloc
+
+
+def _global_time_edges(df: pd.DataFrame, scorable_mask: pd.Series):
+    """~50 evenly-sized time edges across ALL scorable rows (bucket fallback).
+
+    Returns the bin edges from a global qcut (deterministic) or None when the
+    edges cannot be computed — callers then fall back to a plain
+    random_state=42 sample. Used only when a sender's own qcut fails.
+    """
+    try:
+        times = pd.to_datetime(df.loc[scorable_mask, "datetime"]).astype("int64")
+        _, edges = pd.qcut(
+            times,
+            q=min(_TIME_BUCKETS, len(times)),
+            retbins=True,
+            duplicates="drop",
+        )
+        return edges
+    except Exception:  # noqa: BLE001 - bucket-edge failure degrades to the plain-sample fallback
+        return None
+
+
+def _pick_in_sender(
+    df: pd.DataFrame,
+    sender_mask: pd.Series,
+    seats: int,
+    global_edges=None,
+) -> list:
+    """Pick ``seats`` rows from one sender's scorable rows (``sender_mask``).
+
+    Stratifies across ~50 time buckets (qcut over the sender's own datetime
+    positions, falling back to the global edges) and draws deterministically
+    (random_state=42) within every bucket. Without a usable datetime column it
+    degrades to a plain deterministic sample. Always returns exactly
+    ``seats`` row labels.
+    """
+    labels = df.index[sender_mask]
+    if len(labels) <= seats:
+        return labels.tolist()
+    if "datetime" not in df.columns:
+        drawn = labels.to_series().sample(n=seats, random_state=_EMOTION_SAMPLE_RNG)
+        return drawn.tolist()
+    try:
+        times = pd.to_datetime(df.loc[sender_mask, "datetime"]).astype("int64")
+        buckets = pd.Series(
+            pd.qcut(times, q=min(_TIME_BUCKETS, len(times)), duplicates="drop"),
+            index=labels,
+        )
+    except Exception:  # noqa: BLE001 - per-sender qcut failure falls back to global edges / plain sample
+        if global_edges is not None and len(global_edges) >= 2:
+            try:
+                times = pd.to_datetime(df.loc[sender_mask, "datetime"]).astype("int64")
+                buckets = pd.Series(pd.cut(times, bins=global_edges), index=labels)
+            except Exception:  # noqa: BLE001 - global-edge cut failure degrades to a plain sample
+                drawn = labels.to_series().sample(
+                    n=seats, random_state=_EMOTION_SAMPLE_RNG
+                )
+                return drawn.tolist()
+        else:
+            drawn = labels.to_series().sample(n=seats, random_state=_EMOTION_SAMPLE_RNG)
+            return drawn.tolist()
+
+    counts = buckets.value_counts().to_dict()
+    alloc = _allocate_seats(counts, seats)
+    picked: list = []
+    for bucket, n_seats in alloc.items():
+        bucket_labels = labels[buckets == bucket]
+        if n_seats >= len(bucket_labels):
+            picked.extend(bucket_labels.tolist())
+        else:
+            drawn = bucket_labels.to_series().sample(
+                n=n_seats, random_state=_EMOTION_SAMPLE_RNG
+            )
+            picked.extend(drawn.tolist())
+    return picked
+
+
+def _stratified_sample_indices(
+    df: pd.DataFrame,
+    scorable_mask: pd.Series,
+    cap: int,
+) -> pd.Series:
+    """Deterministic (participant, time)-stratified selection of scorable rows.
+
+    Returns a boolean Series aligned to df.index with exactly
+    min(cap, n_scorable) True entries, all on scorable rows. Pure function of
+    (df, cap): identical inputs always produce the identical selection
+    (random_state=42 + largest-remainder seat allocation), so sampled emotion
+    scores are reproducible across runs. Original row order is preserved (the
+    mask never reorders the frame).
+    """
+    chosen = scorable_mask.copy()
+    if int(scorable_mask.sum()) <= cap:
+        return chosen
+    chosen[:] = False
+    if "sender" not in df.columns:
+        drawn = (
+            df.index[scorable_mask]
+            .to_series()
+            .sample(n=cap, random_state=_EMOTION_SAMPLE_RNG)
+        )
+        chosen[drawn.to_numpy()] = True
+        return chosen
+
+    counts = df.loc[scorable_mask, "sender"].value_counts().to_dict()
+    alloc = _allocate_seats(counts, cap)
+    global_edges = _global_time_edges(df, scorable_mask) if "datetime" in df.columns else None
+    for sender, seats in alloc.items():
+        sender_mask = scorable_mask & (df["sender"] == sender)
+        picked = _pick_in_sender(df, sender_mask, seats, global_edges)
+        chosen[picked] = True
+    return chosen
 
 
 class EmotionAnalyzer:
@@ -217,7 +380,8 @@ class EmotionAnalyzer:
     def analyze_emotions(self, 
                         df: pd.DataFrame, 
                         text_column: str = 'message',
-                        batch_size: int = 32) -> pd.DataFrame:
+                        batch_size: int = 32,
+                        sample_cap: int | None = None) -> pd.DataFrame:
         """
         Analyze emotions for all messages in a DataFrame.
         
@@ -225,6 +389,16 @@ class EmotionAnalyzer:
             df: DataFrame with messages
             text_column: Column name containing message text
             batch_size: Number of messages to process at once (for efficiency)
+            sample_cap: Option C cap on how many messages the model scores.
+                None (default) or a frame at/below the cap runs the exact
+                path, byte-for-byte identical to the legacy behavior. Above
+                the cap, a deterministic (participant, time)-stratified
+                sample is scored (random_state=42); the returned frame gains
+                an `emotion_scored` boolean column and a
+                `df.attrs["emotion_sample"]` dict. Any internal sampling
+                failure degrades to exact scoring with the attrs marking the
+                sample as failed so the pipeline labels honestly — the
+                pipeline never crashes.
             
         Returns:
             DataFrame with added emotion columns
@@ -239,26 +413,90 @@ class EmotionAnalyzer:
         
         # Process messages
         if self.pipeline is not None:
-            # Batch path: group scorable rows, score them in batches of
-            # batch_size, and give skipped rows the neutral 1/6 scores.
-            pending = []
-            skipped = []
-            for idx, text in df_copy[text_column].items():
-                if self._is_scorable(text):
-                    pending.append((idx, str(text)[:512]))
-                else:
-                    skipped.append(idx)
+            sampled = False
+            selected = None
+            sample_meta = None
+            if sample_cap is not None:
+                # Option C gate: only when the scorable count exceeds the cap
+                # does the deterministic stratified sample kick in; otherwise
+                # the exact path below runs untouched.
+                scorable_mask = df_copy[text_column].map(self._is_scorable)
+                n_scorable = int(scorable_mask.sum())
+                if n_scorable > sample_cap:
+                    try:
+                        selected = _stratified_sample_indices(
+                            df_copy, scorable_mask, sample_cap
+                        )
+                        sampled = True
+                    except Exception:
+                        logger.exception(
+                            "emotion sampling failed; degrading to exact scoring"
+                        )
+                        sample_meta = {
+                            "scored": n_scorable,
+                            "total": len(df_copy),
+                            "cap": sample_cap,
+                            "sampled": False,
+                            "note": "emotion sampling failed; exact scoring used",
+                        }
 
-            scores_by_idx = {idx: self._get_neutral_emotions() for idx in skipped}
+            if sampled:
+                # Sampled path: score ONLY the deterministic sample through
+                # the same batch path; every other row (scorable or not)
+                # keeps the neutral 1/6 scores.
+                pending = []
+                skipped = []
+                selected_set = set(df_copy.index[selected])
+                for idx, text in df_copy[text_column].items():
+                    if idx in selected_set:
+                        pending.append((idx, str(text)[:512]))
+                    else:
+                        skipped.append(idx)
 
-            if pending:
-                scored = self._score_batch([t for _, t in pending], batch_size)
-                for (idx, _), scores in zip(pending, scored):
-                    scores_by_idx[idx] = scores
+                scores_by_idx = {idx: self._get_neutral_emotions() for idx in skipped}
+                if pending:
+                    scored = self._score_batch([t for _, t in pending], batch_size)
+                    for (idx, _), scores in zip(pending, scored):
+                        scores_by_idx[idx] = scores
 
-            for idx, scores in scores_by_idx.items():
-                for emotion in self.emotions:
-                    df_copy.at[idx, f'emotion_{emotion}'] = scores.get(emotion, 0.0)
+                for idx, scores in scores_by_idx.items():
+                    for emotion in self.emotions:
+                        df_copy.at[idx, f'emotion_{emotion}'] = scores.get(emotion, 0.0)
+
+                df_copy["emotion_scored"] = df_copy.index.isin(selected_set)
+                df_copy.attrs["emotion_sample"] = {
+                    "scored": int(selected.sum()),
+                    "total": len(df_copy),
+                    "cap": sample_cap,
+                    "sampled": True,
+                }
+            else:
+                # Batch path: group scorable rows, score them in batches of
+                # batch_size, and give skipped rows the neutral 1/6 scores.
+                pending = []
+                skipped = []
+                for idx, text in df_copy[text_column].items():
+                    if self._is_scorable(text):
+                        pending.append((idx, str(text)[:512]))
+                    else:
+                        skipped.append(idx)
+
+                scores_by_idx = {idx: self._get_neutral_emotions() for idx in skipped}
+
+                if pending:
+                    scored = self._score_batch([t for _, t in pending], batch_size)
+                    for (idx, _), scores in zip(pending, scored):
+                        scores_by_idx[idx] = scores
+
+                for idx, scores in scores_by_idx.items():
+                    for emotion in self.emotions:
+                        df_copy.at[idx, f'emotion_{emotion}'] = scores.get(emotion, 0.0)
+
+                if sample_meta is not None:
+                    # Sampling machinery failed but every row was scored
+                    # exactly — still mark it so the pipeline labels honestly.
+                    df_copy["emotion_scored"] = True
+                    df_copy.attrs["emotion_sample"] = sample_meta
         else:
             # Rule-based fallback, unchanged per-message loop
             for idx, row in df_copy.iterrows():
