@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 status: complete
 stopped_at: "Milestone v1.0 COMPLETE — all 4 phases, 8/8 plans; QUAL-02 gate closed; phase 4 verification PASS"
-last_updated: "2026-08-05T00:00:00.000Z"
-last_activity: 2026-08-05 -- Phase 4 verified PASS (175/175 pytest, ruff 0 errors, 04-VERIFICATION.md); milestone v1.0 complete
+last_updated: "2026-08-14T00:00:00.000Z"
+last_activity: 2026-08-14 -- Post-milestone plan 04-06 complete: sampled emotion inference (Option C) — env cap CHAT_ANALYZER_EMOTION_SAMPLE (default 50000), deterministic stratified sampling, tty/off-tty gating, honest sample labels; 250/251 fast pytest, ruff clean (pre-existing cp1252 smoke failure deferred #6)
 progress:
   total_phases: 4
   completed_phases: 4
-  total_plans: 8
-  completed_plans: 8
+  total_plans: 9
+  completed_plans: 9
   percent: 100
 ---
 
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-08-01)
 
 ## Current Position
 
-Phase: 4 (NLP Extras & Quality Gate) — COMPLETE
-Plan: 5 of 5
-Status: Milestone v1.0 Complete
-Last activity: 2026-08-05 -- Phase 4 verified PASS (175/175 pytest, ruff 0 errors, 04-VERIFICATION.md)
+Phase: 4 (NLP Extras & Quality Gate) — COMPLETE (milestone v1.0) + post-milestone plan 04-06
+Plan: 6 of 6 (04-06 Option C sampled emotion inference)
+Status: Milestone v1.0 Complete; follow-up plan 04-06 complete
+Last activity: 2026-08-14 -- 04-06 sampled emotion inference shipped (env cap, deterministic stratified sampling, tty/off-tty gate, honest labels)
 
 Progress: [██████████] 100%
 
@@ -36,20 +36,20 @@ Progress: [██████████] 100%
 
 **Velocity:**
 
-- Total plans completed: 8
+- Total plans completed: 9
 - Average duration: 19min
-- Total execution time: 2.3 hours
+- Total execution time: 2.4 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 1. Package Foundation | 2 / 2 | 45min | 22.5min |
-| 4. NLP Extras & Quality Gate | 5 / 5 | 85min | 17min |
+| 4. NLP Extras & Quality Gate | 6 / 6 | 136min | 22.7min |
 
 **Recent Trend:**
 
-- Last 5 plans: 01-02 CLI Interactive Slice (25min), 04-01 Always-On Health + Network Slice (17min), 04-02 Gated Emotion + Summary Slice (45min), 04-03 Interactive NLP Menu + Friendly Errors (20min), 04-05 README Quickstart + Doc Reconciliation (3min)
+- Last 5 plans: 04-03 Interactive NLP Menu + Friendly Errors (20min), 04-05 README Quickstart + Doc Reconciliation (3min), 04-04 Legacy Test Rewiring (QUAL-02, 40min), 04-02 Gated Emotion + Summary Slice (45min), 04-06 Sampled Emotion Inference (51min)
 - Trend: —
 
 *Updated after each plan completion*
@@ -59,6 +59,7 @@ Progress: [██████████] 100%
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | Phase 04 P05 | 3min | 2 tasks | 3 files |
+| Phase 04 P06 | 51min | 7 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -104,6 +105,8 @@ Recent decisions affecting current work:
 - [Phase 04]: README quickstart-first per D-18 with neutral D-19 options block; REQUIREMENTS/ROADMAP reconciled: ANAL-07/09 always-on (D-07/D-07b), OUT-04/05 NO FLAG (D-08), zero --output/--no-report strings in ROADMAP.md — QUAL-03 + reconciliation notes #1/#2 from the orchestrator; plan must_haves artifact pins not_contains --output on ROADMAP.md
 - [Phase 04]: Phase 3 ROADMAP historical note reworded flag-free (OUT-04 output path / OUT-05 report opt-out semantics) despite Task-2 'don't touch Phase 1/2/3' scoping — Plan must_haves artifact ROADMAP.md not_contains --output + success criterion 'no flag wording anywhere in the docs' take precedence
 - [Phase 04]: 04-04 QUAL-02 gate closed FULL-SCOPE (user-approved): pre-existing baseline failures in test_end_to_end.py (11, pandas 2.x freq drift + cp1252 emoji fixture) and test_reporting.py (15, same freq drift), plus 380 pre-existing ruff errors (deferred-items #1), all fixed so pytest 175/175 + `ruff check src/chat_analyzer tests` 0 errors BOTH pass. `tests/__init__.py` added so `python -m unittest tests.test_analysis` module-path invocation works (reconciles plan acceptance)
+- [Phase 04, plan 06]: Option C sampled emotion inference — cap = env `CHAT_ANALYZER_EMOTION_SAMPLE` (absent/empty→50000, `0`/`off`/`false`→None=exact, positive int→int, garbage→50000, never raises); deterministic stratified sample (largest-remainder seats across senders with floor-1, ~50 per-sender time buckets via qcut, `random_state=42`); tty prompt default NO=exact, off-tty AUTO-SAMPLE; exact path byte-for-byte invariant when below/at cap (no `emotion_scored`/attrs); summary computed over scored rows only
+- [Phase 04, plan 06]: `emotion_sample` attrs carry an ADDITIVE `sampled: True/False` key (beyond the plan's scored/total/cap) so HTML report + terminal labels gate on `emotion.sample.sampled` — the sampling-failure degrade path (exact scoring + sampled=False + note) is never mislabeled as sampled; no file-hash cache (determinism from fixed RNG seed instead, per plan)
 
 ### Pending Todos
 
@@ -134,6 +137,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-05T00:00:00.000Z
-Stopped at: All Phase 4 plans complete; verification pending
-Resume file: .planning/phases/04-nlp-extras-quality-gate/04-04-SUMMARY.md
+Last session: 2026-08-14T00:00:00.000Z
+Stopped at: Post-milestone plan 04-06 (Option C sampled emotion inference) complete; 250/251 fast pytest (pre-existing cp1252 smoke failure deferred #6)
+Resume file: .planning/phases/04-nlp-extras-quality-gate/04-06-SUMMARY.md

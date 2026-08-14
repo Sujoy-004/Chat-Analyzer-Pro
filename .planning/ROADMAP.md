@@ -89,7 +89,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   6. Tests exercise the real `chat_analyzer.*` real modules (parser fixtures, parse → analyze → render pipeline, HTML/encoding) and pass in a clean environment
   7. A friend can follow the README quickstart (export → pip install → one command) and get results
 
-**Plans**: 5/5 plans executed — **Phase COMPLETE**, verified PASS (2026-08-05)
+**Plans**: 6/6 plans executed (5 planned + 1 post-milestone follow-up 04-06) — **Phase COMPLETE**, verified PASS (2026-08-05); follow-up plan 04-06 complete 2026-08-14
 Plans:
 **Wave 1**
 
@@ -108,6 +108,10 @@ Plans:
 
 - [x] 04-04-PLAN.md — Legacy test rewiring (test_analysis/test_parser → real chat_analyzer modules)
 
+**Post-milestone follow-up**
+
+- [x] 04-06-PLAN.md — Sampled emotion inference for large chats (Option C): CHAT_ANALYZER_EMOTION_SAMPLE cap, deterministic stratified sampling, tty/off-tty gate, honest sample labels
+
 ## Progress
 
 **Execution Order:**
@@ -118,4 +122,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | 1. Package Foundation | 2/2 | Complete | 2026-08-01 |
 | 2. One-Command Terminal Insights | 1/1 | Complete | 2026-08-03 |
 | 3. Shareable HTML Report | - | Absorbed into Phase 4 | 2026-08-03 |
-| 4. NLP Extras & Quality Gate | 5/5 | Complete | 2026-08-05 |
+| 4. NLP Extras & Quality Gate | 6/6 | Complete (+ 04-06 follow-up) | 2026-08-05, 04-06: 2026-08-14 |
