@@ -252,7 +252,8 @@ def _build_emotion_block(emotion: dict) -> dict:
     place that knows the module's dict shape). ``sample`` carries the Option C
     sampling metadata (scored/total/cap) so render/report can label the
     results "based on a sample of N of M messages"; None when exact scoring
-    ran.
+    ran. ``quarterly`` passes through the per-quarter emotion mean rows so
+    any consumer (report charts_json) can read them.
     """
     dist = emotion.get("emotion_distribution") or {}
     dominant = emotion.get("dominant_emotion")
@@ -263,6 +264,7 @@ def _build_emotion_block(emotion: dict) -> dict:
         "dominant": dominant,
         "average_scores": emotion.get("average_emotion_scores") or {},
         "sample": emotion.get("sampled"),
+        "quarterly": emotion.get("quarterly") or [],
     }
 
 
