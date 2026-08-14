@@ -1,0 +1,10 @@
+metric,value
+parse.parsed_messages,5
+parse.skipped_lines,0
+parse.system_messages,0
+stats.media_messages,0
+stats.total_messages,5
+stats.participants,3
+stats.date_range.start,2025-09-15
+stats.date_range.end,2025-09-15
+sentiment.avg_compound,0.291540
