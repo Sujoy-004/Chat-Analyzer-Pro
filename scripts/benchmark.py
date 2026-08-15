@@ -223,6 +223,10 @@ def _spawn_and_run(
     env = os.environ.copy()
     env["CHAT_ANALYZER_TIER"] = TIER_ENV[tier]
     env["CHAT_ANALYZER_NO_OPEN"] = "1"
+    # Q6.5 / Pitfall 7: the benchmark measures FIRST-RUN timings — a user with
+    # CHAT_ANALYZER_RESULT_CACHE set globally must not get cache-hit seconds
+    # (the README timing table would become fake).
+    env["CHAT_ANALYZER_RESULT_CACHE"] = "0"
     env["PYTHONUNBUFFERED"] = "1"
     env["PYTHONIOENCODING"] = "utf-8"
 
