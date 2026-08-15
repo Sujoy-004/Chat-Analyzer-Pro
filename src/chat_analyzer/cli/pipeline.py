@@ -154,6 +154,7 @@ def run_pipeline(path: Path, console, nlp_enabled: bool | None = None) -> Analys
         source = ""
         rows: list[dict] = []
         counts: dict = {}
+        chosen_names: list[str] = []  # zip transcript member names (04-08 cache key)
 
         with stage(console, progress, task_id, "Parsing chat"):
             if path.suffix.lower() == ".txt":
@@ -174,7 +175,7 @@ def run_pipeline(path: Path, console, nlp_enabled: bool | None = None) -> Analys
                 # analyze; rows/counts come back in the same contract shape.
                 from chat_analyzer.cli.zip_input import parse_zip_with_report
 
-                rows, counts, source = parse_zip_with_report(path, console)
+                rows, counts, source, chosen_names = parse_zip_with_report(path, console)
             else:
                 raise ValueError(
                     f"Unsupported file type: {path.suffix} — expected .txt (WhatsApp), "
@@ -196,6 +197,56 @@ def run_pipeline(path: Path, console, nlp_enabled: bool | None = None) -> Analys
         df = messages_to_dataframe(rows)
         if df.empty:
             raise ValueError("No messages could be parsed from this file")
+
+        # Option C: sampled emotion scoring for large chats. Resolve the cap
+        # once, BEFORE the cache lookup (04-08 Pitfall 2) — when the SCORABLE
+        # count exceeds it (the same _is_scorable rule the analyzer's
+        # n_scorable > cap gate uses, IN-01) prompt on interactive terminals
+        # (default NO = exact) and AUTO-SAMPLE off-tty (piped/CI/tests). The
+        # exact path stays untouched below the cap. The EFFECTIVE cap (the tty
+        # y/N answer collapsed in) is what rides in the cache key, so y and N
+        # on the same file produce two distinct entries (research Q1.4/A1).
+        sample_cap = None
+        if nlp_on:
+            emotion_sample_cap = nlp_gate.emotion_sample_cap()
+            if emotion_sample_cap is not None:
+                from chat_analyzer.analysis.emotion import EmotionAnalyzer
+
+                n_scorable = EmotionAnalyzer.n_scorable(df)
+                if n_scorable > emotion_sample_cap:
+                    if console.is_terminal:
+                        answer = console.input(
+                            f"{n_scorable} scorable messages — exact emotion "
+                            f"scoring can take ~2 hours; sampled (up to "
+                            f"{emotion_sample_cap}) takes minutes. Sample? [y/N] "
+                        )
+                        if answer.strip().lower() in ("y", "yes"):
+                            sample_cap = emotion_sample_cap
+                    else:
+                        sample_cap = emotion_sample_cap  # AUTO-SAMPLE (piped/CI)
+
+        # Result cache (04-08, opt-in via CHAT_ANALYZER_RESULT_CACHE): on a
+        # hit the whole compute/NLP/narrative is skipped — the parse narration
+        # above already ran (honest parsed-count line) and the finally clause
+        # stops the progress bar. On a miss the stages below run unchanged and
+        # the result is stored best-effort before return. Lazy import keeps
+        # module loading light.
+        cache_dir = nlp_gate.result_cache_dir()
+        cache_key_value: str | None = None
+        if cache_dir is not None:
+            from chat_analyzer.cli import result_cache  # lazy (04-08)
+
+            cache_key_value = result_cache.cache_key(
+                path,
+                nlp_on=nlp_on,
+                sample_cap=sample_cap,
+                emotion_workers=nlp_gate.emotion_worker_count(),
+                chosen_transcripts=chosen_names,
+            )
+            cached = result_cache.load(cache_dir, cache_key_value)
+            if cached is not None:
+                console.print("[INFO] Loaded analysis from cache")
+                return cached
 
         with stage(console, progress, task_id, "Computing insights"):
             with contextlib.redirect_stdout(io.StringIO()) as captured:
@@ -292,29 +343,6 @@ def run_pipeline(path: Path, console, nlp_enabled: bool | None = None) -> Analys
         # (D-02/D-06): the pipeline always prepares for NLP, availability decides.
         emotion_summary = None
         if nlp_on:
-            # Option C: sampled emotion scoring for large chats. Resolve the
-            # cap once; when the SCORABLE count exceeds it — the same
-            # _is_scorable rule the analyzer's n_scorable > cap gate uses
-            # (IN-01) — prompt on interactive terminals (default NO = exact)
-            # and AUTO-SAMPLE off-tty (piped/CI/tests). The exact path stays
-            # untouched below the cap.
-            sample_cap = None
-            emotion_sample_cap = nlp_gate.emotion_sample_cap()
-            if emotion_sample_cap is not None:
-                from chat_analyzer.analysis.emotion import EmotionAnalyzer
-
-                n_scorable = EmotionAnalyzer.n_scorable(df)
-                if n_scorable > emotion_sample_cap:
-                    if console.is_terminal:
-                        answer = console.input(
-                            f"{n_scorable} scorable messages — exact emotion "
-                            f"scoring can take ~2 hours; sampled (up to "
-                            f"{emotion_sample_cap}) takes minutes. Sample? [y/N] "
-                        )
-                        if answer.strip().lower() in ("y", "yes"):
-                            sample_cap = emotion_sample_cap
-                    else:
-                        sample_cap = emotion_sample_cap  # AUTO-SAMPLE (piped/CI)
             with stage(console, progress, task_id, "Analyzing emotions"):
                 # D-05/Pitfall 4: announce model name + size BEFORE any
                 # construction that triggers from_pretrained — and outside the
@@ -448,7 +476,7 @@ def run_pipeline(path: Path, console, nlp_enabled: bool | None = None) -> Analys
 
         from chat_analyzer.cli.adapters import adapt
 
-        return adapt(
+        results = adapt(
             source,
             parse_report,
             df,
@@ -464,6 +492,21 @@ def run_pipeline(path: Path, console, nlp_enabled: bool | None = None) -> Analys
             emotion=emotion_summary,
             narrative=narrative,
         )
+
+        # Best-effort store on a miss (never raises — the cache must not break
+        # the run). The tip hint surfaces the opt-in feature on the NLP path
+        # only when the cache is disabled (D-06 hint pattern); a hit path
+        # never reaches here (it returned right after the Loaded label).
+        if cache_dir is not None:
+            from chat_analyzer.cli import result_cache  # already imported above
+
+            result_cache.store(cache_dir, cache_key_value, results)
+        elif nlp_on:
+            console.print(
+                "[INFO] Tip: set CHAT_ANALYZER_RESULT_CACHE=1 to make "
+                "repeat runs of this file take seconds."
+            )
+        return results
     finally:
         if progress is not None:
             progress.stop()
