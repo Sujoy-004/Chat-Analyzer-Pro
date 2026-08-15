@@ -99,6 +99,8 @@ Choosing tier 2 or 3 **is the consent point**: any missing packages are installe
 Emotion scoring on very large chats follows the same prompt-vs-automation split. When a tier 2/3 run exceeds the emotion sampling cap, an interactive terminal is asked `Sample? [y/N]` (default **No** = score every message exactly); on piped/CI runs it auto-samples instead. Sampling scores a deterministic, participant- and time-stratified subset — the same file always samples identically — and when it runs the terminal prints `Emotions based on a sample of N of M messages.` while the report shows *"Emotion scores based on a sample of N of M messages."* under the emotion table.
 
 - `CHAT_ANALYZER_EMOTION_SAMPLE=<n>` — emotion sampling cap (default **50000**): `0`, `off`, or `false` disables sampling (always exact); a positive integer sets the cap; anything else (garbage, or a value that parses to a non-positive integer) falls back to the default.
+- `CHAT_ANALYZER_EMOTION_WORKERS=<n>` — parallel emotion worker count (default **3**): exact scoring fans unique-text inference out to a process pool on very large chats (each worker builds its own DistilBERT pipeline); `0` or `1` forces sequential (no pool); a positive integer sets the count but is capped at **8** (RAM-bound — each worker loads its own ~255 MB model copy plus a torch runtime); anything else falls back to the default. Parallel scoring only engages above the internal unique-text threshold.
+- `CHAT_ANALYZER_RESULT_CACHE=<dir>` — opt-in result cache keyed by the input file's sha256 hash + your settings (default **OFF**): `0`, `off`, `false`, or `no` disable it; `1`, `on`, `true`, or `yes` enable it with the default directory (`%LOCALAPPDATA%\chat-analyzer\cache` on Windows, `~/.cache/chat-analyzer` elsewhere); any other value IS the cache directory. On a repeat run of the same file with the same settings, the terminal prints `[INFO] Loaded analysis from cache` and the run completes in seconds — the HTML report is always regenerated fresh. Entries expire after 30 days (pruned automatically on each store).
 
 ## How the tiers are enforced
 
@@ -132,6 +134,8 @@ Relationship-health grades, emotion labels, and narrative observations are **sta
 ## Privacy
 
 Everything runs **entirely on your machine** — no accounts, no server, no telemetry. `pip install` pulls public model weights (downloaded at tier selection, or on first use if you installed the extras manually, and cached locally); the model, your chat data, and the generated report never leave your device. The terminal messages say this on every NLP run.
+
+With the optional result cache enabled (`CHAT_ANALYZER_RESULT_CACHE`), analysis results are stored **outside the repo** (never in the working tree) under your user profile — delete that cache directory to erase all stored analysis data. Note that cached entries are invalidated by app-version/schema changes, but during development the app version is static: if you are developing with the cache on, delete the cache directory after code changes (the schema constant is the manual override).
 
 ## Features
 
