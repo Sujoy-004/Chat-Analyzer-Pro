@@ -24,7 +24,8 @@ chat export file
 ┌────────────────────────────────────────────────────────────────────┐
 │  PARSERS (chat_analyzer/parser/)                                    │
 │  WhatsAppParser .txt  ·  telegram_parser .json  ·  zip_input .zip   │
-│  produce (rows: list[dict], counts: dict) — never a DataFrame       │
+│  produce (rows: list[dict], counts: dict) — never a DataFrame;      │
+│  zip_input adds source + chosen transcript names (4-tuple)          │
 └───────────────────────────────┬────────────────────────────────────┘
                                 │ ParseReport (dataclass)
                                 ▼
@@ -37,6 +38,21 @@ chat export file
                                 │ canonical DataFrame
                                 ▼
 ┌────────────────────────────────────────────────────────────────────┐
+│  SAMPLE DECISION (Option C — nlp_on only)                           │
+│  n_scorable > CHAT_ANALYZER_EMOTION_SAMPLE cap (default 50_000)?    │
+│  tty prompt (default NO = exact) · off-tty AUTO-SAMPLE              │
+└───────────────────────────────┬────────────────────────────────────┘
+                                │ effective sample cap (rides cache key)
+                                ▼
+┌────────────────────────────────────────────────────────────────────┐
+│  RESULT CACHE (cli/result_cache.py — opt-in)                        │
+│  key = sha256(file bytes) + {schema, app_version, nlp_on,           │
+│        sample_cap, emotion_workers, chosen_transcripts}             │
+│  hit → "[INFO] Loaded analysis from cache" → early return           │
+└───────────────────────────────┬────────────────────────────────────┘
+                                │ miss → continue
+                                ▼
+┌────────────────────────────────────────────────────────────────────┐
 │  ALWAYS-ON ANALYSIS (pandas/numpy/networkx/matplotlib only)         │
 │  ChatEDA (summary/volume/dynamics/content)                          │
 │  add_sentiment_analysis (VADER, consensus)                          │
@@ -44,15 +60,20 @@ chat export file
 │  analyze_network → network dict                                      │
 │  ChatVisualizer → matplotlib figures                                  │
 │  analyze_narrative → Tier A heuristic narrative (always-on)         │
-└───────────────┬─────────────────────────────────────┬──────────────┘
-                │                                     │
-         [nlp] gate OFF                        [nlp] gate ON (probe)
-                │                                     │
-                ▼                                     ▼
+└───────────────────┬─────────────────────────────────────┬──────────┘
+                    │                                     │
+             [nlp] gate OFF                        [nlp] gate ON (probe)
+                    │                                     │
+                    ▼                                     ▼
 ┌──────────────────────────────┐   ┌──────────────────────────────────────┐
-│ emotion stays None;           │   │  EmotionAnalyzer → emotion dict +     │
-│ report renders "unavailable"  │   │    emotion chart (distilbert emotion) │
-└──────────────────────────────┘   │  Tier B narrative (flan-t5-small over  │
+│ emotion stays None;           │   │  EmotionAnalyzer (distilbert emotion)│
+│ report renders "unavailable"  │   │    sampled ≤ cap or exact scoring,   │
+└──────────────────────────────┘   │    unique-text dedupe + process pool  │
+                                   │    above 20_000 unique texts          │
+                                   │  → emotion dict + emotion chart +     │
+                                   │    quarterly means → emotion-quarterly│
+                                   │    ECharts timeline                   │
+                                   │  Tier B narrative (flan-t5-small over  │
                                    │    compact ASCII digest)               │
                                    └──────────────────────────────────────┘
                                 │
@@ -61,6 +82,7 @@ chat export file
 │  ADAPTER (chat_analyzer/cli/adapters.py)                             │
 │  adapt(…) → AnalysisResults TypedDict                                │
 │  extracts only serializable scalars (no DataFrames / DiGraph leak)   │
+│  a cache miss is stored back best-effort before return              │
 └───────────────────────────────┬────────────────────────────────────┘
                                 │ AnalysisResults
                                 ▼
@@ -69,9 +91,10 @@ chat export file
 │  terminal: "Messages: N" line (main.py), ASCII summary panel       │
 │            (render.py, rich), stage narration (pipeline.py)         │
 │  file:     <stem>_report.html in cwd (report_html.py, jinja2,      │
-│            autoescape) — base64 PNG data URIs + interactive         │
-│            ECharts specs (cli/chart_json.py), vendored JS           │
-│            bundles inlined from assets/ (importlib.resources)       │
+│            autoescape) — ALWAYS regenerated, even on a cache hit;   │
+│            base64 PNG data URIs + interactive ECharts specs         │
+│            (cli/chart_json.py, incl. emotion-quarterly), vendored   │
+│            JS bundles inlined from assets/ (importlib.resources)    │
 │  browser:  best-effort auto-open (CHAT_ANALYZER_NO_OPEN=1 opt-out) │
 └────────────────────────────────────────────────────────────────────┘
 ```
@@ -79,7 +102,11 @@ chat export file
 A `.zip` export may contain multiple transcripts (`.txt` = WhatsApp,
 `.json` = Telegram); `cli/zip_input.py` lets the user pick which to
 analyze (all on a non-tty run) and merges their rows + counts into one
-`ParseReport`. The zip's real media *files* are counted once at the
+`ParseReport`. `parse_zip_with_report()` returns a 4-tuple —
+`(rows, counts, source, chosen_names)` — where `chosen_names` is the
+sorted list of chosen transcript member names that rides in the
+result-cache key, so a different selection on the same zip invalidates
+the cache. The zip's real media *files* are counted once at the
 archive level and folded into the report's "Media messages" stat.
 
 ## Module inventory
@@ -91,15 +118,16 @@ Every module that exists in `src/chat_analyzer/`, with its responsibility:
 | `__init__.py` | Package metadata (`__version__ = "0.1.0"`), `__all__`, package-level logging `NullHandler` |
 | `__main__.py` | `python -m chat_analyzer` entry — runs the typer app directly |
 | `cli/__init__.py` | Exposes `app` (from `cli.main`) |
-| `cli/main.py` | The typer app: the single command is the root — no `analyze` subcommand exists — plus the interactive re-prompt loop, `--version` eager callback, `_friendly_error` classification, D-04 NLP download menu, exit codes 0/1 |
-| `cli/pipeline.py` | The single orchestration path — `run_pipeline(path, console)` — parse → canonical df → insights → charts → `AnalysisResults`, with `stage()`/`stage_status()` narration and `_safe_chart()` degradation |
+| `cli/main.py` | The typer app: the single command is the root — no `analyze` subcommand exists — plus the interactive re-prompt loop, `--version` eager callback, `_friendly_error` classification, the always-on 3-option NLP tier menu (PH2) with `CHAT_ANALYZER_TIER` env resolution, exit codes 0/1 |
+| `cli/pipeline.py` | The single orchestration path — `run_pipeline(path, console, nlp_enabled)` — parse → Option C sample decision → result-cache lookup → canonical df → insights → charts → gated emotion/quarterly/narrative → `AnalysisResults`, with `stage()`/`stage_status()` narration, `_safe_chart()` degradation, and best-effort cache store on a miss |
 | `cli/contracts.py` | `ParseReport` dataclass + `AnalysisResults` TypedDict — the pipeline's single output contract; core modules never import it |
 | `cli/adapters.py` | `adapt(...)` — the ONLY place that knows each analysis module's internal dict shape; extracts serializable scalars; `build_insights()` generates the narrative lead-in sentences |
-| `cli/render.py` | Terminal end-of-run rendering: skipped/system notes, rich ASCII "Summary" panel (no charts in the terminal) |
-| `cli/report_html.py` | Single-file HTML report: jinja2 autoescape template, sanitized `<stem>_report.html` written to cwd, best-effort browser open (`CHAT_ANALYZER_NO_OPEN=1`) |
-| `cli/chart_json.py` | `build_chart_specs()` (timeline/activity/participants/sentiment/health/network) + `build_emotion_spec()` — ECharts option dicts behind the `charts_json` contract; strictly JSON-serializable, never raises |
-| `cli/zip_input.py` | `.zip` export support: transcript discovery, interactive transcript selection, zip-level media-file counting, merged parse |
-| `cli/nlp_gate.py` | Silent NLP availability probe (torch+transformers importable), locked model constants, `model_cached()`, guarded `install_nlp()`, Windows `MAX_PATH` guard |
+| `cli/result_cache.py` | Opt-in repeat-run result cache (04-08): sha256 of the input file bytes + config signature → `<key>.json` outside the repo; recursive numpy/date-key sanitizer; json-only load that self-heals corrupt files; atomic store + 30-day TTL prune; never raises |
+| `cli/render.py` | Terminal end-of-run rendering: skipped/system notes, rich ASCII "Summary" panel, Option C "sample of N of M" label (no charts in the terminal) |
+| `cli/report_html.py` | Single-file HTML report: jinja2 autoescape template, sanitized `<stem>_report.html` written to cwd, eight chart slots (incl. `emotion-quarterly`), best-effort browser open (`CHAT_ANALYZER_NO_OPEN=1`) |
+| `cli/chart_json.py` | `build_chart_specs()` (timeline/activity/participants/sentiment/health/network) + `build_emotion_spec()` + `build_emotion_timeline_spec()` (quarterly line) — ECharts option dicts behind the `charts_json` contract; strictly JSON-serializable, never raises |
+| `cli/zip_input.py` | `.zip` export support: transcript discovery, interactive transcript selection, zip-level media-file counting, merged parse; `parse_zip_with_report()` returns `(rows, counts, source, chosen_names)` for the cache key |
+| `cli/nlp_gate.py` | NLP availability + tier resolution: `nlp_status()` (READY/OUTDATED/MISSING), locked model constants, `model_cached()`, guarded `install_nlp()`/`update_nlp()`/`download_models()`, env knobs (`CHAT_ANALYZER_EMOTION_SAMPLE`, `CHAT_ANALYZER_EMOTION_WORKERS`, `CHAT_ANALYZER_RESULT_CACHE`), Windows `MAX_PATH` guard |
 | `ingest/__init__.py` | Package marker |
 | `ingest/ingestion.py` | `messages_to_dataframe()` (canonical df builder), `normalize_message()` contract, legacy `process_uploaded_file()` library API, WhatsApp regex/text + JSON message parse helpers, optional OCR/PDF dependency gates (PIL, pytesseract, pdfplumber, pdf2image) |
 | `parser/__init__.py` | Package marker |
@@ -108,7 +136,7 @@ Every module that exists in `src/chat_analyzer/`, with its responsibility:
 | `analysis/__init__.py` | Package marker |
 | `analysis/eda.py` | `ChatEDA` — volume, dynamics (avg response time, balance ratio), content (word/emoji frequency), comprehensive summary |
 | `analysis/sentiment.py` | Multi-engine sentiment: VADER (`vaderSentiment`), textblob/transformers gated behind `*_AVAILABLE` flags; `add_sentiment_analysis()` + `get_sentiment_summary()`; consensus majority-vote |
-| `analysis/emotion.py` | `EmotionAnalyzer` — 6-class emotion via HF pipeline (`distilbert-base-uncased-emotion`) with rule-based fallback; `emotion_figure()` returns a chart for base64 embedding |
+| `analysis/emotion.py` | `EmotionAnalyzer` — 6-class emotion via HF pipeline (`distilbert-base-uncased-emotion`) with rule-based fallback; Option C deterministic stratified sampling (`emotion_scored` column + `attrs["emotion_sample"]`); unique-text dedupe + parallel exact scoring above 20_000 unique texts (spawn-safe module-level `_score_text_chunk`, torch thread clamp); `get_emotion_quarterly()` per-quarter means; `emotion_figure()` returns a chart for base64 embedding |
 | `analysis/narrative.py` | Tier A heuristic narrative — `analyze_narrative()`; hedged observations (arc/driver/reciprocity/engagement) from pandas+re only; never imports CLI |
 | `analysis/relationship_health.py` | `analyze_relationship_health()` — starters, initiator ratio, response patterns, dominance, weighted health score + gamification (friendship index, streaks, emoji personality, milestones, rolling health) |
 | `analysis/network_graph.py` | `analyze_network()` + `network_figure()` — NetworkX directed interaction graph, centrality metrics, community detection |
@@ -177,12 +205,12 @@ template:
 | `sentiment` | distribution, avg compound, by-sender, daily avg |
 | `health` | **always-on** scalars (overall score, grade, components, initiator balance, avg response minutes, response balance, dominance) |
 | `network` | **always-on** scalars (nodes/edges/density/reciprocity, strongest connections, key participants, subgroup count) |
-| `emotion` | **None when the NLP gate is OFF** (silent degrade); serial blocks when on |
+| `emotion` | **None when the NLP gate is OFF** (silent degrade); when on: `{distribution, dominant, average_scores, sample, quarterly}` — `sample` carries the Option C metadata (`scored`/`total`/`cap`) so the report/terminal can label "based on a sample of N of M messages"; `quarterly` carries the per-quarter mean rows |
 | `narrative` | always present — Tier A observations; Tier B `narrative_summary` when generated |
 | `charts` | `{name: "data:image/png;base64,…"}` — six always, `"emotion"` when NLP on |
-| `charts_json` | `{name: ECharts option dict}` — interactive specs for the same charts (`"emotion"` when NLP on); a chart with no buildable spec renders its PNG from `charts` instead |
+| `charts_json` | `{name: ECharts option dict}` — interactive specs for the same charts (`"emotion"` + `"emotion-quarterly"` when NLP on); a chart with no buildable spec renders its PNG from `charts` instead |
 | `insights` | up to 11 narrative lead-in sentences |
-| `report_path` | filled by `main.py` after the HTML write |
+| `report_path` | filled by `main.py` after the HTML write — forced to `""` on a cache load so the report is always regenerated |
 
 ## Key design decisions
 
@@ -218,14 +246,23 @@ live only behind the optional `[nlp]` extra (`torch>=2.0`,
 no assumption the models are present:
 
 - `nlp_gate.nlp_available(MODEL_ID)` is a **pure importability probe**
-  (`import torch, transformers`) — never raises, never prompts. It runs once
-  up front in `main()` and again in `pipeline.run_pipeline()`.
+  (`import torch, transformers`) — never raises, never prompts. It is
+  consumed up front by `main()`'s tier resolution: choosing tier 2/3
+  resolves `nlp_status()` (READY / OUTDATED / MISSING), and the forced
+  `nlp_enabled` flag is passed into `pipeline.run_pipeline()`. Direct/test
+  callers that pass `nlp_enabled=None` still get the auto-detect probe.
 - `CHAT_ANALYZER_FORCE_NLP=0|1` env var forces either branch deterministically
-  in tests (a dev box may have transformers installed but no cached weights).
+  in tests (a dev box may have transformers installed but no cached weights);
+  `CHAT_ANALYZER_TIER=1|2|3` is the non-interactive tier override (legacy
+  `CHAT_ANALYZER_FORCE_NLP` maps 0→1 and 1→3).
 - Model **weights are not required up front** — they download on first use;
   `model_cached()` announces when a download is about to happen and the model
   and size are printed **before** any `from_pretrained` call (announce-then-
-  construct D-05 rule).
+  construct D-05 rule). Choosing tier 2/3 makes the tier ready *before*
+  analyzing: MISSING runs `install_nlp(cpu_only)` + `download_models()`,
+  OUTDATED offers "Update now / Go with current" (`update_nlp()`), READY
+  proceeds — so both model weight sets are in the HF cache before the
+  pipeline's first model use.
 - Gated stages degrade, they never crash: `EmotionAnalyzer` falls back to a
   rule-based keyword classifier when the model load fails; the Tier B narrative
   degrades to the Tier A lead when its model fails.
@@ -236,14 +273,93 @@ an install hint. When the gate is ON, emotion
 (`distilbert-base-uncased-emotion`, ~255 MB) and the Tier B narrative
 (`google/flan-t5-small`, ~340 MB) both run locally.
 
-Interactive runs with NLP missing show the three-option download menu
-(1 = full torch ~3 GB, 2 = CPU-only torch ~0.6 GB default, 3 = no download);
-positional/piped runs never prompt. `nlp_gate.install_nlp(cpu_only)`
+Every interactive run (positional or in the no-arg loop) shows the
+always-on **3-option NLP tier menu** — 1 = without NLP, 2 = minimal
+(CPU-only torch, ~0.6 GB), 3 = full-fledged (~3 GB) — regardless of the
+current install state; non-interactive runs never prompt (env override,
+else silent tier 1 plus a one-line hint). `nlp_gate.install_nlp(cpu_only)`
 re-installs the already-declared extras via a guarded subprocess pip
 (nothing new enters the dependency graph) and raises `RuntimeError` on
 failure so the run degrades to basic analysis. On Windows, a `MAX_PATH`
 guard (WinError 206 with torch wheels) warns before any multi-GB download and
-points to `scripts/make_nlp_env.ps1` (creates a short-path venv in `%TEMP%`).
+points to `scripts/make_nlp_env.ps1` (creates a short-path venv in `%TEMP%`);
+`CHAT_ANALYZER_ALLOW_LONG_PATH=1` overrides the heuristic check.
+
+### Sampled vs exact emotion scoring (Option C) + parallel workers
+
+The emotion stage scales two ways for large chats — by **sampling** (fewer
+messages scored) and by **parallelizing** exact scoring (score faster, same
+result) — and both knobs live in `nlp_gate`/`analysis/emotion.py`, not in
+the CLI:
+
+- **Sampled path (Option C).** `CHAT_ANALYZER_EMOTION_SAMPLE` sets the cap
+  (default `50000`; `0`/`off`/`false` disables sampling = always exact).
+  The cap is resolved **once** in `run_pipeline` right after the parse
+  (before the cache lookup): when `EmotionAnalyzer.n_scorable(df)` exceeds
+  it, an interactive terminal is prompted (default NO = exact) and piped/CI
+  runs **auto-sample**. The sample itself is deterministic and
+  (participant, time)-stratified — largest-remainder seat allocation across
+  senders, ~50 time buckets per sender, `random_state=42` everywhere — so
+  the same file + cap always yields the same sample. The returned frame
+  gains an `emotion_scored` boolean column and
+  `df.attrs["emotion_sample"]` metadata; the pipeline computes its summary
+  over the **scored sample rows only** and the terminal/report label the
+  result "based on a sample of N of M messages". At/below the cap (or with
+  `sample_cap=None`) the behavior is byte-for-byte the exact path.
+- **Parallel exact scoring.** Every unique text is scored exactly once
+  (dedupe via `dict.fromkeys` — emotion scoring is a pure function of the
+  text) and mapped back to all rows, so the output is identical to scoring
+  every message. Above `_EMOTION_PARALLEL_THRESHOLD` (20_000 unique texts),
+  with a genuine transformers pipeline and
+  `CHAT_ANALYZER_EMOTION_WORKERS` ≥ 2 (default 3, capped at 8 — each worker
+  loads its own ~255 MB model copy), a `ProcessPoolExecutor` map-reduces
+  contiguous fixed-order chunks via the module-level, spawn-safe
+  `_score_text_chunk(texts, model_name, batch_size, num_threads)` — JSON-able
+  args only, the pipeline is built **inside** the child, torch threads are
+  clamped to `max(1, cpu_count // workers)`, and
+  `TOKENIZERS_PARALLELISM=false` is set before the transformers import.
+  Any worker failure degrades to the identical sequential `_score_batch`
+  (byte-parity by construction). The pool lives in the emotion analysis
+  module, never the CLI.
+- **Quarterly aggregation.** `get_emotion_quarterly(df_emo)` computes the
+  per-quarter MEAN of the six emotion scores (oldest first, honors the
+  `emotion_scored` column in sampled mode); the pipeline attaches it as
+  `emotion_summary["quarterly"]`, `chart_json.build_emotion_timeline_spec()`
+  turns it into the `emotion-quarterly` ECharts line spec (one smooth line
+  per emotion, slider+inside `dataZoom`), and `report_html.py` renders the
+  chart when the spec exists.
+
+### Opt-in result cache (keyed by file hash)
+
+`CHAT_ANALYZER_RESULT_CACHE` (default **OFF**) turns repeat runs of the same
+chat file into seconds: the whole post-`adapt()` `AnalysisResults` payload is
+persisted and served on a hit, so the compute and NLP/narrative stages never
+re-run.
+
+- **Key** = `sha256` of the input file's raw bytes (1 MiB chunks; a `touch`
+  still hits; zip archives hash the whole container, media included) folded
+  with a config signature via `json.dumps(sort_keys=True)`:
+  `{schema: RESULT_CACHE_SCHEMA, app_version, nlp_on, sample_cap,
+  emotion_workers, chosen_transcripts}`. The **effective** sample cap (the
+  tty y/N answer collapsed in) rides in the key, and the sample prompt is
+  re-asked on hits — so file edits, tier changes, cap choices, worker counts,
+  zip transcript picks, app upgrades, and schema bumps all invalidate the
+  key by construction. Key filenames are hex digests only — no user input
+  ever enters a path.
+- **Storage** lives OUTSIDE the repo (privacy lock): `%LOCALAPPDATA%\chat-analyzer\cache`
+  on Windows, `~/.cache/chat-analyzer` elsewhere, or any explicit path value.
+  The payload is derived data only (sender names, top words, charts) — raw
+  chat text never enters it. Writes are atomic (same-dir tempfile +
+  `os.replace`), pruned by a **30-day TTL** on every store, and pass through
+  a recursive `_sanitize` (numpy scalars → `.item()`, ndarrays → `tolist()`,
+  NaN/±Inf → `None`, non-serializable dict keys — the verified
+  `sentiment.daily_avg` `datetime.date` leak — → `str()`).
+- **Load** is json-only (never pickle/eval); a corrupt file is self-healed
+  (unlinked), a schema-mismatch file is kept, and `report_path` is forced to
+  `""` so the HTML report is **always regenerated fresh** in the cwd.
+  A hit prints `[INFO] Loaded analysis from cache` and returns early; a miss
+  stores best-effort after `adapt()` (never raises, and the NLP path hints
+  once when the cache is disabled).
 
 ### Tier A narrative vs Tier B generative
 
@@ -341,14 +457,17 @@ decision log):
 | Aspect | pandas-only (base install, gate OFF) | NLP (with `[nlp]` extra, gate ON) |
 |---|---|---|
 | Sentiment | VADER via `vaderSentiment` (pinned `TRANSFORMERS_AVAILABLE = FALSE`), consensus over VADER label | same VADER path — CLI intentionally pins to VADER so pre-existing transformers in the env cannot trigger per-message HF inference |
-| Emotion | Not available — report tab shows the install hint | `EmotionAnalyzer` (distilbert emotion, 6 classes) → `emotion` block + chart |
+| Emotion | Not available — report tab shows the install hint | `EmotionAnalyzer` (distilbert emotion, 6 classes) → `emotion` block + chart; sampled (Option C) or exact scoring with unique-text dedupe + a process pool above 20_000 unique texts; quarterly means → `emotion-quarterly` timeline |
 | Narrative | Tier A heuristic observations always render | Tier A + Tier B generative paragraph (flan-t5-small over ASCII digest) |
 | Health/Network | Always-on (pandas/networkx) | Always-on (identical — no extra deps) |
 | Terminal behavior | runs basic, hints once at the end | models run locally, progress bar total = 4 |
 
-Availability (and only that) is decided by `nlp_gate.nlp_available()`; model
-weights are downloaded lazily at first use and announced with the
-model + side size before construction.
+Availability is decided by the tier selection — the interactive menu or
+`CHAT_ANALYZER_TIER` — resolved through `nlp_gate.nlp_status()`
+(READY / OUTDATED / MISSING) and forced into `run_pipeline` as
+`nlp_enabled`; tiers 2/3 download any missing model weights at selection
+time (`download_models()`), announced with the model + size before
+construction.
 
 ## Tech stack
 
@@ -366,7 +485,8 @@ model + side size before construction.
 | HTML | jinja2 | autoescape enabled; inline template constant |
 | HTTP | requests | Telegram JSON loading from a URL (parser) |
 | PDF / images | reportlab, Pillow | `reporting/pdf_report.py` — shipped, not wired into CLI (v2) |
-| NLP (optional) | torch, transformers, sentencepiece | `[nlp]` extra; lazy imports |
+| NLP (optional) | torch, transformers, sentencepiece | `[nlp]` extra; lazy imports; parallel emotion scoring via stdlib `concurrent.futures` |
+| Result cache | stdlib (hashlib, json, os, tempfile) | opt-in `cli/result_cache.py` — file-hash + config-signature key, 30-day TTL |
 | Dev/test | pytest, pytest-cov, ruff | `[dev]` extra; CI-quality gates |
 | Not shipped | plotext (dropped), Streamlit (deleted), plotly (ECharts used instead) | charts exist only in the HTML report |
 

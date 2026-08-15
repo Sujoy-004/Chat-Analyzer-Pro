@@ -111,31 +111,63 @@ directory isn't on `PATH`), use the module form instead:
 python -m chat_analyzer path/to/your-chat-export.txt
 ```
 
-There are no flags — one command does everything. The terminal shows progress
-as the analysis runs, then a summary of what it found, including a
-`Messages: N` count and an **NLP status line** (`NLP enabled` or
+No flags are required — one command does everything (the CLI adds only
+`--version` and typer's built-in `--help` for introspection). The terminal
+shows progress as the analysis runs, then a summary of what it found,
+including a `Messages: N` count and an **NLP status line** (`NLP enabled` or
 `NLP not installed`) so the tool never picks a tier silently.
 
-### The one-time NLP download prompt
+### The NLP tier menu — shown on every run
 
-The first time you run the tool on an interactive terminal with the NLP models
-not installed, it asks **one question** about downloading them — it's only
-asked once:
+On **every** interactive run, the tool shows a 3-option NLP tier menu
+**before analyzing**, regardless of what's already installed — you choose how
+heavy this run should be:
 
-1. **Full torch (~3 GB)** — best quality
-2. **CPU-only torch + model (~0.6 GB)**
-3. **No download** — run basic analysis
+```
+NLP tier:
+  1) Without NLP
+  2) Minimal (~0.6 GB)
+  3) Full-fledged (~3 GB)
+Choice [1]:
+```
 
-If you choose **No download**, the tool runs basic analysis — every other
-feature still works, and you can install the extras any time with
-`pip install -e ".[nlp]"`. If the tool can't ask (for example, when output is
-piped), it never prompts — it just prints a single hint line
-(`pip install chat-analyzer-pro\[nlp]`) instead.
+1. **Without NLP** (default) — forces NLP off for *this* run (even if the
+   extras are installed) and runs basic analysis: every other feature still
+   works. Press **Enter** to accept the default.
+2. **Minimal** — CPU-only torch (~0.6 GB) plus both the emotion and
+   narrative models.
+3. **Full-fledged** — full torch (~3 GB) plus the same models.
+
+Choosing tier 2 or 3 **is the download consent point**: any missing packages
+are installed and any missing model weights are downloaded immediately (sizes
+are announced first), so the tier is ready before analysis starts. On a first
+run, start with **tier 2** if you want emotion classification and the
+generative narrative without the multi-gigabyte full-torch build; pick
+**tier 3** for the full torch install.
+
+When the menu can't be shown (output is piped, or the run is scripted/CI),
+the tool never prompts: it defaults to **tier 1** silently and prints a single
+hint line (`pip install chat-analyzer-pro\[nlp]`) instead. Automation can
+pick a tier explicitly with `CHAT_ANALYZER_TIER=1|2|3` — see
+[docs/CONFIGURATION.md](CONFIGURATION.md) for the full environment-variable
+reference.
 
 The report's **"What's going on"** tab always states which tier produced it —
 nothing is silently skipped. Basic analysis uses pandas-only heuristic
 observations (**Tier A**); the generative written paragraph (**Tier B**) only
 appears once the models are installed.
+
+### First-run tips
+
+- **Very large chats and emotion:** on a tier 2/3 run, chats above the
+  sampling cap ask `Sample? [y/N]` on an interactive terminal (default **No**
+  = score every message exactly); on piped/CI runs they auto-sample instead.
+  Sampled scoring is deterministic and labels the result "based on a sample
+  of N of M messages".
+- **Repeat runs are instant with the cache:** `CHAT_ANALYZER_RESULT_CACHE=1`
+  opts into a repeat-run result cache (off by default) — re-analyzing the
+  same file takes seconds. Full semantics in
+  [docs/CONFIGURATION.md](CONFIGURATION.md).
 
 ## Where the report is written
 
@@ -176,5 +208,7 @@ its static image, so the report always shows all charts.
   data flow
 - [docs/CONFIGURATION.md](CONFIGURATION.md) — environment variables, the
   `[nlp]` extras, tier auto-detection, and report output details
+- [docs/TESTING.md](TESTING.md) — test framework, how to run the test suite,
+  and CI integration
 - [README.md](../README.md) — features, privacy notes, and narrative-honesty
   caveats

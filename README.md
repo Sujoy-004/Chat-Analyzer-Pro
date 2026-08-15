@@ -95,6 +95,7 @@ Choosing tier 2 or 3 **is the consent point**: any missing packages are installe
 - `CHAT_ANALYZER_TIER=1` — without NLP (explicit)
 - `CHAT_ANALYZER_TIER=2` — minimal
 - `CHAT_ANALYZER_TIER=3` — full-fledged
+- `CHAT_ANALYZER_FORCE_NLP` — legacy override kept for existing automation and tests: `1` maps to tier 3 (full-fledged), `0` to tier 1 (without NLP); `CHAT_ANALYZER_TIER` takes precedence when both are set
 
 Emotion scoring on very large chats follows the same prompt-vs-automation split. When a tier 2/3 run exceeds the emotion sampling cap, an interactive terminal is asked `Sample? [y/N]` (default **No** = score every message exactly); on piped/CI runs it auto-samples instead. Sampling scores a deterministic, participant- and time-stratified subset — the same file always samples identically — and when it runs the terminal prints `Emotions based on a sample of N of M messages.` while the report shows *"Emotion scores based on a sample of N of M messages."* under the emotion table.
 
@@ -149,7 +150,7 @@ One `chat-analyzer <chat-file>` command runs the whole pipeline — no configura
 | Relationship analysis | Relationship-health scoring and the conversation network (both always on) |
 | "What's going on" narrative | Heuristic, pandas-based observations (arc, who drives the chat, reciprocity, engagement) — every observation labelled speculative with a confidence tag |
 | NLP extra (`[nlp]`) | Emotion classification and a generative written summary driven by a small local model (flan-t5) |
-| Output | Terminal progress + summary, plus a self-contained single-file HTML report (~1.7 MB, offline) with interactive ECharts — hover tooltips, dataZoom zoom-to-detail, a 3D drag-to-rotate network — and static PNG chart fallbacks |
+| Output | Terminal progress + summary, plus a self-contained single-file HTML report (~1.7 MB, offline) with interactive ECharts — hover tooltips, dataZoom zoom-to-detail, a quarterly emotion timeline, a 3D drag-to-rotate network — and static PNG chart fallbacks |
 | Local-first | No accounts, no server, no telemetry; model weights downloadable on demand and cached locally |
 
 ## Documentation
@@ -165,6 +166,6 @@ Further docs live in the `docs/` directory:
 
 ## Project status
 
-v1.0 is complete — the full CLI pipeline (parse → analyze → terminal summary → HTML report) is implemented and verified. The test suite is green (290 tests, pytest — fast, golden-parity, and emotion sampling-parity) and the code base is clean under `ruff check` for `src/chat_analyzer` and `tests`.
+v1.0 is complete — the full CLI pipeline (parse → analyze → terminal summary → HTML report) is implemented and verified. The test suite is green (302 fast + 26 slow tests, pytest — fast, golden-parity, and emotion sampling-parity) and the code base is clean under `ruff check` for `src/chat_analyzer` and `tests`.
 
 Distribution today is clone-and-install from source (see Quickstart above); the package is not yet published to PyPI.

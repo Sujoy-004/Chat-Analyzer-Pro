@@ -11,22 +11,35 @@ the enforced floor (`requires-python = ">=3.11"` in `pyproject.toml`).
 ## Environment variables
 
 All environment variables are **optional**. None cause startup to fail if
-missing — each one only changes a specific behavior. Values are matched exactly
-as `"1"`/`"0"` strings.
+missing — each one only changes a specific behavior. The word-list variables
+(`CHAT_ANALYZER_EMOTION_SAMPLE`, `CHAT_ANALYZER_EMOTION_WORKERS`,
+`CHAT_ANALYZER_RESULT_CACHE`) are matched case-insensitively after stripping
+(`.strip().lower()` in `nlp_gate.py`); the boolean flags (`CHAT_ANALYZER_NO_OPEN`,
+`CHAT_ANALYZER_ALLOW_LONG_PATH`) match the exact string `"1"`.
 
 | Variable | Required | Default | Description |
 | --- | --- | --- | --- |
-| `CHAT_ANALYZER_NO_OPEN` | No | unset (report auto-opens) | `"1"` suppresses auto-opening the HTML report in the browser. Honors the opt-out before `webbrowser` is ever touched — no exception, no log (`src/chat_analyzer/cli/report_html.py:306`). |
-| `CHAT_ANALYZER_ALLOW_LONG_PATH` | No | unset (guard active on Windows) | `"1"` bypasses the Windows deep-path MAX_PATH guard before a multi-GB torch download starts (`src/chat_analyzer/cli/nlp_gate.py:163`). Power-user override; see [Windows deep-path guard](#windows-deep-path-guard). |
-| `CHAT_ANALYZER_FORCE_NLP` | No | unset (importability probe) | Forces the NLP availability branch deterministically: `"1"` → NLP treats as available, `"0"` → NLP treated as not installed. Any other value is ignored (the probe falls through to the import check). Latched in `src/chat_analyzer/cli/nlp_gate.py:81-86`. Primarily a test/debug affordance. |
+| `CHAT_ANALYZER_TIER` | No | unset (silent tier 1) | Non-tty NLP tier override: `"1"` = without NLP, `"2"` = minimal (~0.6 GB), `"3"` = full-fledged (~3 GB). Only consulted when stdin is **not** a TTY — interactive runs always show the tier menu instead (see [NLP tier selection](#nlp-tier-selection)). Values outside `1`/`2`/`3` are ignored and resolution falls through to the legacy `CHAT_ANALYZER_FORCE_NLP` mapping, then silent tier 1 (`src/chat_analyzer/cli/main.py:107-120`). |
+| `CHAT_ANALYZER_EMOTION_SAMPLE` | No | `50000` | Cap on how many messages the emotion model scores on large chats. `0`/`off`/`false` (or any value parsing to `<= 0`, e.g. `"00"`, `"-5"`) → sampling disabled (always exact); positive integer → that cap; anything else (garbage) → `50000`. Never raises (`src/chat_analyzer/cli/nlp_gate.py:96-123`). See [Emotion analysis tuning](#emotion-analysis-tuning). |
+| `CHAT_ANALYZER_EMOTION_WORKERS` | No | `3` | Parallel emotion worker count. `0`/`1`/`off`/`false` (or any value parsing to `< 2`) → `1` (sequential, no pool); positive integer → `max(1, min(value, os.cpu_count() or 1, 8))`; anything else (garbage) → `3`. Never raises, always `>= 1` (`nlp_gate.py:126-155`). Parallel scoring only engages with a **real** transformers pipeline, `>= 2` workers, and more than 20,000 unique texts (`analysis/emotion.py:440-465`). |
+| `CHAT_ANALYZER_RESULT_CACHE` | No | OFF (unset) | Opt-in repeat-run cache keyed by the input file's sha256 + a config signature. `0`/`off`/`false`/`no` → off; `1`/`on`/`true`/`yes` → the OS default dir (`%LOCALAPPDATA%\chat-analyzer\cache` on Windows, `~/.cache/chat-analyzer` elsewhere); **any other non-empty value IS the cache directory** (a path, or garbage treated as a path). 30-day TTL, schema-based invalidation (`nlp_gate.py:162-207`). See [Result cache](#result-cache). |
+| `CHAT_ANALYZER_NO_OPEN` | No | unset (report auto-opens) | `"1"` suppresses auto-opening the HTML report in the browser. Honors the opt-out before `webbrowser` is ever touched — no exception, no log (`src/chat_analyzer/cli/report_html.py:463`). |
+| `CHAT_ANALYZER_ALLOW_LONG_PATH` | No | unset (guard active on Windows) | `"1"` bypasses the Windows deep-path MAX_PATH guard before a multi-GB torch download starts (`src/chat_analyzer/cli/nlp_gate.py:371`). Power-user override; see [Windows deep-path guard](#windows-deep-path-guard). |
+| `CHAT_ANALYZER_FORCE_NLP` (legacy) | No | unset (auto-detect) | Legacy override, superseded by `CHAT_ANALYZER_TIER` for tier selection. Two roles: (1) forces the NLP availability probe deterministically — `"1"` → NLP available, `"0"` → not installed, any other value ignored (the probe falls through to the import check) (`nlp_gate.py:222-227`); (2) in non-tty tier resolution it maps `0` → tier 1 and `1` → tier 3 (`main.py:117-120`). Primarily a test/debug affordance. |
 
-Two variables are also honored indirectly:
+Other variables are honored indirectly:
 
 - `BROWSER` — the standard Python `webbrowser` module variable. CI sets it to
   `"__none__"` so subprocess runs can't pop a browser
-  (`.github/workflows/ci.yml:29`).
+  (`.github/workflows/ci.yml:29,51,77`).
 - `TEMP` — used by `scripts/make_nlp_env.ps1` as the default base directory for
   the short-path NLP virtualenv (see below).
+- `LOCALAPPDATA` — read on Windows to build the default result-cache directory
+  (`%LOCALAPPDATA%\chat-analyzer\cache`; falls back to `~/.cache/chat-analyzer`
+  when unset/empty — `nlp_gate.py:200-206`).
+- `TOKENIZERS_PARALLELISM` — set (via `setdefault`) to `"false"` inside the
+  emotion worker child processes so tokenizer forks never emit warnings
+  (`analysis/emotion.py:88`). Not a user-facing knob.
 
 ## Config file format
 
@@ -36,7 +49,7 @@ There is no config file format. Behavior is controlled exclusively by:
 
    | Install command | What you get |
    | --- | --- |
-   | `pip install -e .` | Base install — core analysis: parsing, stats, sentiment, relationship health, network graph, EDA, visualization, single-file HTML report. No emotion analysis: the emotion stage is gated behind the NLP availability check (`if nlp_on:`, `pipeline.py:269`), so on a base install it is skipped and the report shows "Emotion analysis unavailable" (`report_html.py:184`). |
+   | `pip install -e .` | Base install — core analysis: parsing, stats, sentiment, relationship health, network graph, EDA, visualization, single-file HTML report. No emotion analysis: the emotion stage is gated behind the NLP availability check (`if nlp_on:`, `pipeline.py:345`), so on a base install it is skipped and the report shows "Emotion analysis unavailable" (`report_html.py:309`). |
    | `pip install -e ".[nlp]"` | Adds `torch>=2.0`, `transformers>=4.30,<5.15`, `sentencepiece>=0.1.99`. Enables lazy-imported heavy features: emotion classification and the Tier B generative written narrative. |
    | `pip install -e ".[dev]"` | Adds `pytest>=7.4`, `pytest-cov>=4.1`, `ruff>=0.16.1` for development. |
    | `pip install -e ".[dev,nlp]"` | Combined dev + nlp extras (used by the CI `nlp` job). |
@@ -53,9 +66,10 @@ There is no config file format. Behavior is controlled exclusively by:
    | `MODEL_ID` | `bhadresh-savani/distilbert-base-uncased-emotion` (~255 MB) |
    | `TIER_B_MODEL_ID` | `google/flan-t5-small` (~340 MB) |
 
-   Model *weights* are not installed by pip — they download on first use and are
-   cached in the Hugging Face cache (`HF_HUB_CACHE`, falling back to
-   `~/.cache/huggingface/hub` — `nlp_gate.py:56-66`).
+   Model *weights* are not installed by pip — they download at tier selection
+   (or on first use for manually installed extras) and are cached in the
+   Hugging Face cache (`HF_HUB_CACHE`, falling back to
+   `~/.cache/huggingface/hub` — `nlp_gate.py:83-93`).
 
 ## Windows deep-path guard
 
@@ -63,7 +77,7 @@ There is no config file format. Behavior is controlled exclusively by:
 venv's `site-packages` folder is deep enough that torch's wheel extraction
 crosses the 260-character `MAX_PATH` limit (torch 2.x reserves a large amount of
 extraction depth). The CLI checks this before any multi-GB download begins
-(`src/chat_analyzer/cli/nlp_gate.py:150-177`):
+(`src/chat_analyzer/cli/nlp_gate.py:358-385`):
 
 - The check is **heuristic**: `len(site_packages) + 180 (TORCH_PATH_RESERVE) > 260 (WINDOWS_MAX_PATH)` → the path is too deep. A global Python3xx user-site install is not measured, which is why the override exists.
 - **Suppressed automatically** when any of these hold:
@@ -71,70 +85,198 @@ extraction depth). The CLI checks this before any multi-GB download begins
   - `CHAT_ANALYZER_ALLOW_LONG_PATH=1`.
   - The Windows `LongPathsEnabled` system flag is on — read from the registry key
     `HKLM\SYSTEM\CurrentControlSet\Control\FileSystem`, DWORD value 1
-    (`nlp_gate.py:128-147`). <!-- VERIFY: the LongPathsEnabled registry flag is a Windows OS setting described in the README (HKLM\SYSTEM\CurrentControlSet\Control\FileSystem); enabling it requires admin rights and a shell restart, and its exact availability depends on the Windows version. -->
+    (`nlp_gate.py:336-355`). <!-- VERIFY: the LongPathsEnabled registry flag is a Windows OS setting described in the README (HKLM\SYSTEM\CurrentControlSet\Control\FileSystem); enabling it requires admin rights and a shell restart, and its exact availability depends on the Windows version. -->
   - The site-packages path leaves ≥ 180 characters of headroom under the 260 limit.
-- **When triggered**: the terminal prints one `[WARN]` line before the download
-  menu; the runtime installer (`install_nlp`) refuses with a `RuntimeError`
-  that still leaves basic analysis working.
+- **When triggered**: the terminal prints one `[WARN]` line before the tier
+  menu on an interactive run; the runtime installer (`install_nlp` / `update_nlp`)
+  refuses with a `RuntimeError` that still leaves basic analysis working.
 
 **The reliable fix** is a short-path venv. `scripts/make_nlp_env.ps1` creates a
 disposable venv at `%TEMP%\chat-analyzer-nlp` (or a path you pass as
 `-BasePath`) and installs the package with `[nlp]` extras into it, keeping the
-path well under 260 characters (`scripts/make_nlp_env.ps1:8-46`).
+path well under 260 characters (`scripts/make_nlp_env.ps1:8-14`).
 
-## NLP download prompt and tier auto-detection
+## NLP tier selection
 
-### The one-time interactive menu
+### Interactive runs (TTY): the always-on tier menu
 
-On a real TTY (`sys.stdin.isatty()`) with NLP not installed, the CLI shows a
-3-option menu once (`src/chat_analyzer/cli/main.py:84-100`):
+On a real TTY (`sys.stdin.isatty()`) **every** interactive run shows the 3-option
+tier menu regardless of the current install state
+(`src/chat_analyzer/cli/main.py:90-105`, `231-250`):
 
-1. **Download full torch (~3 GB)** — best quality
-2. **Download CPU-only torch + model (~0.6 GB)** — the default choice
-3. **No download** — run basic analysis
+1. **Without NLP** — the default choice
+2. **Minimal (~0.6 GB)** — CPU-only torch + the models
+3. **Full-fledged (~3 GB)** — full torch + the models
 
-Choice 1 or 2 dispatches the guarded runtime installer
-(`install_nlp`, `nlp_gate.py:180-206`, ending at file end) which runs `pip install` in a
-subprocess (never shell=True): CPU-only mode installs torch from the PyTorch CPU
-wheel index (`https://download.pytorch.org/whl/cpu`) first, then transforms
-separately from PyPI; full mode installs torch + transforms together. The
-install has a 900-second timeout and only installs torch + transformers — it
-never installs sentencepiece, which only arrives via `pip install ".[nlp]"`.
-Any failure (offline, no pip, timeout, deep path) degrades to basic analysis
-with a friendly note, never a frozen terminal.
+If the Windows deep-path guard has a message, it is printed as a `[WARN]` line
+*before* the menu offers a multi-GB download. Tier 1 runs with NLP off. Tiers
+2/3 call `_ensure_nlp_for_tier` (`main.py:135-179`) to make NLP ready before
+analyzing:
 
-If the tool can't prompt (positional argument, piped stdin, or the user picks
-option 3), it prints a single hint line instead:
-`pip install chat-analyzer-pro\[nlp]`.
+- **READY** → announces "NLP ready." and proceeds.
+- **MISSING** → announces the install (name + size first), runs the guarded
+  runtime installer (`install_nlp`, `nlp_gate.py:388-414` — a subprocess
+  `pip install`, never `shell=True`), then `download_models` (`nlp_gate.py:436-457`)
+  downloads **both** model weight sets immediately — tier selection is the
+  consent point, not first pipeline use. CPU-only mode (tier 2) installs torch
+  from the PyTorch CPU wheel index (`https://download.pytorch.org/whl/cpu`)
+  first, then transformers separately from PyPI; full mode (tier 3) installs
+  torch + transformers together. The install has a 900-second timeout and only
+  installs torch + transformers — it never installs sentencepiece, which only
+  arrives via `pip install ".[nlp]"`.
+- **OUTDATED** → on a TTY it asks **"Update NLP packages/models now?"**
+  (default no); yes runs `update_nlp` (`--upgrade` to the pinned ranges,
+  `nlp_gate.py:417-433`) plus `download_models`, otherwise it proceeds with
+  what's installed.
 
-### Tier auto-detection
+Any install/download failure (offline, no pip, timeout, deep path) degrades to
+basic analysis with a friendly note — never a frozen terminal.
 
-At startup the CLI runs a **silent probe** (`nlp_available`) that never
-requests: `transformers` + `torch` import == NLP available; the probe no longer
-requires the weights to be cached (they download on first use). The
-`CHAT_ANALYZER_FORCE_NLP` variable overrides both branches for deterministic
-tests.
+### Non-interactive runs (piped/CI): env override, else silent tier 1
 
-- **Tier A** — pandas-only heuristic narrative (arc, driver, reciprocity,
-  engagement). Labeled speculative; always runs when NLP is off.
-- **Tier B** — the generative written paragraph from `google/flan-t5-small`,
-  summarizing a compact *signal digest* (never raw messages). Only runs when
-  NLP is available.
+When the tool can't prompt (positional argument with piped stdin, CI), it never
+shows the menu (`main.py:247-250`):
+
+- `CHAT_ANALYZER_TIER=1|2|3` wins when set.
+- Otherwise the legacy `CHAT_ANALYZER_FORCE_NLP` maps `0` → tier 1 and `1` →
+  tier 3.
+- Otherwise the run is **silent tier 1** (no NLP) and prints a single hint
+  line instead: `pip install chat-analyzer-pro\[nlp]`.
+
+A non-tty tier 2/3 still goes through `_ensure_nlp_for_tier` — so it may
+attempt an install/download — but the OUTDATED branch can't prompt and simply
+proceeds with the current install.
+
+### `nlp_status()` — READY / OUTDATED / MISSING
+
+`nlp_gate.nlp_status()` (`nlp_gate.py:279-302`) resolves the environment into
+one of three states (packages = torch, transformers, sentencepiece; pins in
+`nlp_gate.py:240-244`, mirrored from `pyproject.toml`):
+
+- **MISSING** — at least one `[nlp]` package is not installed.
+- **OUTDATED** — all packages installed but a version falls outside the pins,
+  or the model weights are not cached (a fresh install is not ready until the
+  download step runs).
+- **READY** — packages satisfy the pins **and** both model weight sets are
+  cached.
+
+Separately, the silent importability probe (`nlp_available`, `nlp_gate.py:210-235`)
+returns True when transformers + torch import — it never requires cached
+weights — and `CHAT_ANALYZER_FORCE_NLP` overrides both branches for
+deterministic tests.
 
 The terminal prints an **NLP status line** on every run ("NLP enabled..." or
-"NLP not installed - basic analysis only...", `src/chat_analyzer/cli/render.py:56-66`), and the report's "What's going on" tab states which tier produced it — nothing is silently skipped.
+"NLP not installed - basic analysis only...", `src/chat_analyzer/cli/render.py:54-66`), and the report's "What's going on" tab states which tier produced it — nothing is silently skipped.
+
+## Emotion analysis tuning
+
+Two environment knobs tune the emotion stage on large chats (both resolved in
+`nlp_gate.py`, both **never raise**):
+
+### Sampling cap — `CHAT_ANALYZER_EMOTION_SAMPLE`
+
+`emotion_sample_cap()` (`nlp_gate.py:96-123`) returns the cap or `None`:
+
+- unset/empty → `50000`
+- `0` / `off` / `false`, or any value parsing to `<= 0` → `None` (**sampling
+  disabled: always exact**)
+- positive integer → that value as the cap
+- anything else (garbage) → `50000`
+
+When NLP is on, the cap resolves, and the **scorable** count (same
+`_is_scorable` rule the analyzer uses, `emotion.py:397-416`) exceeds it, the
+pipeline decides between prompt and auto (`pipeline.py:201-226`):
+
+- **TTY** → a prompt asks: *"N scorable messages — exact emotion scoring can
+  take ~2 hours; sampled (up to N) takes minutes. Sample? [y/N]"* — default
+  **NO = exact**; `y`/`yes` samples.
+- **Non-tty** (piped/CI/tests) → **auto-samples** (no prompt).
+
+Sampled scoring is a **deterministic** (participant, time)-stratified sample
+(random_state=42, ~50 time buckets per sender — `emotion.py:124-284`), so the
+same file + cap always produces the same sample. Below the cap (or with the cap
+disabled) behavior is byte-for-byte the exact path. When a sample runs, the
+report and the terminal label it "based on a sample of N of M messages" and the
+summary is computed over the scored rows only (`render.py:67-73`,
+`report_html.py:299,307`). The **effective** cap (a tty y/N answer collapsed in)
+rides in the result-cache key, so y and N on the same file produce two distinct
+cache entries.
+
+### Parallel workers — `CHAT_ANALYZER_EMOTION_WORKERS`
+
+`emotion_worker_count()` (`nlp_gate.py:126-155`) returns a worker count `>= 1`:
+
+- unset/empty → `3`
+- `0` / `1` / `off` / `false`, or any value parsing to `< 2` → `1` (sequential,
+  no pool)
+- positive integer → `max(1, min(value, os.cpu_count() or 1, 8))` — capped at 8
+  because every worker loads its own ~255 MB model copy plus a torch runtime
+  (RAM bound)
+- anything else (garbage) → `3`
+
+Parallel exact scoring fans unique-text inference out to a process pool
+(`emotion.py:440-550`) — each unique text is scored once and mapped back, so
+output is byte-identical to sequential regardless of worker count. It engages
+only when **all** of these hold: a real transformers pipeline is present (mocked
+pipelines always stay sequential), the resolved count is `>= 2`, and there are
+more than 20,000 unique scorable texts (`_EMOTION_PARALLEL_THRESHOLD`,
+`emotion.py:66`). Any worker failure degrades to the sequential path.
+
+## Result cache
+
+`CHAT_ANALYZER_RESULT_CACHE` opts into a repeat-run cache (`nlp_gate.py:162-207`,
+`cli/result_cache.py`):
+
+- **Off words**: `0` / `off` / `false` / `no` (or unset) → cache disabled (the
+  default).
+- **On words**: `1` / `on` / `true` / `yes` → the OS default directory:
+  `%LOCALAPPDATA%\chat-analyzer\cache` on Windows (falling back to
+  `~/.cache/chat-analyzer` when `LOCALAPPDATA` is unset/empty), and
+  `~/.cache/chat-analyzer` elsewhere.
+- **Any other non-empty value** → that value verbatim is the cache directory
+  (garbage is indistinguishable from a path — documented in the README).
+
+On a cache hit the whole compute/NLP/narrative is skipped: the terminal prints
+`[INFO] Loaded analysis from cache` and the run completes in seconds — the HTML
+report is always regenerated fresh. On a miss, the result is stored best-effort
+(never raises). When NLP is on and the cache is disabled, the pipeline prints a
+tip: `[INFO] Tip: set CHAT_ANALYZER_RESULT_CACHE=1 to make repeat runs of this
+file take seconds.` (`pipeline.py:504-508`).
+
+Cache mechanics (`result_cache.py`):
+
+- **Key**: sha256 of the input file's bytes **plus** a JSON config signature
+  (`{schema, app_version, nlp_on, sample_cap, emotion_workers,
+  chosen_transcripts}` — `result_cache.py:78-105`). The `RESULT_CACHE_SCHEMA`
+  constant (`nlp_gate.py:74`) folds into every key, so a schema bump or an app
+  upgrade invalidates all existing entries by construction.
+- **TTL**: entries older than **30 days** are pruned on every store
+  (`result_cache.py:43`, `219-238`).
+- **Format**: `json.load` only — never pickle, never eval. Corrupt or
+  schema-mismatched entries degrade to a miss (corrupt files self-heal by
+  deletion); a stale `report_path` never survives a load.
+- **Privacy**: the cache lives **outside the repo tree** — the default directory
+  is always a user-profile path, never the working tree. The payload is the
+  derived `AnalysisResults` contract only (sender names, top words, charts);
+  raw chat text never enters it, and key filenames are hex digests only, so no
+  user input ever enters a path. **To erase all stored analysis, delete the
+  cache directory** (the default `%LOCALAPPDATA%\chat-analyzer\cache` /
+  `~/.cache/chat-analyzer`, or whatever path you set). Note that cached entries
+  are invalidated by app-version/schema changes, but during development the app
+  version is static — if you develop with the cache on, delete the cache
+  directory after code changes.
 
 ## Report output configuration
 
 - **Location**: the report is always written to the **current working
   directory** (the folder where you run the command), not the input's directory
   (`report_path = Path.cwd() / "<chat_name>_report.html"`,
-  `src/chat_analyzer/cli/report_html.py:295-296`).
+  `src/chat_analyzer/cli/report_html.py:452`).
 - **Filename**: `<chat_name>_report.html`, where `<chat_name>` is the
   sanitized bare stem of the input file (e.g., `my-chat.txt` →
   `my-chat_report.html`).
 - **Format**: a single self-contained HTML file — all charts/assets are
-  base64-embedded; the file is written UTF-8 (`report_html.py:296`).
+  base64-embedded; the file is written UTF-8 (`report_html.py:453`).
 - **Interactive charts**: charts render as interactive ECharts — hover
   tooltips, dataZoom zoom-to-detail on the timeline/sentiment/health trends,
   and a 3D drag-to-rotate conversation network — driven by `charts_json`
@@ -155,7 +297,7 @@ The terminal prints an **NLP status line** on every run ("NLP enabled..." or
 - **Markers**: one custom marker is registered, `slow`, for wall-clock-long
   tests (subprocess spawns / full pipeline renders):
   `markers = ["slow: long wall-clock tests (subprocess spawns / full pipeline renders)"]`
-  in `[tool.pytest.ini_options]` (`pyproject.toml:39-42`). The fast suite runs
+  in `[tool.pytest.ini_options]` (`pyproject.toml:40-43`). The fast suite runs
   with `pytest -m "not slow"`; the slow suite with `pytest -m "slow"`.
 - **Coverage**: no coverage threshold is configured in `pyproject.toml` —
   coverage gates are not enforced.
@@ -174,7 +316,8 @@ environments is *which extras are installed* and *which env vars are set*:
 | Local base | `pip install -e .` | none (auto-open on by default) |
 | Local NLP | `pip install -e ".[nlp]"` | `CHAT_ANALYZER_ALLOW_LONG_PATH=1` (only if the venv site-packages path trips the MAX_PATH guard) |
 | Tests / CI (`test` job) | `pip install -e ".[dev]"` | `CHAT_ANALYZER_NO_OPEN=1`, `CHAT_ANALYZER_FORCE_NLP=0`, `BROWSER="__none__"` — see `.github/workflows/ci.yml:27-31` |
-| CI `nlp` job | `pip install -e ".[dev,nlp]"` | same as above (`ci.yml:74-79`) |
+| CI `slow` job | `pip install -e ".[dev]"` | same as above (`ci.yml:50-53`) |
+| CI `nlp` job | `pip install -e ".[dev,nlp]"` | same as above (`ci.yml:75-79`) |
 
 The CI workflow pumps `push` and `pull_request` events; the fast `test` job
 runs across ubuntu/windows × Python 3.11/3.12 with `-m "not slow"`, the `slow`
