@@ -109,6 +109,8 @@ def _sanitize(obj):
     """Recursively coerce a payload to JSON-safe plain data (Q2.3).
 
     - dict/list/tuple walk; everything else passes through unchanged
+    - dict KEYS: numpy scalars -> .item(); anything else not JSON-serializable
+      (verified leak: sentiment.daily_avg is keyed by datetime.date) -> str()
     - numpy scalars -> .item(): integer -> int, floating -> float (NaN/Inf ->
       None), bool_ -> bool; ndarray -> tolist() then recurse
     - non-finite plain floats (NaN/+-Inf) -> None (chart_json _float_or_none
@@ -118,7 +120,23 @@ def _sanitize(obj):
     walk (the module imports without numpy).
     """
     if isinstance(obj, dict):
-        return {key: _sanitize(value) for key, value in obj.items()}
+        out: dict = {}
+        for key, value in obj.items():
+            if _np is not None:
+                if isinstance(key, _np.bool_):
+                    key = bool(key.item())
+                elif isinstance(key, _np.integer):
+                    key = int(key.item())
+                elif isinstance(key, _np.floating):
+                    key = float(key.item())
+            if isinstance(key, (str, int, float, bool)) or key is None:
+                out[key] = _sanitize(value)
+            else:
+                # Non-serializable keys (verified leak: sentiment.daily_avg is
+                # keyed by datetime.date) become their str() form — the same
+                # normalization json itself applies to int keys.
+                out[str(key)] = _sanitize(value)
+        return out
     if isinstance(obj, (list, tuple)):
         return [_sanitize(value) for value in obj]
     if _np is not None:
