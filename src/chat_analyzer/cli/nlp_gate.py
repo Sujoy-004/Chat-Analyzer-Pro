@@ -61,6 +61,18 @@ EMOTION_SAMPLE_DEFAULT = 50000
 _EMOTION_WORKERS_ENV = "CHAT_ANALYZER_EMOTION_WORKERS"
 EMOTION_WORKERS_DEFAULT = 3
 
+# Result cache keyed by file hash (04-08): the opt-in repeat-run cache. Exposed
+# via CHAT_ANALYZER_RESULT_CACHE; absent/empty/off-words disable it, on-words
+# resolve to the OS default dir (%LOCALAPPDATA%\chat-analyzer\cache on Windows,
+# ~/.cache/chat-analyzer elsewhere), and any other value IS the cache dir.
+# See result_cache_enabled / result_cache_dir below.
+_RESULT_CACHE_ENV = "CHAT_ANALYZER_RESULT_CACHE"
+
+# Cache payload/key schema version. Bump whenever the AnalysisResults contract
+# shape or the cache key composition changes (the value folds into every key,
+# so a bump invalidates all existing entries by construction).
+RESULT_CACHE_SCHEMA = 1
+
 # Windows MAX_PATH guard (A1): torch 2.x wheel extraction crashes with
 # WinError 206 when the venv's site-packages path plus torch's own reserved
 # extraction depth crosses the 260-char limit.
@@ -141,6 +153,58 @@ def emotion_worker_count() -> int:
     if value < 2:  # "00", "-0", "-5" — any parses-to-<2 value disables the pool
         return 1
     return max(1, min(value, os.cpu_count() or 1, 8))
+
+
+_RESULT_CACHE_OFF_WORDS = ("0", "off", "false", "no")
+_RESULT_CACHE_ON_WORDS = ("1", "on", "true", "yes")
+
+
+def result_cache_enabled() -> bool:
+    """Whether the opt-in result cache is enabled via CHAT_ANALYZER_RESULT_CACHE.
+
+    Whitelist semantics mirroring emotion_sample_cap — case-insensitive,
+    never raises:
+
+    - absent/empty                      -> False (disabled; default OFF)
+    - "0"/"off"/"false"/"no"            -> False (off-words disable)
+    - anything else ("1"/"on"/"true"/"yes" OR a path) -> True
+
+    A non-keyword value (including a path) is treated as enabled; the value's
+    meaning as a directory is resolved by result_cache_dir below.
+    """
+    raw = os.environ.get(_RESULT_CACHE_ENV, "").strip().lower()
+    if raw == "":
+        return False
+    return raw not in _RESULT_CACHE_OFF_WORDS
+
+
+def result_cache_dir() -> Path | None:
+    """Resolve the cache directory from CHAT_ANALYZER_RESULT_CACHE, or None.
+
+    None when the cache is disabled (per result_cache_enabled). Otherwise:
+
+    - on-words ("1"/"on"/"true"/"yes") -> the OS default dir: on Windows
+      %LOCALAPPDATA%\\chat-analyzer\\cache (falling back to
+      ~/.cache/chat-analyzer when LOCALAPPDATA is unset/empty); elsewhere
+      ~/.cache/chat-analyzer (matches the existing ~/.cache/huggingface
+      convention, model_cached above).
+    - any other non-empty value -> that value verbatim as the explicit dir
+      (garbage is indistinguishable from a path — documented in README).
+
+    SIDE-EFFECT-FREE: no mkdir here — directory creation belongs to
+    result_cache.store(). The default dir is ALWAYS outside the repo tree by
+    construction (a user-profile path). Never raises.
+    """
+    if not result_cache_enabled():
+        return None
+    raw = os.environ.get(_RESULT_CACHE_ENV, "").strip().lower()
+    if raw in _RESULT_CACHE_ON_WORDS:
+        if os.name == "nt":
+            local_app_data = os.environ.get("LOCALAPPDATA", "").strip()
+            if local_app_data:
+                return Path(local_app_data) / "chat-analyzer" / "cache"
+        return Path.home() / ".cache" / "chat-analyzer"
+    return Path(raw)
 
 
 def nlp_available(model_id: str = MODEL_ID) -> bool:
