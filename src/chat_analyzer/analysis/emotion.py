@@ -486,21 +486,30 @@ class EmotionAnalyzer:
         """Resolve the effective parallel worker count (0 = sequential).
 
         The real-pipeline gate ALWAYS applies: parallel only for a genuine
-        transformers pipeline. An explicit ``workers`` argument (resolved by
-        the pipeline via nlp_gate) is gated the same way; None resolves the
-        CHAT_ANALYZER_EMOTION_WORKERS env knob via nlp_gate.emotion_worker_count.
+        transformers pipeline. An explicit ``workers`` argument is validated
+        with the same cap math nlp_gate uses — positive ints are clamped to
+        max(1, min(value, os.cpu_count() or 1, 8)) and non-numeric values
+        fall back to the CHAT_ANALYZER_EMOTION_WORKERS env resolution
+        (nlp_gate.emotion_worker_count). None resolves that env knob
+        directly. Never raises.
         """
+        import os
+
         if not self._is_real_pipeline():
             return 0
+        try:
+            from chat_analyzer.cli import nlp_gate
+        except Exception:
+            logger.exception("emotion worker resolution failed; using sequential")
+            return 0
         if workers is None:
-            try:
-                from chat_analyzer.cli import nlp_gate
-
-                return nlp_gate.emotion_worker_count()
-            except Exception:
-                logger.exception("emotion worker resolution failed; using sequential")
-                return 0
-        return max(1, int(workers))
+            return nlp_gate.emotion_worker_count()
+        try:
+            resolved = int(workers)
+        except (TypeError, ValueError):
+            logger.exception("invalid emotion workers %r; using env resolution", workers)
+            return nlp_gate.emotion_worker_count()
+        return max(1, min(resolved, os.cpu_count() or 1, 8))
 
     def _score_unique_texts_parallel(
         self, unique_texts: list[str], batch_size: int, workers: int
@@ -613,11 +622,13 @@ class EmotionAnalyzer:
                 failure degrades to exact scoring with the attrs marking the
                 sample as failed so the pipeline labels honestly — the
                 pipeline never crashes.
-            workers: Explicit parallel worker count (the pipeline resolves
-                it via nlp_gate.emotion_worker_count). None resolves the
-                CHAT_ANALYZER_EMOTION_WORKERS env knob internally. Parallel
-                only ever triggers for a REAL transformers pipeline with
-                >= 2 workers AND more than _EMOTION_PARALLEL_THRESHOLD
+            workers: Explicit parallel worker count. None resolves the
+                CHAT_ANALYZER_EMOTION_WORKERS env knob internally (nlp_gate).
+                Explicit values are validated like nlp_gate: non-numeric
+                values fall back to the env resolution and positive ints are
+                clamped to max(1, min(value, os.cpu_count() or 1, 8)).
+                Parallel only ever triggers for a REAL transformers pipeline
+                with >= 2 workers AND more than _EMOTION_PARALLEL_THRESHOLD
                 unique texts; the output is byte-identical to sequential
                 regardless.
             

@@ -52,9 +52,11 @@ _EMOTION_SAMPLE_ENV = "CHAT_ANALYZER_EMOTION_SAMPLE"
 EMOTION_SAMPLE_DEFAULT = 50000
 
 # Parallel exact emotion scoring (large chats): the worker-count knob.
-# Exposed via CHAT_ANALYZER_EMOTION_WORKERS; "0"/"1" mean sequential (no
-# pool), positive integers are capped at 8 (each worker loads its own
-# ~255 MB model copy plus torch), anything else falls back to the default.
+# Exposed via CHAT_ANALYZER_EMOTION_WORKERS; "0"/"1"/"off"/"false" and any
+# value parsing to < 2 mean sequential (no pool), positive integers are
+# capped at 8 (each worker loads its own ~255 MB model copy plus torch),
+# anything else falls back to the default. Disable semantics mirror
+# emotion_sample_cap so "off"/"false" never silently enable a pool.
 # See emotion_worker_count below.
 _EMOTION_WORKERS_ENV = "CHAT_ANALYZER_EMOTION_WORKERS"
 EMOTION_WORKERS_DEFAULT = 3
@@ -118,6 +120,8 @@ def emotion_worker_count() -> int:
 
     - absent/empty      -> EMOTION_WORKERS_DEFAULT (3)
     - "0"/"1"           -> 1 (sequential, no pool)
+    - "off"/"false"     -> 1 (sequential — sampling-disabled semantics)
+    - parses to < 2 ("00", "-0", "-5") -> 1 (sequential)
     - positive integer  -> max(1, min(value, os.cpu_count() or 1, 8)) —
       capped at 8 because every worker loads its own ~255 MB model copy
       plus a torch runtime (RAM bound)
@@ -125,17 +129,17 @@ def emotion_worker_count() -> int:
 
     Always returns >= 1; callers parallelize only when the value is >= 2.
     """
-    raw = os.environ.get(_EMOTION_WORKERS_ENV, "").strip()
+    raw = os.environ.get(_EMOTION_WORKERS_ENV, "").strip().lower()
     if raw == "":
         return EMOTION_WORKERS_DEFAULT
-    if raw in ("0", "1"):
+    if raw in ("0", "1", "off", "false"):
         return 1
     try:
         value = int(raw)
     except ValueError:
         return EMOTION_WORKERS_DEFAULT
-    if value < 2:  # "00", "-0", "-5" — any parses-to-<2 value is not a usable pool
-        return EMOTION_WORKERS_DEFAULT
+    if value < 2:  # "00", "-0", "-5" — any parses-to-<2 value disables the pool
+        return 1
     return max(1, min(value, os.cpu_count() or 1, 8))
 
 
