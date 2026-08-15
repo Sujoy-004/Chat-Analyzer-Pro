@@ -4,8 +4,8 @@ Covers the parallel unique-text scoring branch (research delta #5 — ZERO
 coverage at research time) of the exact-path emotion scorer:
 
 - test_emotion_worker_count_env_contract: CHAT_ANALYZER_EMOTION_WORKERS parsing
-  (absent -> 3, "0"/"1" -> 1, "4" -> 4, "99" -> min(99, cpu, 8), garbage and
-  "-5" -> 3, never raises).
+  (absent -> 3, "0"/"1"/"off"/"false" -> 1, values parsing to < 2 -> 1,
+  "4" -> min(4, cpu, 8), "99" -> min(99, cpu, 8), garbage -> 3, never raises).
 - test_mocked_pipeline_stays_sequential: the real-pipeline gate — a mocked
   classifier is NOT a transformers.Pipeline, so _scoring_workers returns 0 and
   _score_unique_texts never invokes the parallel driver.
@@ -21,7 +21,9 @@ coverage at research time) of the exact-path emotion scorer:
 - test_spawn_parallel_matches_sequential_smoke (@pytest.mark.slow): the REAL
   cached DistilBERT pipeline with the threshold forced to 1 and 2 pool
   workers — parallel output matches the sequential reference within float
-  tolerance. Skipped when the [nlp] extra / model cache is missing (D-17).
+  tolerance. Skipped when the [nlp] extra / model cache is missing, or when
+  CHAT_ANALYZER_FORCE_NLP is set (which would let the probe lie about a real
+  pipeline) (D-17).
 
 The fast tests mock the model callables exactly like test_perf_parity_emotion.py
 (module-level ``_emotion_analyzer`` + ``_emotion_model_loaded`` patched with a
@@ -109,6 +111,7 @@ class _FakePool:
         self.max_workers = max_workers
         self.fail = fail
         self.seen_chunks = None
+        self.seen_threads = None
 
     def __enter__(self):
         return self
@@ -118,6 +121,10 @@ class _FakePool:
 
     def map(self, fn, chunks, *iterables):
         self.seen_chunks = list(chunks)
+        # LW-02: record the per-worker torch-thread budget the driver sent so
+        # tests can assert max(1, (os.cpu_count() or 1) // workers) reaches the
+        # worker (each args tuple = (chunk, model_name, batch_size, num_threads)).
+        self.seen_threads = [args[-1] for args in zip(chunks, *iterables)]
         if self.fail:
             raise RuntimeError("pool exploded")
         # zip() stops at len(chunks), so the itertools.repeat args are finite
@@ -138,19 +145,25 @@ def test_emotion_worker_count_env_contract(monkeypatch):
     monkeypatch.delenv(env, raising=False)
     assert nlp_gate.emotion_worker_count() == 3  # absent -> default
 
-    for off in ("0", "1"):
+    for off in ("0", "1", "off", "false", "OFF", "FALSE"):
         monkeypatch.setenv(env, off)
-        assert nlp_gate.emotion_worker_count() == 1  # no pool
+        assert nlp_gate.emotion_worker_count() == 1  # sequential, no pool
+
+    for sub2 in ("00", "-0", "-5"):
+        monkeypatch.setenv(env, sub2)
+        assert nlp_gate.emotion_worker_count() == 1  # parses-to-<2 -> sequential
 
     monkeypatch.setenv(env, "4")
-    assert nlp_gate.emotion_worker_count() == 4
+    assert nlp_gate.emotion_worker_count() == max(
+        1, min(4, os.cpu_count() or 1, 8)
+    )  # capped by cpu, not a literal 4
 
     monkeypatch.setenv(env, "99")
     assert nlp_gate.emotion_worker_count() == min(99, os.cpu_count() or 1, 8)
 
-    for garbage in ("off", "false", "abc", "-5"):
+    for garbage in ("abc", "3x"):
         monkeypatch.setenv(env, garbage)
-        assert nlp_gate.emotion_worker_count() == 3  # never raises
+        assert nlp_gate.emotion_worker_count() == 3  # garbage -> default, never raises
 
 
 # --- real-pipeline gate ------------------------------------------------------
@@ -210,6 +223,22 @@ def test_threshold_above_invokes_parallel(monkeypatch):
     assert out is fake
 
 
+def test_threshold_at_exactly_20000_stays_sequential(monkeypatch):
+    """At EXACTLY _EMOTION_PARALLEL_THRESHOLD (20_000) unique texts the gate
+    is strict-greater, so the parallel driver must not be invoked (LW-02)."""
+    analyzer = _make_analyzer(_classifier)
+    monkeypatch.setattr(analyzer, "_is_real_pipeline", lambda: True)
+
+    driver = unittest.mock.Mock(wraps=analyzer._score_unique_texts_parallel)
+    monkeypatch.setattr(analyzer, "_score_unique_texts_parallel", driver)
+
+    with redirect_stdout(StringIO()):
+        out = analyzer._score_unique_texts(_pending(20_000), batch_size=32, workers=2)
+
+    driver.assert_not_called()
+    assert len(out) == 20_000
+
+
 # --- chunking + degrade ------------------------------------------------------
 
 
@@ -237,6 +266,11 @@ def test_parallel_chunks_contiguous_fixed_order(monkeypatch):
     ]
     assert [t for chunk in pool.seen_chunks for t in chunk] == unique_texts
     assert list(result) == unique_texts
+
+    # LW-02: the per-worker torch-thread budget (cpu_count // workers) must
+    # actually reach the worker — no silent oversubscription.
+    expected_threads = max(1, (os.cpu_count() or 1) // 3)
+    assert pool.seen_threads == [expected_threads] * len(pool.seen_chunks)
 
 
 def test_parallel_pool_failure_degrades_to_sequential(monkeypatch, caplog):
@@ -303,18 +337,23 @@ def test_spawn_parallel_matches_sequential_smoke(monkeypatch):
     with 2 pool workers, asserting the parallel output matches the sequential
     reference within float tolerance (last-bit thread-dependent noise < 1e-6).
 
-    Skipped when the [nlp] extra or the model cache is missing (D-17: real-model
-    inference is allowed ONLY in this slow-marked test).
+    Skipped when the [nlp] extra or the model cache is missing, or when
+    CHAT_ANALYZER_FORCE_NLP is set (D-17: real-model inference is allowed ONLY
+    in this slow-marked test).
     """
-    model_cache = os.path.expanduser(
-        "~/.cache/huggingface/hub/models--bhadresh-savani--distilbert-base-uncased-emotion"
-    )
-    if not nlp_gate.nlp_available() or not os.path.isdir(model_cache):
+    if os.environ.get("CHAT_ANALYZER_FORCE_NLP") is not None:
+        # LW-01: nlp_available() honors the FORCE override and can report True
+        # without transformers — the analyzer would then degrade to rule-based
+        # and this smoke would pass WITHOUT ever spawning a worker.
+        pytest.skip(
+            "CHAT_ANALYZER_FORCE_NLP is set — nlp_available() is forced; "
+            "cannot genuinely exercise the spawn path (D-17)"
+        )
+    if not nlp_gate.nlp_available() or not nlp_gate.model_cached(nlp_gate.MODEL_ID):
         pytest.skip(
             "real DistilBERT model cache missing — spawn smoke needs [nlp] weights (D-17)"
         )
 
-    monkeypatch.setenv("CHAT_ANALYZER_EMOTION_WORKERS", "2")
     monkeypatch.setattr(_emotion_module, "_EMOTION_PARALLEL_THRESHOLD", 1)
 
     with redirect_stdout(StringIO()):
