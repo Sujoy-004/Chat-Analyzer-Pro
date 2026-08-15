@@ -85,6 +85,7 @@ def _score_text_chunk(
     import os
 
     try:
+        os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
         import torch
         from transformers import pipeline
 
