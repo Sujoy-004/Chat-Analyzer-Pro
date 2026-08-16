@@ -212,7 +212,7 @@ Key relationships:
   skips the compute/NLP stages entirely.
 - `cli/contracts.py` is the single source of truth between the CLI modules; the
   analysis core (`parser`, `analysis`, `ingest`) never imports it.
-- The legacy `reporting/` modules and the old Streamlit web app (`app/`) are not
+- The legacy `reporting/` modules are not
   part of the CLI. Do not treat them as the reference for new code.
 
 ---
@@ -235,9 +235,7 @@ policies here win.
   and graceful-availability flags (e.g. `try/except ImportError` → module-level
   `_AVAILABLE` flag → functions return safe defaults when the flag is False).
 - **No web-app-only code:** do not reintroduce remote-`exec()` patterns or
-  `unsafe_allow_html`-style rendering. Specifically never port the old
-  `app/streamlit_app.py` practice of fetching modules from GitHub URLs and
-  running them via `exec(code, namespace)`.
+  `unsafe_allow_html`-style rendering.
 - **Reuse the existing analysis modules:** do not rewrite analysis logic in the
   pipeline. The CLI wraps modules like `ChatEDA`, `add_sentiment_analysis`,
   `analyze_relationship_health`, `analyze_network`, and `analyze_narrative`.

@@ -23,9 +23,9 @@ chat export file
       ▼
 ┌────────────────────────────────────────────────────────────────────┐
 │  PARSERS (chat_analyzer/parser/)                                    │
-│  WhatsAppParser .txt  ·  telegram_parser .json  ·  zip_input .zip   │
+│  WhatsAppParser .txt  ·  telegram_parser .json                      │
 │  produce (rows: list[dict], counts: dict) — never a DataFrame;      │
-│  zip_input adds source + chosen transcript names (4-tuple)          │
+│  .zip → cli/zip_input.py (pick → merged rows/counts, 4-tuple)       │
 └───────────────────────────────┬────────────────────────────────────┘
                                 │ ParseReport (dataclass)
                                 ▼
@@ -119,7 +119,7 @@ Every module that exists in `src/chat_analyzer/`, with its responsibility:
 | `__main__.py` | `python -m chat_analyzer` entry — runs the typer app directly |
 | `cli/__init__.py` | Exposes `app` (from `cli.main`) |
 | `cli/main.py` | The typer app: the single command is the root — no `analyze` subcommand exists — plus the interactive re-prompt loop, `--version` eager callback, `_friendly_error` classification, the always-on 3-option NLP tier menu (PH2) with `CHAT_ANALYZER_TIER` env resolution, exit codes 0/1 |
-| `cli/pipeline.py` | The single orchestration path — `run_pipeline(path, console, nlp_enabled)` — parse → Option C sample decision → result-cache lookup → canonical df → insights → charts → gated emotion/quarterly/narrative → `AnalysisResults`, with `stage()`/`stage_status()` narration, `_safe_chart()` degradation, and best-effort cache store on a miss |
+| `cli/pipeline.py` | The single orchestration path — `run_pipeline(path, console, nlp_enabled)` — parse → canonical df → Option C sample decision → result-cache lookup → insights → charts → gated emotion/quarterly/narrative → `AnalysisResults`, with `stage()`/`stage_status()` narration, `_safe_chart()` degradation, and best-effort cache store on a miss |
 | `cli/contracts.py` | `ParseReport` dataclass + `AnalysisResults` TypedDict — the pipeline's single output contract; core modules never import it |
 | `cli/adapters.py` | `adapt(...)` — the ONLY place that knows each analysis module's internal dict shape; extracts serializable scalars; `build_insights()` generates the narrative lead-in sentences |
 | `cli/result_cache.py` | Opt-in repeat-run result cache (04-08): sha256 of the input file bytes + config signature → `<key>.json` outside the repo; recursive numpy/date-key sanitizer; json-only load that self-heals corrupt files; atomic store + 30-day TTL prune; never raises |

@@ -233,7 +233,7 @@ more than 20,000 unique scorable texts (`_EMOTION_PARALLEL_THRESHOLD`,
   `%LOCALAPPDATA%\chat-analyzer\cache` on Windows (falling back to
   `~/.cache/chat-analyzer` when `LOCALAPPDATA` is unset/empty), and
   `~/.cache/chat-analyzer` elsewhere.
-- **Any other non-empty value** → that value verbatim is the cache directory
+- **Any other non-empty value** → that value is the cache directory, normalized by strip + lowercase (`.strip().lower()` before `Path(raw)` — `nlp_gate.py:200-207`)
   (garbage is indistinguishable from a path — documented in the README).
 
 On a cache hit the whole compute/NLP/narrative is skipped: the terminal prints
