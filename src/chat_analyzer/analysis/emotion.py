@@ -65,6 +65,11 @@ EMOTION_LABELS = ("joy", "sadness", "anger", "fear", "surprise", "love")
 # spawn churn).
 _EMOTION_PARALLEL_THRESHOLD = 20_000
 
+# Parallel chunk sizing: several bounded chunks PER WORKER let idle workers
+# pull the next chunk as they finish (P/E-core load balancing) and bound the
+# blast radius of one dying child. 512 texts keeps pickle/IPC overhead noise.
+_MIN_CHUNK_TEXTS = 512
+
 
 def _score_text_chunk(
     texts: list[str],
@@ -91,27 +96,56 @@ def _score_text_chunk(
 
         threads = max(1, num_threads or ((os.cpu_count() or 1) // 3))
         torch.set_num_threads(threads)
-        scorer = pipeline(
-            "text-classification", model=model_name, top_k=None, device=-1
+        scorer = _maybe_quantize_pipeline(
+            pipeline("text-classification", model=model_name, top_k=None, device=-1)
         )
         size = max(1, batch_size)
         out: list[tuple[str, dict]] = []
         for i in range(0, len(texts), size):
             chunk = texts[i : i + size]
-            batch_out = scorer(chunk, batch_size=size, top_k=None)
-            if not isinstance(batch_out, list):
-                raise TypeError("pipeline returned a non-list result")
-            if (
-                len(batch_out) == 1
-                and isinstance(batch_out[0], list)
-                and len(batch_out[0]) == len(chunk)
-            ):
-                batch_out = batch_out[0]
-            if len(batch_out) != len(chunk):
-                raise ValueError("pipeline returned a non-aligned result shape")
+            try:
+                # truncation=True: a <=512-CHAR message can still exceed the
+                # model's 512-TOKEN position budget (emoji/CJK-dense text) and
+                # used to hard-crash DistilBERT forward (tensor 802 vs 512),
+                # killing this worker's whole chunk.
+                batch_out = scorer(
+                    chunk, batch_size=size, top_k=None, truncation=True
+                )
+                if not isinstance(batch_out, list):
+                    raise TypeError("pipeline returned a non-list result")
+                if (
+                    len(batch_out) == 1
+                    and isinstance(batch_out[0], list)
+                    and len(batch_out[0]) == len(chunk)
+                ):
+                    batch_out = batch_out[0]
+                if len(batch_out) != len(chunk):
+                    raise ValueError("pipeline returned a non-aligned result shape")
+                chunk_scores = [
+                    _parse_emotion_scores(item) for item in batch_out
+                ]
+            except Exception:
+                # Same degrade contract as the parent's _score_batch: one bad
+                # batch must never lose its whole chunk — fall back to
+                # per-message scoring, then neutral scores.
+                logging.getLogger(__name__).exception(
+                    "worker batch failed; degrading to per-message"
+                )
+                chunk_scores = []
+                for text in chunk:
+                    try:
+                        chunk_scores.append(
+                            _parse_emotion_scores(
+                                scorer(text[:512], top_k=None, truncation=True)
+                            )
+                        )
+                    except Exception:  # noqa: BLE001 - neutral scores beat losing the chunk
+                        chunk_scores.append(
+                            {emotion: 0.0 for emotion in EMOTION_LABELS}
+                        )
             out.extend(
-                (text, _parse_emotion_scores(item))
-                for text, item in zip(chunk, batch_out)
+                (text, scores)
+                for text, scores in zip(chunk, chunk_scores)
             )
         return out
     except Exception:
@@ -119,6 +153,33 @@ def _score_text_chunk(
         # caller catches the re-raised error and degrades to sequential.
         logging.getLogger(__name__).exception("emotion worker chunk failed")
         raise
+
+
+def _maybe_quantize_pipeline(scorer):
+    """Dynamically int8-quantize a text-classification pipeline's Linear layers.
+
+    CPU DistilBERT-class models typically gain ~1.6-2.5x inference throughput
+    with sub-1% score drift; results stay deterministic for a given torch
+    build. Opt out with CHAT_ANALYZER_EMOTION_QUANT=off (0/off/false/no).
+    Applied identically in the parent process and every spawn child so
+    parallel and sequential outputs stay comparable.
+    """
+    import os
+
+    flag = os.environ.get("CHAT_ANALYZER_EMOTION_QUANT", "1").strip().lower()
+    if flag in ("0", "off", "false", "no"):
+        return scorer
+    try:
+        import torch
+
+        scorer.model = torch.ao.quantization.quantize_dynamic(
+            scorer.model, {torch.nn.Linear}, dtype=torch.qint8
+        )
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "emotion int8 quantization failed; keeping fp32"
+        )
+    return scorer
 
 
 def _allocate_seats(counts: dict, cap: int) -> dict:
@@ -334,13 +395,15 @@ class EmotionAnalyzer:
             print(f"🚀 Loading emotion classification model: {self.model_name}")
             print("   This may take a moment on first run...")
             
-            self.pipeline = pipeline(
-                "text-classification",
-                model=self.model_name,
-                top_k=None,  # Return all emotion scores
-                device=-1  # CPU (use 0 for GPU if available)
+            self.pipeline = _maybe_quantize_pipeline(
+                pipeline(
+                    "text-classification",
+                    model=self.model_name,
+                    top_k=None,  # Return all emotion scores
+                    device=-1  # CPU (use 0 for GPU if available)
+                )
             )
-            
+
             _emotion_analyzer = self.pipeline
             _emotion_model_loaded = True
             print("✅ Emotion model loaded successfully!")
@@ -375,7 +438,9 @@ class EmotionAnalyzer:
         try:
             if self.pipeline is not None:
                 # Limit to 512 chars for efficiency
-                return self._parse_pipeline_result(self.pipeline(text[:512]))
+                return self._parse_pipeline_result(
+                    self.pipeline(text[:512], top_k=None, truncation=True)
+                )
             else:
                 # Fallback to rule-based detection
                 return self._rule_based_emotion(text)
@@ -423,7 +488,9 @@ class EmotionAnalyzer:
         for i in range(0, len(texts), size):
             chunk = texts[i:i + size]
             try:
-                batch_out = self.pipeline(chunk, batch_size=size, top_k=None)
+                batch_out = self.pipeline(
+                    chunk, batch_size=size, top_k=None, truncation=True
+                )
                 if not isinstance(batch_out, list):
                     raise TypeError("pipeline returned a non-list result")
                 if len(batch_out) == 1 and isinstance(batch_out[0], list) and len(batch_out[0]) == len(chunk):
@@ -432,7 +499,9 @@ class EmotionAnalyzer:
                     raise ValueError("pipeline returned a non-aligned result shape")
                 chunk_scores = [self._parse_pipeline_result(item) for item in batch_out]
             except Exception as e:  # noqa: BLE001 - batched failure degrades to per-message scoring, never crashes the batch
-                print(f"⚠️ Batch failed ({e}), falling back to per-message...")
+                # ASCII-safe print: an emoji here crashed cp1252 consoles INSIDE
+                # the error handler, turning a degraded batch into a hard crash.
+                print(f"Batch failed ({e}), falling back to per-message...")
                 chunk_scores = [self.analyze_single_message(t) for t in chunk]
             scored.extend(chunk_scores)
         return scored
@@ -516,35 +585,91 @@ class EmotionAnalyzer:
     ) -> dict[str, dict] | None:
         """Map-reduce unique-text scoring across a process pool, or None on failure.
 
-        ``unique_texts`` is split into ``workers`` CONTIGUOUS fixed-order
-        chunks and each chunk is scored by a worker-local pipeline; the
-        flattened results restore the original unique order. Per-message
-        scores are pure functions of the text, so the returned {text: scores}
-        map is byte-identical regardless of worker count. Any exception
-        degrades to the sequential path (VADER precedent).
+        ``unique_texts`` is split into BOUNDED contiguous fixed-order chunks
+        (several per worker so idle workers pull the next chunk as they finish);
+        each chunk is scored by a worker-local pipeline and results are merged
+        by text. Per-message scores are pure functions of the text, so the
+        returned {text: scores} map is byte-identical regardless of worker
+        count or chunk boundaries.
+
+        Failure policy (fixes the measured pathology where one spawn child dying
+        at teardown invalidated pool.map and threw away every already-computed
+        chunk for a full sequential re-score): chunks are consumed as they
+        complete; whatever the pool loses is re-scored IN THE PARENT via
+        _score_batch, so a pool failure costs at most the missing slices. If
+        NOTHING comes back from the pool, None degrades to the caller's
+        sequential fallback (VADER precedent).
         """
         try:
             import itertools
             import os
             from concurrent.futures import ProcessPoolExecutor
 
-            step = (len(unique_texts) + workers - 1) // workers
-            chunks = [unique_texts[i * step : (i + 1) * step] for i in range(workers)]
-            chunks = [c for c in chunks if c]
-            scored: dict[str, dict] = {}
+            n_chunks = max(workers * 4, 4)
+            size = max(_MIN_CHUNK_TEXTS, -(-len(unique_texts) // n_chunks))
+            chunks = [
+                unique_texts[i : i + size] for i in range(0, len(unique_texts), size)
+            ]
             num_threads = max(1, (os.cpu_count() or 1) // workers)
-            with ProcessPoolExecutor(max_workers=workers) as pool:
-                results = pool.map(
-                    _score_text_chunk,
-                    chunks,
-                    itertools.repeat(self.model_name),
-                    itertools.repeat(batch_size),
-                    itertools.repeat(num_threads),
+
+            collected: dict[str, dict] = {}
+            lost: list[str] = []
+            pool_error: Exception | None = None
+            try:
+                with ProcessPoolExecutor(max_workers=workers) as pool:
+                    results = pool.map(
+                        _score_text_chunk,
+                        chunks,
+                        itertools.repeat(self.model_name),
+                        itertools.repeat(batch_size),
+                        itertools.repeat(num_threads),
+                    )
+                    results_iter = iter(results)
+                    exhausted = False
+                    for pos, chunk in enumerate(chunks):
+                        if exhausted:
+                            lost.extend(chunk)
+                            continue
+                        try:
+                            chunk_pairs = next(results_iter)
+                        except StopIteration:
+                            # Pool died before this chunk ever ran.
+                            exhausted = True
+                            lost.extend(chunk)
+                            continue
+                        except Exception:
+                            # ONE bad chunk must not abort later chunks:
+                            # futures are independent — skip and rescue it.
+                            logger.exception(
+                                "emotion pool lost chunk %d/%d",
+                                pos + 1,
+                                len(chunks),
+                            )
+                            lost.extend(chunk)
+                            continue
+                        for text, scores in chunk_pairs:
+                            collected[text] = scores
+            except Exception as exc:
+                logger.exception("emotion pool failed to run")
+                pool_error = exc
+
+            if not collected:
+                if pool_error is not None:
+                    logger.error(
+                        "parallel emotion scoring failed; using sequential (%s)",
+                        pool_error,
+                    )
+                return None
+
+            if lost:
+                print(
+                    f"Emotion pool lost {len(lost)}/{len(unique_texts)} unique texts;"
+                    " rescuing them sequentially..."
                 )
-                for chunk, chunk_pairs in zip(chunks, results):
-                    for text, scores in chunk_pairs:
-                        scored[text] = scores
-            return scored
+                rescued = self._score_batch(lost, batch_size)
+                for text, scores in zip(lost, rescued):
+                    collected[text] = scores
+            return collected
         except Exception:
             logger.exception("parallel emotion scoring failed; using sequential")
             return None
@@ -552,6 +677,27 @@ class EmotionAnalyzer:
     def _get_neutral_emotions(self) -> dict[str, float]:
         """Return neutral emotion scores."""
         return {emotion: 1/len(self.emotions) for emotion in self.emotions}
+
+    def _write_emotion_columns(
+        self, df_copy: pd.DataFrame, scores_by_idx: dict
+    ) -> None:
+        """Write per-row score dicts into the emotion_* columns, vectorized.
+
+        Equivalent to a per-row ``df_copy.at`` write loop but ~an order of
+        magnitude faster on 400k+ rows: one numpy materialization followed by
+        one column assignment per emotion. Rows are written POSITIONALLY over
+        ``df_copy.index`` (the parser always produces a unique RangeIndex);
+        every row must be present in scores_by_idx exactly as before.
+        """
+        matrix = np.array(
+            [
+                [scores_by_idx[idx].get(emotion, 0.0) for emotion in self.emotions]
+                for idx in df_copy.index
+            ],
+            dtype=np.float64,
+        )
+        for col_pos, emotion in enumerate(self.emotions):
+            df_copy[f"emotion_{emotion}"] = matrix[:, col_pos]
     
     def _rule_based_emotion(self, text: str) -> dict[str, float]:
         """
@@ -653,7 +799,7 @@ class EmotionAnalyzer:
                 # does the deterministic stratified sample kick in; otherwise
                 # the exact path below runs untouched.
                 scorable_mask = df_copy[text_column].map(self._is_scorable)
-                n_scorable = self.n_scorable(df_copy, text_column)
+                n_scorable = int(scorable_mask.sum())  # same rule as n_scorable(), one pass
                 if n_scorable > sample_cap:
                     try:
                         selected = _stratified_sample_indices(
@@ -685,7 +831,8 @@ class EmotionAnalyzer:
                     else:
                         skipped.append(idx)
 
-                scores_by_idx = {idx: self._get_neutral_emotions() for idx in skipped}
+                neutral = self._get_neutral_emotions()
+                scores_by_idx = dict.fromkeys(skipped, neutral)
                 if pending:
                     scores_by_text = self._score_unique_texts(
                         pending, batch_size, workers
@@ -693,9 +840,7 @@ class EmotionAnalyzer:
                     for idx, text in pending:
                         scores_by_idx[idx] = scores_by_text[text]
 
-                for idx, scores in scores_by_idx.items():
-                    for emotion in self.emotions:
-                        df_copy.at[idx, f'emotion_{emotion}'] = scores.get(emotion, 0.0)
+                self._write_emotion_columns(df_copy, scores_by_idx)
 
                 df_copy["emotion_scored"] = df_copy.index.isin(selected_set)
                 df_copy.attrs["emotion_sample"] = {
@@ -715,7 +860,8 @@ class EmotionAnalyzer:
                     else:
                         skipped.append(idx)
 
-                scores_by_idx = {idx: self._get_neutral_emotions() for idx in skipped}
+                neutral = self._get_neutral_emotions()
+                scores_by_idx = dict.fromkeys(skipped, neutral)
 
                 if pending:
                     scores_by_text = self._score_unique_texts(
@@ -724,9 +870,7 @@ class EmotionAnalyzer:
                     for idx, text in pending:
                         scores_by_idx[idx] = scores_by_text[text]
 
-                for idx, scores in scores_by_idx.items():
-                    for emotion in self.emotions:
-                        df_copy.at[idx, f'emotion_{emotion}'] = scores.get(emotion, 0.0)
+                self._write_emotion_columns(df_copy, scores_by_idx)
 
                 if sample_meta is not None:
                     # Sampling machinery failed but every row was scored

@@ -101,6 +101,7 @@ Emotion scoring on very large chats follows the same prompt-vs-automation split.
 
 - `CHAT_ANALYZER_EMOTION_SAMPLE=<n>` — emotion sampling cap (default **50000**): `0`, `off`, or `false` disables sampling (always exact); a value that parses to a non-positive integer (e.g. `-5`, `00`) also disables sampling; a positive integer sets the cap; anything else (garbage) falls back to the default.
 - `CHAT_ANALYZER_EMOTION_WORKERS=<n>` — parallel emotion worker count (default **3**): exact scoring fans unique-text inference out to a process pool on very large chats (each worker builds its own DistilBERT pipeline); `0` or `1` forces sequential (no pool); a positive integer sets the count but is capped at **8** (RAM-bound — each worker loads its own ~255 MB model copy plus a torch runtime); anything else falls back to the default. Parallel scoring only engages above the internal unique-text threshold.
+- `CHAT_ANALYZER_EMOTION_QUANT=<on|off>` — int8 dynamic quantization of the emotion model (default **on**): roughly 1.5–2.5x faster CPU inference with negligible score drift, applied identically in the parent process and every pool worker; `0`, `off`, `false`, or `no` keep full fp32 weights.
 - `CHAT_ANALYZER_RESULT_CACHE=<dir>` — opt-in result cache keyed by the input file's sha256 hash + your settings (default **OFF**): `0`, `off`, `false`, or `no` disable it; `1`, `on`, `true`, or `yes` enable it with the default directory (`%LOCALAPPDATA%\chat-analyzer\cache` on Windows, `~/.cache/chat-analyzer` elsewhere); any other value IS the cache directory. On a repeat run of the same file with the same settings, the terminal prints `[INFO] Loaded analysis from cache` and the run completes in seconds — the HTML report is always regenerated fresh. Entries expire after 30 days (pruned automatically on each store).
 
 ## How the tiers are enforced
@@ -121,12 +122,16 @@ Real wall-clock times measured via `scripts/benchmark.py` on the author's Window
 
 | Chat size (~messages) | Tier 1 | Tier 2/3 (sampled for large chats) |
 |---|---|---|
-| 424,826 | ~10 min (~589 s) | ~33 min (~1,991 s) — **sampled** (50,000 of 424,826) |
-| 31,218 | ~2 min (~119 s) | ~14 min (~834 s) — exact |
-| 3,644 | ~46 s | ~2 min (~134 s) — exact |
-| 1,014 | ~19 s | ~1.5 min (~85 s) — exact |
+| 424,826 | ~10 min (~589 s) | **~13 min (~758 s)** — **sampled** (50,000 of 424,826) |
+| 31,218 | ~2 min (~119 s) | ~14 min (~834 s)* — exact |
+| 3,644 | ~46 s | ~2 min (~134 s)* — exact |
+| 1,014 | ~19 s | ~1.5 min (~85 s)* — exact |
+
+\* Rows marked with an asterisk predate the August 2026 emotion-path overhaul (int8 dynamic quantization of the DistilBERT model, resilient bounded-chunk process pooling, vectorized score write-back); the 424k row was re-measured after that work. Expect the smaller exact rows to improve by a similar inference-speedup factor (roughly 1.5–2.5x on the emotion stage).
 
 These are **conservative upper bounds**: the machine was not idle (VS Code and editors were running throughout), so a quiet machine runs faster. For chats above the sampling cap, the emotion stage scores a deterministic stratified sample instead of every message and the report and terminal label it — and exact (unsampled) tier 2/3 on a 424k chat is the pre-Option-C behavior, which takes hours; that wall is exactly why sampled mode exists (see `CHAT_ANALYZER_EMOTION_SAMPLE` above).
+
+Emotion inference uses int8 dynamic quantization by default (faster CPU scoring with negligible score drift). Set `CHAT_ANALYZER_EMOTION_QUANT=off` to keep full fp32 weights; parallel and sequential paths quantize identically so results stay comparable either way.
 
 ## On narrative honesty
 

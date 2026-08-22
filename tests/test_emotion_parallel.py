@@ -137,6 +137,14 @@ def _inline_fake_worker(texts, model_name, batch_size, num_threads):
     return [(t, _per_text(t)) for t in texts]
 
 
+def _parsed_fake_worker(texts, model_name, batch_size, num_threads):
+    """Like the REAL child: returns per-emotion score dicts, not raw lists."""
+    return [
+        (t, _emotion_module._parse_emotion_scores(_per_text(t), EMOTIONS))
+        for t in texts
+    ]
+
+
 # --- env contract -----------------------------------------------------------
 
 
@@ -243,9 +251,10 @@ def test_threshold_at_exactly_20000_stays_sequential(monkeypatch):
 
 
 def test_parallel_chunks_contiguous_fixed_order(monkeypatch):
-    """The pool slots unique texts into contiguous fixed-order chunks so the
-    flattened result restores the original unique order (deterministic output
-    regardless of worker count)."""
+    """The pool slots unique texts into contiguous fixed-order BOUNDED chunks
+    (several per worker so idle workers pull the next one) so the merged
+    result restores the original unique order — deterministic output
+    regardless of worker count or chunk boundaries."""
     analyzer = _make_analyzer(_classifier)
     pool = _FakePool(max_workers=3)
     monkeypatch.setattr(
@@ -254,23 +263,93 @@ def test_parallel_chunks_contiguous_fixed_order(monkeypatch):
     monkeypatch.setattr(_emotion_module, "_score_text_chunk", _inline_fake_worker)
 
     unique_texts = [f"unique message text number {i}" for i in range(10)]
+
+    # Tiny chunk floor -> several chunks per worker, still contiguous+ordered.
+    default_floor = _emotion_module._MIN_CHUNK_TEXTS
+    monkeypatch.setattr(_emotion_module, "_MIN_CHUNK_TEXTS", 2)
     result = analyzer._score_unique_texts_parallel(
         unique_texts, batch_size=4, workers=3
     )
-
-    step = (10 + 3 - 1) // 3  # ceil(10/3) = 4
+    n_chunks = max(3 * 4, 4)
+    size = max(2, -(-len(unique_texts) // n_chunks))
     assert pool.seen_chunks == [
-        unique_texts[0:step],
-        unique_texts[step : 2 * step],
-        unique_texts[2 * step :],
+        unique_texts[i : i + size] for i in range(0, len(unique_texts), size)
     ]
     assert [t for chunk in pool.seen_chunks for t in chunk] == unique_texts
     assert list(result) == unique_texts
 
     # LW-02: the per-worker torch-thread budget (cpu_count // workers) must
-    # actually reach the worker — no silent oversubscription.
+    # actually reach EVERY chunk — no silent oversubscription.
     expected_threads = max(1, (os.cpu_count() or 1) // 3)
     assert pool.seen_threads == [expected_threads] * len(pool.seen_chunks)
+
+    # Default floor (512): a small batch collapses to ONE big chunk.
+    monkeypatch.setattr(_emotion_module, "_MIN_CHUNK_TEXTS", default_floor)
+    pool2 = _FakePool(max_workers=3)
+    monkeypatch.setattr(
+        "concurrent.futures.ProcessPoolExecutor", lambda max_workers: pool2
+    )
+    result2 = analyzer._score_unique_texts_parallel(
+        unique_texts, batch_size=4, workers=3
+    )
+    assert pool2.seen_chunks == [unique_texts]
+    assert list(result2) == unique_texts
+
+
+def test_parallel_partial_pool_failure_rescues_only_lost_chunks(monkeypatch):
+    """One dead worker must NOT throw away already-computed chunks: completed
+    results are kept and ONLY the lost slices are re-scored sequentially."""
+    from concurrent.futures.process import BrokenProcessPool
+
+    analyzer = _make_analyzer(_classifier)
+
+    class _HalfBrokenPool:
+        def __init__(self, max_workers):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def map(self, fn, chunks, *iterables):
+            # First chunk succeeds; everything after dies mid-iteration.
+            def gen():
+                for pos, chunk in enumerate(chunks):
+                    if pos == 0:
+                        yield fn(chunk, next(iter(iterables[0])), 8, 4)
+                    else:
+                        raise BrokenProcessPool("worker died at teardown")
+
+            return gen()
+
+    monkeypatch.setattr(
+        "concurrent.futures.ProcessPoolExecutor",
+        lambda max_workers: _HalfBrokenPool(max_workers),
+    )
+    monkeypatch.setattr(_emotion_module, "_score_text_chunk", _parsed_fake_worker)
+    monkeypatch.setattr(_emotion_module, "_MIN_CHUNK_TEXTS", 4)
+
+    rescued_texts: list[list[str]] = []
+    real_score_batch = analyzer._score_batch
+
+    def tracking_score_batch(texts, batch_size):
+        rescued_texts.append(list(texts))
+        return real_score_batch(texts, batch_size)
+
+    monkeypatch.setattr(analyzer, "_score_batch", tracking_score_batch)
+
+    unique_texts = [f"unique message text number {i}" for i in range(20)]
+    with redirect_stdout(StringIO()):
+        result = analyzer._score_unique_texts_parallel(
+            unique_texts, batch_size=4, workers=3
+        )
+
+    assert list(result) == unique_texts  # complete coverage, order preserved
+    assert len(rescued_texts) == 1  # exactly one sequential rescue pass
+    assert set(rescued_texts[0]) == set(unique_texts[4:])  # only the lost slice
+    assert all(set(scores) == set(EMOTIONS) for scores in result.values())
 
 
 def test_parallel_pool_failure_degrades_to_sequential(monkeypatch, caplog):
