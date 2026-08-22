@@ -376,6 +376,19 @@ def test_parallel_pool_failure_degrades_to_sequential(monkeypatch, caplog):
     assert len(out) == 20_001
 
 
+def test_analyze_emotions_empty_frame_is_noop():
+    """An empty frame must flow through the vectorized write-back untouched
+    (the old .at loop was naturally a no-op; np.array([]) would raise)."""
+    analyzer = _make_analyzer(_classifier)
+    df = _smoke_fixture_df(3).iloc[0:0]
+    with redirect_stdout(StringIO()):
+        out = analyzer.analyze_emotions(df, batch_size=8)
+
+    assert len(out) == 0
+    for col in EMOTION_COLS:
+        assert col in out.columns
+
+
 # --- worker hardening (A1) ---------------------------------------------------
 
 

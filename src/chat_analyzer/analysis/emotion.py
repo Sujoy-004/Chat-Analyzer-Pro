@@ -84,8 +84,10 @@ def _score_text_chunk(
     child — never passed in — and torch threads are clamped to the caller's
     per-worker budget (cpu_count // workers) so the pool does not
     oversubscribe the box. Uses the same 4.x/5.x shape normalization as the
-    parent's _score_batch (top_k=None flat vs nested list). Any failure
-    raises cleanly; the caller degrades to sequential.
+    parent's _score_batch (top_k=None flat vs nested list). Batch failures
+    degrade to per-message scoring inside this worker; anything that still
+    escapes is logged and re-raised — the driver keeps every completed chunk
+    and rescues only the lost ones.
     """
     import os
 
@@ -156,18 +158,21 @@ def _score_text_chunk(
 
 
 def _maybe_quantize_pipeline(scorer):
-    """Dynamically int8-quantize a text-classification pipeline's Linear layers.
+    """Optionally int8-quantize a text-classification pipeline's Linear layers.
 
-    CPU DistilBERT-class models typically gain ~1.6-2.5x inference throughput
-    with sub-1% score drift; results stay deterministic for a given torch
-    build. Opt out with CHAT_ANALYZER_EMOTION_QUANT=off (0/off/false/no).
+    OPT-IN (default OFF): measured on torch 2.13.0+cpu + transformers 5.14.1,
+    dynamic qint8 buys ~1.7x inference throughput but measurably distorts
+    scores — dominant-label agreement vs fp32 dropped to ~75% on a 200-text
+    probe, with systematic surprise/love -> joy flips (fp32 itself is
+    bit-stable run-to-run). Accuracy-first: fp32 unless the user explicitly
+    enables it via CHAT_ANALYZER_EMOTION_QUANT=1/on/true/yes.
     Applied identically in the parent process and every spawn child so
-    parallel and sequential outputs stay comparable.
+    parallel and sequential outputs stay comparable within a mode.
     """
     import os
 
-    flag = os.environ.get("CHAT_ANALYZER_EMOTION_QUANT", "1").strip().lower()
-    if flag in ("0", "off", "false", "no"):
+    flag = os.environ.get("CHAT_ANALYZER_EMOTION_QUANT", "0").strip().lower()
+    if flag not in ("1", "on", "true", "yes"):
         return scorer
     try:
         import torch
@@ -590,7 +595,8 @@ class EmotionAnalyzer:
         each chunk is scored by a worker-local pipeline and results are merged
         by text. Per-message scores are pure functions of the text, so the
         returned {text: scores} map is byte-identical regardless of worker
-        count or chunk boundaries.
+        count or chunk boundaries (exact for the default fp32 path; the
+        opt-in int8 mode is approximate but still deterministic).
 
         Failure policy (fixes the measured pathology where one spawn child dying
         at teardown invalidated pool.map and threw away every already-computed
@@ -647,8 +653,15 @@ class EmotionAnalyzer:
                             )
                             lost.extend(chunk)
                             continue
-                        for text, scores in chunk_pairs:
-                            collected[text] = scores
+                        try:
+                            for text, scores in chunk_pairs:
+                                collected[text] = scores
+                        except Exception:
+                            # Merge errors must not strand the rest: re-score
+                            # this whole chunk via the rescue path below.
+                            logger.exception("emotion pool merge failed for a chunk")
+                            lost.extend(chunk)
+                            continue
             except Exception as exc:
                 logger.exception("emotion pool failed to run")
                 pool_error = exc
@@ -689,6 +702,8 @@ class EmotionAnalyzer:
         ``df_copy.index`` (the parser always produces a unique RangeIndex);
         every row must be present in scores_by_idx exactly as before.
         """
+        if len(df_copy.index) == 0:
+            return
         matrix = np.array(
             [
                 [scores_by_idx[idx].get(emotion, 0.0) for emotion in self.emotions]
