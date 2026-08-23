@@ -317,10 +317,46 @@ the CLI:
   `_score_text_chunk(texts, model_name, batch_size, num_threads)` — JSON-able
   args only, the pipeline is built **inside** the child, torch threads are
   clamped to `max(1, cpu_count // workers)`, and
-  `TOKENIZERS_PARALLELISM=false` is set before the transformers import.
-  Any worker failure degrades to the identical sequential `_score_batch`
-  (byte-parity by construction). The pool lives in the emotion analysis
+  `TOKENIZERS_PARALLELISM=false` is set before the transformers import
+  (`emotion.py` ~line 95). Chunks are consumed **as they complete** and
+  merged by text, so per-message scores are byte-identical to sequential
+  regardless of worker count or chunk boundaries (exact on the default fp32
+  path; the opt-in int8 mode below is approximate but still deterministic).
+  Failure is a **partial rescue**, not a wholesale degrade: completed chunk
+  scores are KEPT, and only lost chunks — a worker whose chunk raised, a
+  merge error, or a pool that died before later chunks ran — fall back to a
+  sequential `_score_batch` re-score in the parent before merging into the
+  same `{text: scores}` map, so a pool failure costs at most the missing
+  slices. Only when NOTHING comes back from the pool does the run degrade
+  fully to sequential `_score_batch`. The pool lives in the emotion analysis
   module, never the CLI.
+- **Perf-overhaul mechanics (Aug 2026 pass, all in `analysis/emotion.py`).**
+  Four changes ride along with the pool:
+  - **Truncation-safe batching** — every batched pipeline call passes
+    `truncation=True`: a ≤512-*character* message can still exceed
+    DistilBERT's 512-*token* position budget (emoji/CJK-dense text) and
+    used to hard-crash the forward pass (tensor 802 vs 512), killing the
+    worker's whole chunk (~lines 109–115).
+  - **Bounded chunk count** — `n_chunks = max(workers * 4, 4)` (~line 614)
+    with a `_MIN_CHUNK_TEXTS = 512` floor (~line 71): memory stays bounded
+    no matter how large the corpus, several chunks per worker let idle
+    workers pull the next chunk as they finish (load balancing), and one
+    dying child can only take down its own slice.
+  - **Vectorized write-back** — `_write_emotion_columns` (~lines 694–715)
+    materializes one numpy matrix and assigns one column per emotion,
+    replacing the per-row `.at` write loop (~an order of magnitude faster
+    on 400k+ rows); rows are written positionally over the RangeIndex.
+  - **Opt-in INT8 dynamic quantization** — `_maybe_quantize_pipeline`
+    (~lines 160–187) runs `torch.ao.quantization.quantize_dynamic` over the
+    emotion classifier's Linear layers ONLY when
+    `CHAT_ANALYZER_EMOTION_QUANT` parses truthy (`1`/`on`/`true`/`yes`;
+    env parser ~line 174; default **OFF**, accuracy-first), applied
+    identically in the parent process and every spawn child so parallel and
+    sequential outputs stay comparable within a mode. It trades score
+    fidelity for speed/memory — developer-reported figures only, NOT
+    benchmarked by CI: ~1.7× inference throughput, with dominant-label
+    agreement vs fp32 dropping to ~75% on a 200-text probe (systematic
+    surprise/love → joy flips).
 - **Quarterly aggregation.** `get_emotion_quarterly(df_emo)` computes the
   per-quarter MEAN of the six emotion scores (oldest first, honors the
   `emotion_scored` column in sampled mode); the pipeline attaches it as

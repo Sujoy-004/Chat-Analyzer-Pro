@@ -3,12 +3,12 @@
 
 Chat-Analyzer-Pro is tested with **pytest** (the dev extra in `pyproject.toml`
 declares `pytest>=7.4`, `pytest-cov>=4.1`, and `ruff>=0.16.1`). The suite has
-**328 tests across 31 files** — 302 fast tests plus 26 wall-clock-slow tests.
+**330 tests across 31 files** — 304 fast tests plus 26 wall-clock-slow tests.
 Wall-clock-slow tests (CLI subprocess spawns, full pipeline/report renders, and
 the one real-model emotion spawn-parity smoke) are gated behind the `slow`
 marker (`[tool.pytest.ini_options]` in `pyproject.toml`) so the fast suite
 stays lean for every commit. The pytest config sets no `addopts`: plain
-`python -m pytest` runs all 328 tests, and the fast-only selection is an
+`python -m pytest` runs all 330 tests, and the fast-only selection is an
 explicit `-m "not slow"`.
 
 Tests exercise the **real shipped modules** — `chat_analyzer.parser.*`,
@@ -51,8 +51,8 @@ All commands below ran from the repo root and were verified against the suite:
 
 | Command | What it runs |
 | --- | --- |
-| `python -m pytest` | Full suite — 328 tests (302 fast + 26 slow). |
-| `python -m pytest -m "not slow"` | Fast suite only — 302 tests (this is the CI default; CI adds `-q -p no:cacheprovider`). |
+| `python -m pytest` | Full suite — 330 tests (304 fast + 26 slow). |
+| `python -m pytest -m "not slow"` | Fast suite only — 304 tests (this is the CI default; CI adds `-q -p no:cacheprovider`). |
 | `python -m pytest -m "slow"` | Slow suite only — 26 tests (CLI subprocess spawns, full pipeline + report renders, real-model emotion spawn-parity smoke). |
 | `python -m pytest tests/test_phase2_telegram.py` | A single test file. |
 | `python -m pytest tests/test_phase2_whatsapp.py::test_exact_fixture_counts` | A single test function. |
@@ -106,7 +106,7 @@ report run never writes into the repo tree.
 | Sentiment (VADER) | `tests/test_analysis.py`, `tests/test_phase1_smoke.py`, `tests/test_perf_parity_sentiment.py` | Real VADER columns (`vader_compound`/`vader_sentiment`) on positive/negative/neutral fixtures, `[-1, 1]` score range, sentiment distribution summary; the transformers path pinned off (`TRANSFORMERS_AVAILABLE = False`); the dedupe + parallel `_score_vader_parallel` path is bit-identical to the per-message reference. |
 | Emotion classification (NLP-gated) | `tests/test_analysis.py`, `tests/test_phase4_nlp.py` | Real `EmotionAnalyzer` with the transformers pipeline mocked — label/score shape, non-uniform dominant emotion, transformers 5.x nested-list compat, locked default model name; pipeline-level emotion block + `emotion` chart with the gate on/off. |
 | Emotion sampling (Option C) | `tests/test_emotion_sampling.py` | Deterministic stratified-sample path in `EmotionAnalyzer` and the pipeline gate that drives it — all model callables mocked (D-17), mirroring `test_perf_parity_emotion.py`; report labels and sample stats agree. |
-| Emotion parallel scoring | `tests/test_emotion_parallel.py` | `CHAT_ANALYZER_EMOTION_WORKERS` env contract (absent → 3, off-words/`<2` → 1, capped by cpu & 8, garbage → 3, never raises); the real-pipeline gate (a mocked classifier is not a `transformers.Pipeline`, so `_scoring_workers` returns 0 and mocked tests stay sequential); the `_EMOTION_PARALLEL_THRESHOLD` (20 000) boundary both directions plus exactly-at; contiguous fixed-order chunking with a `_FakePool`; pool-failure degrade to sequential with identical output; `TOKENIZERS_PARALLELISM=false` set before the transformers import in the worker; plus **one `@pytest.mark.slow` real-model spawn-parity smoke** (skips without the cached DistilBERT weights or when `CHAT_ANALYZER_FORCE_NLP` is set). |
+| Emotion parallel scoring | `tests/test_emotion_parallel.py` | `CHAT_ANALYZER_EMOTION_WORKERS` env contract (absent → 3, off-words/`<2` → 1, capped by cpu & 8, garbage → 3, never raises); the real-pipeline gate (a mocked classifier is not a `transformers.Pipeline`, so `_scoring_workers` returns 0 and mocked tests stay sequential); the `_EMOTION_PARALLEL_THRESHOLD` (20 000) boundary both directions plus exactly-at; **bounded** contiguous fixed-order chunking with a `_FakePool` (`_MIN_CHUNK_TEXTS` floor → several chunks per worker, the default floor collapses to one big chunk, and the per-worker torch-thread budget reaches every chunk); partial pool-failure rescue — completed chunks are kept and only the `BrokenProcessPool`-lost slices are re-scored sequentially; whole-pool degrade to sequential with identical output; an empty frame flows through the vectorized write-back as a noop; `TOKENIZERS_PARALLELISM=false` set before the transformers import in the worker; plus **one `@pytest.mark.slow` real-model spawn-parity smoke** (skips without the cached DistilBERT weights or when `CHAT_ANALYZER_FORCE_NLP` is set). |
 | Quarterly emotion aggregation | `tests/test_emotion_quarterly.py` | Per-quarter MEAN of the six `emotion_*` columns, oldest quarter first, rounded to 6 decimals; degenerate/malformed frames (empty, None, missing `datetime`, bad columns) → `[]` without raising; sampled mode aggregates only `emotion_scored` rows; analyzer method wrapper delegation; `build_emotion_timeline_spec` chart contract (one line series per emotion in fixed order, yAxis 0–1, NaN → None, numpy scalars coerced, JSON-safe). |
 | Result cache | `tests/test_result_cache.py` | Drives the **real `run_pipeline`** with mocked models: default OFF (no env var → no cache dir, no `Loaded` label); env parser whitelist (off-words disable, on-words → default dir, path values used as-is, never raises, default dir never under the repo tree); miss runs all stages and stores; hit skips the NLP stages (mock call counter unchanged) and prints the honest `[INFO] Loaded analysis from cache` label; file-edit / config (sampling knob) / tier (`nlp_on`) / tty y-N choice invalidation; corrupt (garbage text + pickle payload) → miss with self-heal; schema-mismatch → miss, file kept; sanitizer round-trips numpy scalars/arrays, NaN/Inf → None, `datetime.date` keys → str; 30-day TTL prune on the next store; zip transcript selection rides in the key while mtime does not; `report_path` reset to `''` on load. |
 | Summarizer (NLP-gated) | `tests/test_phase4_nlp.py` | Real `ConversationSummarizer` with T5 pipeline/tokenizer/model mocked — non-empty summary text, `summary` block present only with the gate on. |

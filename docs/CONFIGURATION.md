@@ -14,14 +14,17 @@ All environment variables are **optional**. None cause startup to fail if
 missing — each one only changes a specific behavior. The word-list variables
 (`CHAT_ANALYZER_EMOTION_SAMPLE`, `CHAT_ANALYZER_EMOTION_WORKERS`,
 `CHAT_ANALYZER_RESULT_CACHE`) are matched case-insensitively after stripping
-(`.strip().lower()` in `nlp_gate.py`); the boolean flags (`CHAT_ANALYZER_NO_OPEN`,
-`CHAT_ANALYZER_ALLOW_LONG_PATH`) match the exact string `"1"`.
+(`.strip().lower()` in `nlp_gate.py`; the same normalization applies to
+`CHAT_ANALYZER_EMOTION_QUANT` in `analysis/emotion.py`); the boolean flags
+(`CHAT_ANALYZER_NO_OPEN`, `CHAT_ANALYZER_ALLOW_LONG_PATH`) match the exact
+string `"1"`.
 
 | Variable | Required | Default | Description |
 | --- | --- | --- | --- |
 | `CHAT_ANALYZER_TIER` | No | unset (silent tier 1) | Non-tty NLP tier override: `"1"` = without NLP, `"2"` = minimal (~0.6 GB), `"3"` = full-fledged (~3 GB). Only consulted when stdin is **not** a TTY — interactive runs always show the tier menu instead (see [NLP tier selection](#nlp-tier-selection)). Values outside `1`/`2`/`3` are ignored and resolution falls through to the legacy `CHAT_ANALYZER_FORCE_NLP` mapping, then silent tier 1 (`src/chat_analyzer/cli/main.py:107-120`). |
 | `CHAT_ANALYZER_EMOTION_SAMPLE` | No | `50000` | Cap on how many messages the emotion model scores on large chats. `0`/`off`/`false` (or any value parsing to `<= 0`, e.g. `"00"`, `"-5"`) → sampling disabled (always exact); positive integer → that cap; anything else (garbage) → `50000`. Never raises (`src/chat_analyzer/cli/nlp_gate.py:96-123`). See [Emotion analysis tuning](#emotion-analysis-tuning). |
-| `CHAT_ANALYZER_EMOTION_WORKERS` | No | `3` | Parallel emotion worker count. `0`/`1`/`off`/`false` (or any value parsing to `< 2`) → `1` (sequential, no pool); positive integer → `max(1, min(value, os.cpu_count() or 1, 8))`; anything else (garbage) → `3`. Never raises, always `>= 1` (`nlp_gate.py:126-155`). Parallel scoring only engages with a **real** transformers pipeline, `>= 2` workers, and more than 20,000 unique texts (`analysis/emotion.py:440-465`). |
+| `CHAT_ANALYZER_EMOTION_WORKERS` | No | `3` | Parallel emotion worker count. `0`/`1`/`off`/`false` (or any value parsing to `< 2`) → `1` (sequential, no pool); positive integer → `max(1, min(value, os.cpu_count() or 1, 8))`; anything else (garbage) → `3`. Never raises, always `>= 1` (`nlp_gate.py:126-155`). Parallel scoring only engages with a **real** transformers pipeline, `>= 2` workers, and more than 20,000 unique texts (`_EMOTION_PARALLEL_THRESHOLD`, `analysis/emotion.py:66`). |
+| `CHAT_ANALYZER_EMOTION_QUANT` | No | OFF (`0`) | Opt-in INT8 dynamic quantization of the emotion classifier's Linear layers (`torch.ao.quantization.quantize_dynamic` → `qint8`, `analysis/emotion.py:160-187`). `1`/`on`/`true`/`yes` enable it; any other value keeps fp32. Applies only when a genuine transformers pipeline runs — no effect on the rule-based fallback or mocked scorers. Faster but approximate: developer-reported (unaudited, not CI-benchmarked) ~12 min vs ~18 min wall-clock on the 424k-message exact-score run, with only ~74.5% agreement between quantized and fp32 outputs on a stratified probe sample. See [Emotion analysis tuning](#emotion-analysis-tuning). |
 | `CHAT_ANALYZER_RESULT_CACHE` | No | OFF (unset) | Opt-in repeat-run cache keyed by the input file's sha256 + a config signature. `0`/`off`/`false`/`no` → off; `1`/`on`/`true`/`yes` → the OS default dir (`%LOCALAPPDATA%\chat-analyzer\cache` on Windows, `~/.cache/chat-analyzer` elsewhere); **any other non-empty value IS the cache directory** (a path, or garbage treated as a path). 30-day TTL, schema-based invalidation (`nlp_gate.py:162-207`). See [Result cache](#result-cache). |
 | `CHAT_ANALYZER_NO_OPEN` | No | unset (report auto-opens) | `"1"` suppresses auto-opening the HTML report in the browser. Honors the opt-out before `webbrowser` is ever touched — no exception, no log (`src/chat_analyzer/cli/report_html.py:463`). |
 | `CHAT_ANALYZER_ALLOW_LONG_PATH` | No | unset (guard active on Windows) | `"1"` bypasses the Windows deep-path MAX_PATH guard before a multi-GB torch download starts (`src/chat_analyzer/cli/nlp_gate.py:371`). Power-user override; see [Windows deep-path guard](#windows-deep-path-guard). |
@@ -39,7 +42,7 @@ Other variables are honored indirectly:
   when unset/empty — `nlp_gate.py:200-206`).
 - `TOKENIZERS_PARALLELISM` — set (via `setdefault`) to `"false"` inside the
   emotion worker child processes so tokenizer forks never emit warnings
-  (`analysis/emotion.py:88`). Not a user-facing knob.
+  (`_score_text_chunk`, `analysis/emotion.py:95`). Not a user-facing knob.
 
 ## Config file format
 
@@ -170,8 +173,8 @@ The terminal prints an **NLP status line** on every run ("NLP enabled..." or
 
 ## Emotion analysis tuning
 
-Two environment knobs tune the emotion stage on large chats (both resolved in
-`nlp_gate.py`, both **never raise**):
+Three environment knobs tune the emotion stage on large chats (two resolved in
+`nlp_gate.py`, one in `analysis/emotion.py`; all **never raise**):
 
 ### Sampling cap — `CHAT_ANALYZER_EMOTION_SAMPLE`
 
@@ -184,7 +187,7 @@ Two environment knobs tune the emotion stage on large chats (both resolved in
 - anything else (garbage) → `50000`
 
 When NLP is on, the cap resolves, and the **scorable** count (same
-`_is_scorable` rule the analyzer uses, `emotion.py:397-416`) exceeds it, the
+`_is_scorable` rule the analyzer uses, `emotion.py:467-486`) exceeds it, the
 pipeline decides between prompt and auto (`pipeline.py:201-226`):
 
 - **TTY** → a prompt asks: *"N scorable messages — exact emotion scoring can
@@ -193,7 +196,7 @@ pipeline decides between prompt and auto (`pipeline.py:201-226`):
 - **Non-tty** (piped/CI/tests) → **auto-samples** (no prompt).
 
 Sampled scoring is a **deterministic** (participant, time)-stratified sample
-(random_state=42, ~50 time buckets per sender — `emotion.py:124-284`), so the
+(random_state=42, ~50 time buckets per sender — `emotion.py:190-350`), so the
 same file + cap always produces the same sample. Below the cap (or with the cap
 disabled) behavior is byte-for-byte the exact path. When a sample runs, the
 report and the terminal label it "based on a sample of N of M messages" and the
@@ -215,12 +218,45 @@ cache entries.
 - anything else (garbage) → `3`
 
 Parallel exact scoring fans unique-text inference out to a process pool
-(`emotion.py:440-550`) — each unique text is scored once and mapped back, so
-output is byte-identical to sequential regardless of worker count. It engages
-only when **all** of these hold: a real transformers pipeline is present (mocked
-pipelines always stay sequential), the resolved count is `>= 2`, and there are
-more than 20,000 unique scorable texts (`_EMOTION_PARALLEL_THRESHOLD`,
-`emotion.py:66`). Any worker failure degrades to the sequential path.
+(`_score_unique_texts_parallel`, `emotion.py:588-688`) — each unique text is
+scored once and mapped back, so output is byte-identical to sequential
+regardless of worker count. It engages only when **all** of these hold: a real
+transformers pipeline is present (mocked pipelines always stay sequential), the
+resolved count is `>= 2`, and there are more than 20,000 unique scorable texts
+(`_EMOTION_PARALLEL_THRESHOLD`, `emotion.py:66`; gate in
+`_score_unique_texts`, `emotion.py:514-539`). Worker failures are **partially
+rescued** rather than discarding the whole pool: chunks are consumed as they
+complete, completed chunks' scores are kept, and only the lost chunks are
+re-scored sequentially in the parent and merged back in original order — output
+still matches the sequential path byte-for-byte. Only when nothing comes back
+from the pool at all does the entire stage fall back to fully sequential
+scoring.
+
+### INT8 quantization — `CHAT_ANALYZER_EMOTION_QUANT`
+
+Opt-in (**default off**) INT8 dynamic quantization of the emotion classifier's
+Linear layers: when enabled, `_maybe_quantize_pipeline`
+(`analysis/emotion.py:160-187`) rewrites the pipeline model's `torch.nn.Linear`
+layers to `qint8` via `torch.ao.quantization.quantize_dynamic`. Parsing mirrors
+the other knobs — `.get("CHAT_ANALYZER_EMOTION_QUANT", "0").strip().lower()`
+(`emotion.py:174`) — with the truthy values `1`/`on`/`true`/`yes`; anything
+else keeps fp32. It is applied identically in the parent process and inside
+every spawn worker, so sequential and parallel outputs stay comparable within
+a mode, and it has no effect on the rule-based fallback or mocked scorers
+(nothing genuine to quantize).
+
+The speedup trades accuracy. These figures are developer-reported (unaudited,
+not CI-benchmarked):
+
+- ~12 min vs ~18 min wall-clock on the 424k-message exact-score run.
+- ~74.5% dominant-label agreement between quantized and fp32 outputs on a
+  stratified probe sample (the source notes systematic surprise/love → joy
+  flips).
+
+Note that the result-cache key does **not** include this flag
+(`result_cache.py:78-105`), so toggling quantization neither invalidates nor
+re-keys existing entries — delete the cache directory to force a re-score when
+switching modes on an already-cached file.
 
 ## Result cache
 

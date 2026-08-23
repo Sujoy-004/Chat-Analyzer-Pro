@@ -164,6 +164,9 @@ appears once the models are installed.
   = score every message exactly); on piped/CI runs they auto-sample instead.
   Sampled scoring is deterministic and labels the result "based on a sample
   of N of M messages".
+- **Optional speed knob:** `CHAT_ANALYZER_EMOTION_QUANT=1` int8-quantizes the
+  emotion model for faster exact scoring on very large chats — off by
+  default; see [docs/CONFIGURATION.md](CONFIGURATION.md) before enabling.
 - **Repeat runs are instant with the cache:** `CHAT_ANALYZER_RESULT_CACHE=1`
   opts into a repeat-run result cache (off by default) — re-analyzing the
   same file takes seconds. Full semantics in

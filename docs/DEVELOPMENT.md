@@ -188,7 +188,8 @@ src/chat_analyzer/
 │   ├── network_graph.py   # always-on network analysis + figure
 │   ├── narrative.py       # Tier A heuristic "what is going on" observations (pandas only)
 │   ├── emotion.py         # EmotionAnalyzer — gated behind [nlp]; lazy torch/transformers,
-│   │                      #   sampled scoring (Option C) + parallel worker pool (real pipeline only)
+│   │                      #   sampled scoring (Option C) + parallel worker pool (real pipeline only);
+│   │                      #   truncation-safe batched scoring, opt-in int8 (CHAT_ANALYZER_EMOTION_QUANT)
 │   └── summarizer.py      # ConversationSummarizer (flan-t5-small) — gated behind [nlp], Tier B narrative
 ├── reporting/
 │   ├── pdf_report.py      # legacy PDF report generator (importable, not wired into the CLI)
@@ -340,10 +341,12 @@ Steps:
    matplotlib → base64 PNG data URIs (pipelined via `fig_to_data_uri` /
    `_safe_chart`) and rendered by `report_html.py`.
 4. **Interactive ECharts (optional):** add a builder to `cli/chart_json.py`
-   (`build_chart_specs` is the only entry the pipeline calls) that returns a
-   strictly JSON-serializable option dict; a failed spec is skipped and
-   `write_report` renders the PNG fallback instead — a spec failure must never
-   kill the report.
+   that returns a strictly JSON-serializable option dict — always-on charts
+   go through `build_chart_specs` (the single entry for the base set), while
+   gated charts get their own function called directly by the pipeline
+   (e.g. `build_emotion_spec`, `build_emotion_timeline_spec`); a failed spec
+   is skipped and `write_report` renders the PNG fallback instead — a spec
+   failure must never kill the report.
 5. **Result-cache schema:** if your change alters the shape of
    `AnalysisResults` or the cache-key composition, bump
    `RESULT_CACHE_SCHEMA = 1` in `cli/nlp_gate.py` — the value folds into every
@@ -411,11 +414,40 @@ Exact emotion scoring fans unique-text inference out to a process pool when
   callables, so mocked tests always take the sequential path.
 
 The spawn worker `_score_text_chunk` is module-level and takes only JSON-able
-args (Windows-spawn rule); the model pipeline is built inside the child, torch
-threads are clamped to `cpu_count // workers`, and any pool failure degrades to
-the sequential path. A `@pytest.mark.slow` real-model smoke
-(`tests/test_emotion_parallel.py`) forces the threshold to 1 and asserts spawn
-parity vs sequential when the weights are cached.
+args (Windows-spawn rule); the model pipeline is built inside the child, and
+torch threads are clamped to `cpu_count // workers`. Pool failures get a
+**partial rescue**, not an all-or-nothing fallback: chunk results are consumed
+as they complete, so completed chunks' scores survive a `BrokenProcessPool` or
+a worker exception, and only the lost chunks are re-scored sequentially in the
+parent (`_score_batch`) and merged into the result map — the final
+`{text: scores}` output stays byte-identical to the sequential run. The full
+sequential path runs only when nothing comes back from the pool at all. A
+`@pytest.mark.slow` real-model smoke (`tests/test_emotion_parallel.py`) forces
+the threshold to 1 and asserts spawn parity vs sequential when the weights are
+cached.
+
+Mechanics introduced by the August 2026 performance overhaul — know these
+before touching emotion scoring:
+
+- **Truncation-safe batching:** every scorer call passes `truncation=True`.
+  A <=512-character message can still exceed the model's 512-token position
+  budget (emoji/CJK-dense text) — that mismatch used to hard-crash the
+  DistilBERT forward pass (tensor length 802 vs 512) and kill the worker's
+  whole chunk.
+- **Bounded chunking:** `n_chunks = max(workers * 4, 4)` splits the unique
+  texts into several chunks per worker (idle workers pull the next chunk as
+  they finish), with `_MIN_CHUNK_TEXTS = 512` flooring the chunk size to keep
+  pickle/IPC overhead noise down.
+- **Vectorized write-back:** scored rows land in the `emotion_*` columns via
+  `_write_emotion_columns` — one numpy materialization plus one column
+  assignment per emotion, replacing the old per-row `.at` loop (roughly an
+  order of magnitude faster on 400k+ rows). Preserve this pattern when
+  editing.
+- **Opt-in int8:** `CHAT_ANALYZER_EMOTION_QUANT=1/on/true/yes` (default OFF)
+  dynamic-quantizes the classifier's Linear layers to qint8, identically in
+  the parent process and every spawn child — no effect on mocked scorers or
+  the rule-based fallback. It trades score fidelity for throughput; see the
+  INT8 section in [CONFIGURATION.md](CONFIGURATION.md) before enabling.
 
 ### Result cache
 
