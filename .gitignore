@@ -220,6 +220,9 @@ VERIFICATION.md
 # Agent instructions (local-only, never tracked)
 AGENTS.md
 
+# Private engineering study guide / knowledge base (never committed, never pushed)
+study_guide/
+
 # Database files
 *.db
 *.sqlite
