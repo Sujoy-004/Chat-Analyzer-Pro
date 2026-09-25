@@ -90,18 +90,27 @@ Three mechanisms keep hundred-thousand-message exports tractable:
 
 ## Performance
 
-Measured numbers come from `scripts/benchmark.py`: each `(input, tier)` pair runs in a fresh subprocess through the real user-facing pipeline with the result cache forced off (benchmark results captured 2026-08-14).
+Measured numbers come from `scripts/benchmark.py`: each `(input, tier)` pair runs in a fresh subprocess through the real user-facing pipeline with the result cache forced off.
 
-| Chat size | Tier 1 (no NLP) | Tier 3 (NLP) |
-| --- | --- | --- |
-| 424,826 messages (WhatsApp) | 589.087 s | 1,991.393 s total with 50k-cap auto-sampling — of which emotion scoring was 1,513.878 s |
-| 31,218 messages | 119.428 s | 834.091 s |
-| 3,644 messages | 46.2 s | 134.07 s |
-| 1,014 messages | 18.929 s | 84.879 s |
+### Final authoritative snapshot (2026-09-25)
 
-Developer-reported figures (not produced by the benchmark harness above):
+Current tier-1 (no-NLP) figures, captured in a single locked run of the real user-facing pipeline (parse → insights → report) on the 424,826-message WhatsApp export with the result cache forced off, so every stage reconciles against the same thermal state:
 
-- Large-chat pipeline improved 2401 s → 758 s in commit `8122df9` (2026-08-22 performance overhaul)
+| Metric | Final | Original baseline | Speedup |
+| --- | --- | --- | --- |
+| Full pipeline | **64.3 s** | 243.7 s | **3.79×** |
+| Parsing chat | **3.1 s** | 128.5 s | **41×** |
+| Computing insights | **54.0 s** | 198.0 s | **3.7×** |
+| Sentiment (VADER) | **37.6 s** | 266.5 s | **7.1×** |
+| Throughput | **6,607 messages/s** | — | — |
+| Peak memory (insights) | **3.41 GB** | 5.7 GB | −40% |
+| `strptime()` calls per parse | **0** | 3,823,434 | — |
+
+> **Benchmark caveat:** the CPU thermally throttles (i7-1255U, ~1.7 GHz under load), so cross-session absolute timings can spread roughly ±40%. Treat this single-run snapshot as the authoritative figure; re-run `scripts/benchmark.py` for current numbers.
+
+Historical developer-reported figures (predate the final snapshot; tier-3 NLP/quant, not re-measured here):
+
+- Large-chat pipeline improved 2401 s → 758 s in commit `8122df9` (2026-08-22 performance overhaul); the current no-NLP pipeline is 64.3 s
 - ~1084 s (~18 min) re-measured fp32 full-exact tier-3 run on the 424k-message chat
 - ~12 min on the same chat with `CHAT_ANALYZER_EMOTION_QUANT=1` (int8), with ~74.5% agreement between int8 and fp32 dominant labels on a stratified probe sample
 - ~34 s end-to-end small-chat tier-3 run

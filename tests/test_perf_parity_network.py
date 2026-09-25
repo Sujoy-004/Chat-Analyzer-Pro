@@ -167,3 +167,52 @@ def test_network_threshold_prunes_low_weight_edges():
     assert set(actual.nodes()) == set(reference.nodes())
     assert _edge_items(actual) == _edge_items(reference)
     assert list(actual.edges()) == []
+
+
+# ============================================================================
+# compute-once regression: network_figure reuses analyze_network's result
+# ============================================================================
+
+import io
+from pathlib import Path
+
+import pytest
+
+from chat_analyzer.analysis import network_graph as network_graph_module
+from chat_analyzer.cli.pipeline import run_pipeline
+
+try:
+    from rich.console import Console
+except ImportError:
+    Console = None
+
+
+def test_network_computed_once_per_pipeline(monkeypatch):
+    """run_pipeline computes analyze_network exactly once — network_figure
+    reuses the result instead of re-running the full graph build (betweenness,
+    PageRank, community detection)."""
+    if Console is None:
+        pytest.skip("rich not installed")
+
+    real = network_graph_module.analyze_network
+    calls = {"count": 0}
+
+    def counting_wrapper(df, weight_threshold=0):
+        calls["count"] += 1
+        return real(df, weight_threshold=weight_threshold)
+
+    monkeypatch.setattr(network_graph_module, "analyze_network", counting_wrapper)
+
+    sample = Path(__file__).resolve().parent.parent / "data" / "sample_chats" / "whatsapp_sample.txt"
+    assert sample.exists(), "sample chat fixture missing"
+
+    console = Console(file=io.StringIO(), force_terminal=False)
+    results = run_pipeline(sample, console, nlp_enabled=False)
+
+    assert calls["count"] == 1, (
+        f"analyze_network ran {calls['count']}x — network_figure must reuse "
+        "run_pipeline's computed result, not re-run the graph build"
+    )
+    assert isinstance(results["network"]["density"], float), (
+        "the pipeline still produced a real network analysis"
+    )

@@ -21,6 +21,16 @@ DATE_FORMATS = (
     "%d/%m/%Y %H:%M:%S", "%m/%d/%Y %H:%M:%S",
 )
 
+# Fast-path shape for the canonical WhatsApp timestamp layouts the caller can
+# produce ("DD/MM/YY HH:MM", 12h with AM/PM, optional seconds, 2/4-digit year).
+# Anything outside this shape falls back to the DATE_FORMATS strptime loop, so
+# direct calls with non-canonical strings keep identical behavior.
+_FIXED_SHAPE = re.compile(
+    r"^(?P<d>\d{1,2})/(?P<m>\d{1,2})/(?P<y>\d{2,4}) "
+    r"(?P<h>\d{1,2}):(?P<min>\d{2})(?::(?P<s>\d{2}))?(?: (?P<p>AM|PM))?$"
+)
+_NOT_HANDLED = object()
+
 
 class WhatsAppParser:
     """
@@ -63,12 +73,73 @@ class WhatsAppParser:
     def _parse_datetime_strict(self, datetime_str: str) -> datetime | None:
         """Parse a WhatsApp timestamp strictly — None on total failure.
 
+        Fast path: WhatsApp exports use a small fixed set of layouts (24h
+        "DD/MM/YY HH:MM", 12h with AM/PM, optional seconds, 2/4-digit year),
+        parsed directly here instead of running datetime.strptime's per-call
+        regex engine (up to 16 formats for every message). Anything outside
+        the fast-path shapes falls back to the identical strptime loop.
+
         Never falls back to fabricating a current timestamp: an unparseable
         date is corrupt data and must be counted as skipped (D-15).
         """
+        parsed = self._parse_fast(datetime_str)
+        if parsed is not _NOT_HANDLED:
+            return parsed
         for fmt in DATE_FORMATS:
             try:
                 return datetime.strptime(datetime_str, fmt)  # noqa: DTZ007 - WhatsApp exports carry no timezone; the naive datetime is deliberate and normalized to naive UTC downstream
+            except ValueError:
+                continue
+        return None
+
+    @staticmethod
+    def _parse_fast(datetime_str: str) -> object:
+        """Direct conversion for canonical WhatsApp timestamp shapes.
+
+        Mirrors the DATE_FORMATS strptime loop exactly for these strings:
+        - 2-digit year maps POSIX-style (<=68 -> 2000+, else 1900+); a 4-digit
+          year is any the datetime constructor accepts (1..9999).
+        - 12h clock requires hour 1-12 and an uppercase AM/PM (what strptime
+          %p accepts in the C locale); 24h accepts hour 0-23.
+        - minute/second must be 0-59; strptime rejects 60+ via datetime.
+        - ambiguous day/month is tried day-first first, matching DATE_FORMATS
+          order.
+        Returns _NOT_HANDLED for strings outside the fast-path shapes so the
+        caller runs the strptime fallback.
+        """
+        m = _FIXED_SHAPE.fullmatch(datetime_str)
+        if m is None:
+            return _NOT_HANDLED
+        d, mo, y = m.group("d"), m.group("m"), m.group("y")
+        p = m.group("p")
+        if len(y) not in (2, 4):
+            return None
+        if len(y) == 2:
+            yi = int(y)
+            year = 2000 + yi if yi <= 68 else 1900 + yi
+        else:
+            year = int(y)
+        hh = int(m.group("h"))
+        mi = int(m.group("min"))
+        se = int(m.group("s")) if m.group("s") is not None else 0
+        if p is not None:
+            if not 1 <= hh <= 12:
+                return None
+            if p == "PM" and hh != 12:
+                hh += 12
+            elif p == "AM" and hh == 12:
+                hh = 0
+        elif not 0 <= hh <= 23:
+            return None
+        if not 0 <= mi <= 59:
+            return None
+        if not 0 <= se <= 59:
+            return None
+        for day, mon in ((int(d), int(mo)), (int(mo), int(d))):
+            if not 1 <= mon <= 12:
+                continue
+            try:
+                return datetime(year, mon, day, hh, mi, se)  # noqa: DTZ001 - naive is deliberate, identical to the strptime path it replaces; normalized to naive UTC downstream
             except ValueError:
                 continue
         return None

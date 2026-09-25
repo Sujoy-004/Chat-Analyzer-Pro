@@ -81,9 +81,14 @@ def _friendly_error(chat_file: Path, exc: Exception) -> str:
 
 def _version_callback(value: bool) -> None:
     if value:
-        from importlib.metadata import version
+        from importlib.metadata import PackageNotFoundError, version
 
-        typer.echo(f"chat-analyzer {version('chat-analyzer-pro')}")
+        try:
+            ver = version("chat-analyzer-pro")
+        except PackageNotFoundError:
+            typer.echo("chat-analyzer (dev \u2014 package metadata not found)")
+        else:
+            typer.echo(f"chat-analyzer {ver}")
         raise typer.Exit()
 
 

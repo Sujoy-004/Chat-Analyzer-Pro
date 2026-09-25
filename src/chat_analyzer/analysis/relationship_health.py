@@ -356,11 +356,14 @@ def calculate_relationship_health_score(
 # DAY 9: ROLLING HEALTH SCORE TRACKER
 # ============================================================================
 
-# Parallelize the per-window metric loop for large chats: every 7-day window is
-# independent, so the O(dates) metric recompute becomes embarrassingly parallel.
-# Below this many candidate windows, multiprocessing spawn overhead exceeds the
-# win — keep the identical sequential loop (deterministic, cheap for small chats).
-_ROLLING_PARALLEL_MIN_DATES = 128
+# Production always takes the incremental sliding-window path below: each window
+# is scored in ~1ms from columns computed ONCE over the full frame, so a process
+# pool adds only pickling/IPC cost. The multiprocessing branch is retained as
+# the reference/verification path (it runs the unmodified _rolling_window_score
+# recompute) and is reached only when tests force the threshold low — e.g.
+# test_rolling_health_parallel_matches_sequential sets it to 1 to prove the
+# sequential incremental output is identical to the parallel recompute.
+_ROLLING_PARALLEL_MIN_DATES = 2**62
 
 # Workers are modest (2 P-cores + 8 E-cores on the target): more churns CPU and
 # memory without a faster fan-out.
@@ -368,7 +371,10 @@ _ROLLING_PARALLEL_WORKERS = 4
 
 
 def _rolling_window_score(args) -> dict | None:
-    """Score ONE rolling-health window (worker entry for parallel path)."""
+    """Score ONE rolling-health window (reference/worker entry for the forced
+    parallel verification path). Full per-window recompute, bit-identical to the
+    boolean-mask original — this is the parity gold standard `_rolling_window_fast`
+    must match."""
     window_df, current_date, min_messages = args
     if len(window_df) < min_messages:
         return None
@@ -390,6 +396,157 @@ def _rolling_window_score(args) -> dict | None:
         return {'error': current_date, 'message': str(e)}
 
 
+def _collect_health_scored(scored: list[dict | None]) -> pd.DataFrame:
+    """Build the output DataFrame from scored window dicts, skipping below
+    threshold (None) and error windows exactly like the original code."""
+    health_scores = []
+    for r in scored:
+        if r is None:
+            continue
+        if 'error' in r:
+            logger.warning(f"Failed to calculate health score for {r['error']}: {r['message']}")
+            continue
+        health_scores.append(r)
+    return pd.DataFrame(health_scores)
+
+
+def _date_row_spans(date_series: pd.Series) -> dict:
+    """Map each distinct date to its trailing-exclusive [start, stop) row offsets
+    within a date-sorted frame. Trailing NaT rows (unsortable, never inside any
+    window) fall outside the last span."""
+    spans: dict = {}
+    limit = len(date_series)
+    start = None
+    prev = None
+    for i in range(limit):
+        d = date_series.iloc[i]
+        if pd.isna(d):
+            limit = i
+            break
+        if d != prev:
+            if prev is not None:
+                spans[prev] = (start, i)
+            start = i
+            prev = d
+    if prev is not None:
+        spans[prev] = (start, limit)
+    return spans
+
+
+def _rolling_window_fast(window_df: pd.DataFrame, current_date) -> dict | None:
+    """Score ONE rolling-health window from columns already computed once over
+    the full frame (see calculate_rolling_health_score). Mirrors
+    _rolling_window_score's metric math bit-for-bit while skipping its redundant
+    per-window identify_conversation_starters pass and the dead median/std/pair
+    aggregation the original response block recomputed.
+
+    The window frame carries is_conversation_starter, prev_sender and
+    time_diff_minutes from the single full-frame identify pass. Those are
+    WINDOW-INVARIANT: every window's first row is the first message of its oldest
+    date, which the day-change rule already marks as a starter (the global row 0
+    is force-marked), so the window-local reset could only re-force a flag that
+    is already True; every non-starter row's diff is against an in-window
+    predecessor and therefore identical to the full-frame value. Every live
+    value below is produced by the same pandas routine over the same row set as
+    the reference, so output is bit-identical.
+    """
+    try:
+        n = len(window_df)
+        starters = window_df['is_conversation_starter']
+
+        # calculate_initiator_ratio -> balance_score
+        starter_counts = window_df.loc[starters, 'sender'].value_counts()
+        total_conversations = starters.sum()
+        if total_conversations == 0:
+            initiation_score = 0.0
+        elif len(starter_counts) >= 2:
+            initiation_score = 1 - abs(starter_counts.values[0] - starter_counts.values[1]) / total_conversations
+        else:
+            initiation_score = 0.0
+
+        # analyze_response_patterns -> overall mean + rounded per-responder means
+        valid_response = (
+            (~starters)
+            & (window_df['prev_sender'] != window_df['sender'])
+            & window_df['time_diff_minutes'].notna()
+        )
+        response_times = window_df.loc[valid_response, 'time_diff_minutes']
+        if len(response_times) == 0:
+            responsiveness_score = 0.0
+            response_balance_score = 1.0
+        else:
+            overall_avg_response = response_times.mean()
+            response_means = (
+                window_df.loc[valid_response, ['sender', 'time_diff_minutes']]
+                .groupby('sender')['time_diff_minutes']
+                .mean()
+                .round(2)
+            )
+            if len(response_means) >= 2:
+                avg_times = response_means.values  # alphabetical sender order (groupby sort=True)
+                response_balance = abs(avg_times[0] - avg_times[1])
+                responsiveness_score = max(0, 1 - (overall_avg_response / 120))
+                response_balance_score = max(0, 1 - (response_balance / 60))
+            else:
+                response_balance = 0
+                responsiveness_score = max(0, 1 - (overall_avg_response / 120))
+                response_balance_score = 1.0
+
+        # calculate_dominance_scores -> composite_dominance_score
+        message_counts = window_df['sender'].value_counts()
+        if len(message_counts) >= 2:
+            message_dominance_score = 1 - abs(message_counts.values[0] - message_counts.values[1]) / n
+        else:
+            message_dominance_score = 0.0
+
+        if 'message_length' in window_df.columns:
+            length_distribution = window_df.groupby('sender')['message_length'].sum()
+            total_chars = window_df['message_length'].sum()
+            if len(length_distribution) >= 2 and total_chars > 0:
+                length_dominance_score = 1 - abs(length_distribution.values[0] - length_distribution.values[1]) / total_chars
+            else:
+                length_dominance_score = 1.0
+        else:
+            length_dominance_score = 1.0
+
+        is_ending = starters.shift(-1, fill_value=False) | (np.arange(n) == n - 1)
+        conversation_endings = window_df.loc[is_ending, 'sender'].tolist()
+        ending_counts = pd.Series(conversation_endings).value_counts()
+        if len(ending_counts) >= 2:
+            control_balance = 1 - abs(ending_counts.values[0] - ending_counts.values[1]) / len(conversation_endings)
+        else:
+            control_balance = 0.0
+
+        composite_dominance_score = (message_dominance_score + length_dominance_score + control_balance) / 3
+
+        # calculate_relationship_health_score with the default balanced weights
+        overall_score = (
+            0.25 * initiation_score
+            + 0.35 * responsiveness_score
+            + 0.20 * response_balance_score
+            + 0.20 * composite_dominance_score
+        )
+        if overall_score >= 0.90:
+            grade = "EXCELLENT"
+        elif overall_score >= 0.80:
+            grade = "VERY GOOD"
+        elif overall_score >= 0.70:
+            grade = "GOOD"
+        elif overall_score >= 0.60:
+            grade = "FAIR"
+        else:
+            grade = "NEEDS IMPROVEMENT"
+
+        return {
+            'date': current_date,
+            'health_score': overall_score,
+            'grade': grade,
+            'message_count': n,
+        }
+    except Exception as e:  # noqa: BLE001 - a failing window is skipped, never allowed to crash the series
+        return {'error': current_date, 'message': str(e)}
+
+
 def calculate_rolling_health_score(
     df: pd.DataFrame,
     window_days: int = 7,
@@ -398,6 +555,12 @@ def calculate_rolling_health_score(
     """
     Calculate rolling relationship health score over time.
     
+    Incremental sliding-window: one identify_conversation_starters pass over the
+    full frame replaces the per-window passes (its starter/diff/prev columns are
+    window-invariant), and each window is then a positional slice of that
+    precomputed frame scored by _rolling_window_fast. The O(dates^2) concat
+    window build, per-window re-sort/re-derivation, and IPC are gone.
+
     Args:
         df: Prepared DataFrame with conversation metrics
         window_days: Rolling window size in days
@@ -410,43 +573,58 @@ def calculate_rolling_health_score(
     df['datetime'] = pd.to_datetime(df['datetime'])
     df = df.sort_values('datetime')
     
-    # Group by date
+    # Group by date (NaT datetimes are inert — they sort ito no window and only
+    # crash the original sorted(date.unique()) call).
     df['date'] = df['datetime'].dt.date
-    dates = sorted(df['date'].unique())
-    by_date = {d: g.reset_index(drop=True) for d, g in df.groupby('date')}
-    
-    # Build window frames once (parent side). Window build is O(dates^2) in the
-    # trivial date comparisons but ~2s even at ~1400 dates; the per-window metric
-    # recompute is the real cost and is what gets parallelized. Order preserved.
-    window_args = []
-    for current_date in dates:
-        window_start = current_date - timedelta(days=window_days)
-        window_df = pd.concat([by_date[d] for d in dates if window_start <= d <= current_date])
-        window_args.append((window_df, current_date, min_messages))
-    
-    if len(window_args) >= _ROLLING_PARALLEL_MIN_DATES:
+    dates = sorted(d for d in df['date'].unique() if pd.notna(d))
+    if not dates:
+        return pd.DataFrame([])
+
+    # Forced-reference parallel path (see _ROLLING_PARALLEL_MIN_DATES): reruns the
+    # ORIGINAL per-window recompute in a process pool. Never taken at the default
+    # threshold; exercised by the sequential == parallel parity tests.
+    if len(dates) >= _ROLLING_PARALLEL_MIN_DATES:
         try:
+            by_date = {d: g.reset_index(drop=True) for d, g in df.groupby('date')}
+            window_args = []
+            for current_date in dates:
+                window_start = current_date - timedelta(days=window_days)
+                window_df = pd.concat([by_date[d] for d in dates if window_start <= d <= current_date])
+                window_args.append((window_df, current_date, min_messages))
+
             import multiprocessing as mp
             from concurrent.futures import ProcessPoolExecutor
 
             max_workers = min(_ROLLING_PARALLEL_WORKERS, mp.cpu_count() or 1)
             with ProcessPoolExecutor(max_workers=max_workers) as pool:
                 scored = list(pool.map(_rolling_window_score, window_args, chunksize=16))
+            return _collect_health_scored(scored)
         except Exception:
             logger.exception("parallel rolling-health failed; using sequential")
-            scored = [_rolling_window_score(a) for a in window_args]
-    else:
-        scored = [_rolling_window_score(a) for a in window_args]
-    
+
+    # Incremental sequential path (production default).
+    full = identify_conversation_starters(df.reset_index(drop=True))
+    spans = _date_row_spans(full['date'])
+
     health_scores = []
-    for r in scored:
+    lo_idx = 0
+    n_dates = len(dates)
+    for current_date in dates:
+        window_start = current_date - timedelta(days=window_days)
+        while lo_idx < n_dates and dates[lo_idx] < window_start:
+            lo_idx += 1
+        first_date = dates[lo_idx] if lo_idx < n_dates else current_date
+        lo, hi = spans[first_date][0], spans[current_date][1]
+        if hi - lo < min_messages:
+            continue
+        r = _rolling_window_fast(full.iloc[lo:hi].reset_index(drop=True), current_date)
         if r is None:
             continue
         if 'error' in r:
             logger.warning(f"Failed to calculate health score for {r['error']}: {r['message']}")
             continue
         health_scores.append(r)
-    
+
     return pd.DataFrame(health_scores)
 
 

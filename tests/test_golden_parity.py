@@ -19,9 +19,7 @@ rename (e.g. moving media_messages out of stats) trips the key-assert first.
 """
 
 import io
-import sys
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 from rich.console import Console
@@ -39,29 +37,6 @@ FIXTURES = [
     ("whatsapp_sample.csv", DATA / "whatsapp_sample.txt"),
     ("telegram_sample.csv", DATA / "telegram_sample.json"),
 ]
-
-
-@pytest.fixture(autouse=True)
-def _no_transformers(monkeypatch):
-    """Guarantee the no-NLP tier is deterministic and fast on every machine.
-
-    chat_analyzer/analysis/sentiment.py eagerly executes
-    ``from transformers import pipeline`` at module import time when the
-    ``transformers`` package is installed (line 47). On a dev machine with
-    the [nlp] extras installed that import alone costs ~15-25s per fresh
-    pytest process — even though nlp_enabled=False never touches it. A clean
-    clone without the extras instead gets the fast ImportError path.
-
-    This fixture reproduces that clean-clone ImportError by pre-seeding
-    sys.modules with an empty stand-in (the `from transformers import ...`
-    attribute miss raises the same ImportError sentiment.py catches). The
-    monkeypatch restores sys.modules after each test, so other tests are
-    unaffected; the module-level import of sentiment.py only happens once
-    and is then cached for the session.
-    """
-    if "transformers" in sys.modules:
-        sys.modules.pop("transformers")
-    monkeypatch.setitem(sys.modules, "transformers", SimpleNamespace())
 
 
 def _console() -> Console:

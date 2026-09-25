@@ -194,7 +194,17 @@ def run_pipeline(path: Path, console, nlp_enabled: bool | None = None) -> Analys
 
         parse_report = ParseReport(source=source, **counts)
 
-        df = messages_to_dataframe(rows)
+        # COR-02: rows the builder drops (missing/NaT datetime) are surfaced
+        # here, not folded into the parser counters — skipped_lines stays the
+        # parsers' own tally and ParseReport(source=source, **counts) keeps its
+        # exact shape. Always 0 on the strict-parser paths (those parsers emit
+        # a real datetime or never put the row in `rows`).
+        df, dropped_rows = messages_to_dataframe(rows, return_counts=True)
+        if dropped_rows:
+            console.print(
+                f"[WARN] Dropped {dropped_rows} message(s) "
+                "with no parseable datetime"
+            )
         if df.empty:
             raise ValueError("No messages could be parsed from this file")
 
@@ -319,7 +329,7 @@ def run_pipeline(path: Path, console, nlp_enabled: bool | None = None) -> Analys
                         )
                     ),
                     "health": _safe_chart(viz.plot_relationship_health_trend(health_trend_df)),
-                    "network": _safe_chart(network_figure(df)),
+                    "network": _safe_chart(network_figure(network_res)),
                 }
 
                 # Interactive ECharts specs for the same charts (charts_json).

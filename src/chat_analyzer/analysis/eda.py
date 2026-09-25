@@ -1,3 +1,4 @@
+import itertools
 import re
 from collections import Counter
 
@@ -72,21 +73,23 @@ class ChatEDA:
         }
     
     def analyze_content(self):
-        """Analyze message content and vocabulary"""
-        # Word frequency analysis
-        all_text = ' '.join(self.df['message'].apply(self._clean_text))
-        words = [w for w in all_text.split() if len(w) > 2]
-        word_freq = Counter(words)
-        
-        # Emoji analysis
-        all_emojis = []
-        for msg in self.df['message']:
-            emojis = re.findall(r'[😀-🙏🌀-🗿]', str(msg))
-            all_emojis.extend(emojis)
-        
+        """Analyze message content and vocabulary (vectorized)."""
+        msgs = self.df['message']
+        cleaned = msgs.where(~msgs.isna() & (msgs != '<Media omitted>'), pd.NA)
+        cleaned = cleaned.str.lower().str.replace(r'[^\w\s]', ' ', regex=True)
+        tok = cleaned.str.split().explode().dropna()
+        tok = tok[tok.str.len() > 2]
+        counts = tok.value_counts()
+        # Counter key order = first occurrence in the token stream (ties in most_common break on it); do not sort.
+        first_seen = tok.drop_duplicates(keep='first')
+        word_freq = Counter(dict(zip(first_seen.tolist(), counts.loc[first_seen.tolist()].astype(int).tolist())))
+
+        emoji_rows = self.df['message'].str.findall(r'[😀-🙏🌀-🗿]').dropna()
+        emoji_frequency = Counter(itertools.chain.from_iterable(emoji_rows))
+
         return {
             'word_frequency': word_freq,
-            'emoji_frequency': Counter(all_emojis),
+            'emoji_frequency': emoji_frequency,
             'total_words': sum(self.df['word_count']),
             'unique_words': len(word_freq)
         }

@@ -155,10 +155,11 @@ def parse_zip_with_report(
     same contract run_pipeline expects from the single-file parsers, so the
     downstream pipeline is unchanged. counts is the SUM across chosen
     transcripts; source is "whatsapp", "telegram", or "mixed" (Item C: keep
-    both formats). chosen_names is the sorted member-name list of the chosen
-    transcripts (the same list the merge loop iterates) — it rides in the
-    result-cache key so a different transcript selection invalidates the
-    cache (04-08). media_messages is the one zip-level exception (D3/P17): it
+    both formats). chosen_names is the sorted member-name list of ONLY the
+    transcripts that were successfully parsed into the merged rows — a chosen
+    transcript that failed to parse is absent, so it rides in the result-cache
+    key (04-08) without misreporting the failed member as analyzed.
+    media_messages is the one zip-level exception (D3/P17): it
     starts at the merged transcripts' sum (the parsers report none, so 0) and
     is then ADDED the real media-file count measured once from the whole
     archive.
@@ -184,12 +185,14 @@ def parse_zip_with_report(
         "media_messages": 0,
     }
     kinds = set()
+    parsed_names: list[str] = []
 
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
         for member, kind in chosen:
             try:
                 member_rows, member_counts = _parse_member(zip_path, member, kind, tmp)
+                parsed_names.append(member)
             except Exception:  # noqa: BLE001 - one bad transcript must not tank the batch
                 console.print(f"[WARN] Skipped transcript: {member} (failed to parse).")
                 continue
@@ -209,5 +212,5 @@ def parse_zip_with_report(
         raise ValueError("No messages could be parsed from the selected transcripts")
 
     source = "mixed" if len(kinds) > 1 else next(iter(kinds))
-    chosen_names = sorted(member for member, _ in chosen)
+    chosen_names = sorted(parsed_names)
     return rows, counts, source, chosen_names

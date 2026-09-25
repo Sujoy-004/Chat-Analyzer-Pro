@@ -340,7 +340,9 @@ def _to_naive_utc(value) -> datetime:
     return dt
 
 
-def messages_to_dataframe(messages: list[dict]) -> pd.DataFrame:
+def messages_to_dataframe(
+    messages: list[dict], return_counts: bool = False
+) -> pd.DataFrame | tuple[pd.DataFrame, int]:
     """Build the canonical analysis DataFrame from message dicts (Anti-Pattern 5).
 
     THE single dict->df builder for the whole pipeline — no second copy in
@@ -348,8 +350,17 @@ def messages_to_dataframe(messages: list[dict]) -> pd.DataFrame:
     chat visualizer REQUIRES 'timestamp'), date, hour, sender, message,
     message_length, source and uid. Rows with no parseable datetime are
     dropped (caller owns skip accounting); nothing is fabricated.
+
+    COR-02: those drops used to be silent, invisible to the parse statistics.
+    With return_counts=True the function returns (df, dropped_rows), where
+    dropped_rows counts exactly the rows THIS function dropped — missing
+    datetime/timestamp/date+time, or a null/NaT datetime (which previously
+    crashed on dt.date()). Rows the parsers already counted as skipped_lines
+    never reach this builder, so nothing is ever double-counted; healthy
+    parser input yields dropped_rows == 0.
     """
     rows = []
+    dropped_rows = 0
     for m in messages:
         dt = m.get("datetime") or m.get("timestamp")
         if dt is None:
@@ -359,7 +370,14 @@ def messages_to_dataframe(messages: list[dict]) -> pd.DataFrame:
             elif m.get("date") and m.get("time"):
                 dt = pd.to_datetime(f"{m['date']} {m['time']}")
             else:
+                dropped_rows += 1
                 continue
+
+        if pd.isna(dt):
+            # Null/NaT datetime — genuinely unparseable, counted and dropped
+            # instead of crashing on dt.date() below (COR-02).
+            dropped_rows += 1
+            continue
 
         dt = _to_naive_utc(dt)
         text = m.get("text") or m.get("message") or ""
@@ -379,6 +397,8 @@ def messages_to_dataframe(messages: list[dict]) -> pd.DataFrame:
     df = pd.DataFrame(rows)
     if not df.empty:
         df["datetime"] = pd.to_datetime(df["datetime"])
+    if return_counts:
+        return df, dropped_rows
     return df
 
 

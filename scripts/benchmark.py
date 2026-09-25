@@ -58,15 +58,10 @@ TIER_ENV = {"basic": "1", "nlp": "3"}
 _TIERS = ("basic", "nlp")
 _STAGE_LABELS = ("Parsing chat", "Computing insights", "Analyzing emotions", "Generating narrative")
 
-# The author's real chat exports. Every entry is verified with Path.is_file()
-# and skipped (with a warning) when absent, so a clone without these files can
-# still run the harness against its own inputs via --inputs.
-DEFAULT_INPUTS = (
-    Path.home() / "Downloads" / "WhatsApp Chat with Suraj.txt",
-    Path.home() / "Downloads" / "WhatsApp Chat with Anu.zip",
-    Path.home() / "Downloads" / "WhatsApp Chat with Keblasss \u2615.zip",
-    Path.home() / "Downloads" / "WhatsApp Chat with Anuradha Shaw.zip",
-)
+# No default chat exports are bundled (privacy: real chat filenames must not
+# ship in the repo). Pass your own inputs via --inputs; the harness runs
+# nothing and exits 0 when no input files exist.
+DEFAULT_INPUTS: tuple[Path, ...] = ()
 
 BUSY_NOTE = (
     "Machine NOT idle during the benchmark: VS Code and opencode were running "
@@ -372,7 +367,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--inputs",
         nargs="+",
-        help="Chat export paths to benchmark (default: the 4 author chats).",
+        help="Chat export paths to benchmark (required on clones; no defaults ship).",
     )
     parser.add_argument(
         "--tiers",

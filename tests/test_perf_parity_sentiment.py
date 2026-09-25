@@ -15,8 +15,10 @@ the workers spawn fresh interpreters, which is exactly why the top-level
 helpers (_vader_score_batch, _score_vader_parallel) are importable.
 """
 
+import importlib
 import io
 import os
+import sys
 from contextlib import redirect_stdout
 
 # Headless-first (same guarantee as test_analysis.py): sentiment.py imports
@@ -171,3 +173,26 @@ def test_uninitialized_analyzer_returns_all_neutral(monkeypatch):
     assert (actual['vader_neu'] == 1).all()
     assert (actual['vader_neg'] == 0).all()
     assert (actual['vader_sentiment'] == 'Neutral').all()
+
+
+def test_import_does_not_pull_transformers():
+    """Regression: importing sentiment must not eagerly import transformers/torch.
+
+    Before the fix, sentiment.py executed ``from transformers import pipeline``
+    at module import time (~15-25s and hundreds of MB when torch is present)
+    even though every CLI path pins TRANSFORMERS_AVAILABLE = False. The eager
+    import is now an unconditional ``TRANSFORMERS_AVAILABLE = False``.
+
+    Most meaningful in a fresh interpreter: here sentiment is already imported
+    at module top, so importlib returns the cached module without re-executing
+    its body — the sys.modules assertion then only proves the import added no
+    NEW transformers/torch modules (pre-existing keys are ignored).
+    """
+    before = set(sys.modules)
+    module = importlib.import_module("chat_analyzer.analysis.sentiment")
+    added = {
+        m for m in set(sys.modules) - before
+        if m.split(".")[0] in ("transformers", "torch")
+    }
+    assert module.TRANSFORMERS_AVAILABLE is False
+    assert not added, f"importing sentiment pulled {sorted(added)}"

@@ -37,18 +37,9 @@ if not _in_spawn_child():
 else:
     TEXTBLOB_AVAILABLE = False
 
-# Skip the deep transformers/torch import inside multiprocessing spawn children
-# entirely: workers only score with VADER, never the HF pipeline, so importing torch
-# per worker would add ~5-15s and hundreds of MB each (ME-01).
-if _in_spawn_child():
-    TRANSFORMERS_AVAILABLE = False
-else:
-    try:
-        from transformers import pipeline
-        TRANSFORMERS_AVAILABLE = True
-    except ImportError:
-        TRANSFORMERS_AVAILABLE = False
-        print("⚠️ Transformers not available. Install with: pip install transformers torch")
+# Every CLI path runs the VADER-only tier (pipeline.py pins this flag False), so a
+# module-load transformers/torch import (~15-25s, hundreds of MB) would be pure waste.
+TRANSFORMERS_AVAILABLE = False
 
 class SentimentConfig:
     """Configuration settings for sentiment analysis"""
@@ -72,9 +63,11 @@ def initialize_analyzers(hf_model=None):
         _vader_analyzer = SentimentIntensityAnalyzer()
         print("✅ VADER analyzer loaded")
     
-    # Initialize HuggingFace
+    # Initialize HuggingFace (import deferred: only loaded if the flag is ever
+    # flipped back on, so the default tier never pays the torch/transformers cost)
     if TRANSFORMERS_AVAILABLE:
         try:
+            from transformers import pipeline
             model = hf_model or SentimentConfig.HF_MODEL
             _hf_analyzer = pipeline(
                 "sentiment-analysis",
@@ -191,11 +184,14 @@ def categorize_sentiment(score, positive_threshold=None, negative_threshold=None
 
 _VADER_PARALLEL_THRESHOLD = 20_000
 
-# Workers are capped at 4, not cpu_count: the target machine is a hybrid
-# 2P+8E-core laptop where >4 spawn workers neither score faster (~50s at 4
-# AND 8 workers) nor reduce memory/spawn churn — and it makes in-context
-# timings far less load-sensitive (ME-02).
-_VADER_PARALLEL_WORKERS = 4
+# Worker count is pinned at 2, not cpu_count: on the target hybrid 2P+8E-core
+# laptop (ME-02), a per-worker-count scan over the 424,826-message corpus
+# (2026-09-25) showed near-linear scaling only up to 2 workers (1.97x, 99%
+# efficiency - both land on the only two P-cores); 4/6/8 workers land on the
+# weaker E-cores and score no faster (1.86x/1.87x/1.90x) while adding spawn/IPC
+# churn. 2 is the measured peak for this topology; spawn+IPC is ~0.6s, so the
+# pool is work-bound, not transport-bound.
+_VADER_PARALLEL_WORKERS = 2
 
 
 def _vader_score_batch(strings: list[str]) -> list[dict]:
@@ -307,7 +303,9 @@ def add_sentiment_analysis(df, message_col='message', initialize_first=True):
     if 'hf_sentiment' in df.columns:
         sentiment_cols.append('hf_sentiment')
     
-    if sentiment_cols:
+    if len(sentiment_cols) == 1:
+        df['consensus_sentiment'] = df[sentiment_cols[0]]
+    elif sentiment_cols:
         df['consensus_sentiment'] = df[sentiment_cols].mode(axis=1)[0]
     
     print("✅ Sentiment analysis complete!")
