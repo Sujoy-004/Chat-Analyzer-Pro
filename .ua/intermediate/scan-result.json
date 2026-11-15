@@ -1,0 +1,750 @@
+{
+ "name": "chat-analyzer-pro",
+ "description": "Analyzes WhatsApp and Telegram chat exports from the terminal, producing message statistics, sentiment, relationship, and network insights in a single self-contained HTML report. Note: this project has over 100 source files; consider scoping analysis to a subdirectory for faster results.",
+ "languages": [
+  "csv",
+  "echarts",
+  "echarts-gl",
+  "html",
+  "ipynb",
+  "json",
+  "markdown",
+  "powershell",
+  "python",
+  "toml",
+  "txt",
+  "yaml"
+ ],
+ "frameworks": [
+  "GitHub Actions",
+  "pytest"
+ ],
+ "files": [
+  {
+   "path": ".github/workflows/ci.yml",
+   "language": "yaml",
+   "sizeLines": 93,
+   "fileCategory": "infra"
+  },
+  {
+   "path": "README.md",
+   "language": "markdown",
+   "sizeLines": 167,
+   "fileCategory": "docs"
+  },
+  {
+   "path": "data/processed/example_parsed.csv",
+   "language": "csv",
+   "sizeLines": 28,
+   "fileCategory": "data"
+  },
+  {
+   "path": "data/sample_chats/telegram_sample.json",
+   "language": "json",
+   "sizeLines": 41,
+   "fileCategory": "config"
+  },
+  {
+   "path": "data/sample_chats/whatsapp_sample.txt",
+   "language": "txt",
+   "sizeLines": 29,
+   "fileCategory": "docs"
+  },
+  {
+   "path": "docs/ARCHITECTURE.md",
+   "language": "markdown",
+   "sizeLines": 538,
+   "fileCategory": "docs"
+  },
+  {
+   "path": "docs/CONFIGURATION.md",
+   "language": "markdown",
+   "sizeLines": 361,
+   "fileCategory": "docs"
+  },
+  {
+   "path": "docs/DEVELOPMENT.md",
+   "language": "markdown",
+   "sizeLines": 580,
+   "fileCategory": "docs"
+  },
+  {
+   "path": "docs/GETTING-STARTED.md",
+   "language": "markdown",
+   "sizeLines": 216,
+   "fileCategory": "docs"
+  },
+  {
+   "path": "docs/TESTING.md",
+   "language": "markdown",
+   "sizeLines": 217,
+   "fileCategory": "docs"
+  },
+  {
+   "path": "docs/design_incremental_rolling_health.md",
+   "language": "markdown",
+   "sizeLines": 225,
+   "fileCategory": "docs"
+  },
+  {
+   "path": "notebooks/01_data_parsing.ipynb",
+   "language": "ipynb",
+   "sizeLines": 1264,
+   "fileCategory": "code"
+  },
+  {
+   "path": "notebooks/02_exploratory_analysis.ipynb",
+   "language": "ipynb",
+   "sizeLines": 1331,
+   "fileCategory": "code"
+  },
+  {
+   "path": "notebooks/03_sentiment_emotion.ipynb",
+   "language": "ipynb",
+   "sizeLines": 2890,
+   "fileCategory": "code"
+  },
+  {
+   "path": "notebooks/04_relationship_health.ipynb",
+   "language": "ipynb",
+   "sizeLines": 2564,
+   "fileCategory": "code"
+  },
+  {
+   "path": "notebooks/05_network_graph.ipynb",
+   "language": "ipynb",
+   "sizeLines": 1055,
+   "fileCategory": "code"
+  },
+  {
+   "path": "notebooks/06_summarization.ipynb",
+   "language": "ipynb",
+   "sizeLines": 2363,
+   "fileCategory": "code"
+  },
+  {
+   "path": "notebooks/07_final_integration.ipynb",
+   "language": "ipynb",
+   "sizeLines": 1,
+   "fileCategory": "code"
+  },
+  {
+   "path": "pyproject.toml",
+   "language": "toml",
+   "sizeLines": 43,
+   "fileCategory": "config"
+  },
+  {
+   "path": "scripts/benchmark.py",
+   "language": "python",
+   "sizeLines": 507,
+   "fileCategory": "code"
+  },
+  {
+   "path": "scripts/make_nlp_env.ps1",
+   "language": "powershell",
+   "sizeLines": 49,
+   "fileCategory": "script"
+  },
+  {
+   "path": "src/chat_analyzer/__init__.py",
+   "language": "python",
+   "sizeLines": 27,
+   "fileCategory": "code"
+  },
+  {
+   "path": "src/chat_analyzer/__main__.py",
+   "language": "python",
+   "sizeLines": 6,
+   "fileCategory": "code"
+  },
+  {
+   "path": "src/chat_analyzer/analysis/__init__.py",
+   "language": "python",
+   "sizeLines": 29,
+   "fileCategory": "code"
+  },
+  {
+   "path": "src/chat_analyzer/analysis/eda.py",
+   "language": "python",
+   "sizeLines": 145,
+   "fileCategory": "code"
+  },
+  {
+   "path": "src/chat_analyzer/analysis/emotion.py",
+   "language": "python",
+   "sizeLines": 1246,
+   "fileCategory": "code"
+  },
+  {
+   "path": "src/chat_analyzer/analysis/narrative.py",
+   "language": "python",
+   "sizeLines": 519,
+   "fileCategory": "code"
+  },
+  {
+   "path": "src/chat_analyzer/analysis/network_graph.py",
+   "language": "python",
+   "sizeLines": 552,
+   "fileCategory": "code"
+  },
+  {
+   "path": "src/chat_analyzer/analysis/relationship_health.py",
+   "language": "python",
+   "sizeLines": 1369,
+   "fileCategory": "code"
+  },
+  {
+   "path": "src/chat_analyzer/analysis/sentiment.py",
+   "language": "python",
+   "sizeLines": 519,
+   "fileCategory": "code"
+  },
+  {
+   "path": "src/chat_analyzer/analysis/summarizer.py",
+   "language": "python",
+   "sizeLines": 542,
+   "fileCategory": "code"
+  },
+  {
+   "path": "src/chat_analyzer/assets/LICENSE.echarts",
+   "language": "echarts",
+   "sizeLines": 222,
+   "fileCategory": "code"
+  },
+  {
+   "path": "src/chat_analyzer/assets/LICENSE.echarts-gl",
+   "language": "echarts-gl",
+   "sizeLines": 29,
+   "fileCategory": "code"
+  },
+  {
+   "path": "src/chat_analyzer/cli/__init__.py",
+   "language": "python",
+   "sizeLines": 9,
+   "fileCategory": "code"
+  },
+  {
+   "path": "src/chat_analyzer/cli/adapters.py",
+   "language": "python",
+   "sizeLines": 418,
+   "fileCategory": "code"
+  },
+  {
+   "path": "src/chat_analyzer/cli/chart_json.py",
+   "language": "python",
+   "sizeLines": 549,
+   "fileCategory": "code"
+  },
+  {
+   "path": "src/chat_analyzer/cli/contracts.py",
+   "language": "python",
+   "sizeLines": 53,
+   "fileCategory": "code"
+  },
+  {
+   "path": "src/chat_analyzer/cli/main.py",
+   "language": "python",
+   "sizeLines": 316,
+   "fileCategory": "code"
+  },
+  {
+   "path": "src/chat_analyzer/cli/nlp_gate.py",
+   "language": "python",
+   "sizeLines": 457,
+   "fileCategory": "code"
+  },
+  {
+   "path": "src/chat_analyzer/cli/pipeline.py",
+   "language": "python",
+   "sizeLines": 522,
+   "fileCategory": "code"
+  },
+  {
+   "path": "src/chat_analyzer/cli/render.py",
+   "language": "python",
+   "sizeLines": 84,
+   "fileCategory": "code"
+  },
+  {
+   "path": "src/chat_analyzer/cli/report_html.py",
+   "language": "python",
+   "sizeLines": 469,
+   "fileCategory": "code"
+  },
+  {
+   "path": "src/chat_analyzer/cli/result_cache.py",
+   "language": "python",
+   "sizeLines": 237,
+   "fileCategory": "code"
+  },
+  {
+   "path": "src/chat_analyzer/cli/zip_input.py",
+   "language": "python",
+   "sizeLines": 215,
+   "fileCategory": "code"
+  },
+  {
+   "path": "src/chat_analyzer/ingest/__init__.py",
+   "language": "python",
+   "sizeLines": 18,
+   "fileCategory": "code"
+  },
+  {
+   "path": "src/chat_analyzer/ingest/ingestion.py",
+   "language": "python",
+   "sizeLines": 747,
+   "fileCategory": "code"
+  },
+  {
+   "path": "src/chat_analyzer/parser/__init__.py",
+   "language": "python",
+   "sizeLines": 22,
+   "fileCategory": "code"
+  },
+  {
+   "path": "src/chat_analyzer/parser/telegram_parser.py",
+   "language": "python",
+   "sizeLines": 159,
+   "fileCategory": "code"
+  },
+  {
+   "path": "src/chat_analyzer/parser/whatsapp_parser.py",
+   "language": "python",
+   "sizeLines": 426,
+   "fileCategory": "code"
+  },
+  {
+   "path": "src/chat_analyzer/reporting/__init__.py",
+   "language": "python",
+   "sizeLines": 20,
+   "fileCategory": "code"
+  },
+  {
+   "path": "src/chat_analyzer/reporting/pdf_report.py",
+   "language": "python",
+   "sizeLines": 622,
+   "fileCategory": "code"
+  },
+  {
+   "path": "src/chat_analyzer/reporting/weekly_digest.py",
+   "language": "python",
+   "sizeLines": 664,
+   "fileCategory": "code"
+  },
+  {
+   "path": "src/chat_analyzer/utils/__init__.py",
+   "language": "python",
+   "sizeLines": 14,
+   "fileCategory": "code"
+  },
+  {
+   "path": "src/chat_analyzer/utils/preprocessing.py",
+   "language": "python",
+   "sizeLines": 295,
+   "fileCategory": "code"
+  },
+  {
+   "path": "src/chat_analyzer/utils/visualization.py",
+   "language": "python",
+   "sizeLines": 714,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tests/__init__.py",
+   "language": "python",
+   "sizeLines": 0,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tests/fixtures/telegram_bare_entity.json",
+   "language": "json",
+   "sizeLines": 5,
+   "fileCategory": "config"
+  },
+  {
+   "path": "tests/fixtures/telegram_full_export.json",
+   "language": "json",
+   "sizeLines": 10,
+   "fileCategory": "config"
+  },
+  {
+   "path": "tests/fixtures/whatsapp_all_skipped.txt",
+   "language": "txt",
+   "sizeLines": 3,
+   "fileCategory": "docs"
+  },
+  {
+   "path": "tests/fixtures/whatsapp_system_skip.txt",
+   "language": "txt",
+   "sizeLines": 7,
+   "fileCategory": "docs"
+  },
+  {
+   "path": "tests/golden/telegram_sample.csv",
+   "language": "csv",
+   "sizeLines": 10,
+   "fileCategory": "data"
+  },
+  {
+   "path": "tests/golden/whatsapp_sample.csv",
+   "language": "csv",
+   "sizeLines": 10,
+   "fileCategory": "data"
+  },
+  {
+   "path": "tests/test_analysis.py",
+   "language": "python",
+   "sizeLines": 507,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tests/test_eda_parity.py",
+   "language": "python",
+   "sizeLines": 140,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tests/test_emotion_parallel.py",
+   "language": "python",
+   "sizeLines": 460,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tests/test_emotion_quarterly.py",
+   "language": "python",
+   "sizeLines": 323,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tests/test_emotion_sampling.py",
+   "language": "python",
+   "sizeLines": 621,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tests/test_end_to_end.py",
+   "language": "python",
+   "sizeLines": 646,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tests/test_golden_parity.py",
+   "language": "python",
+   "sizeLines": 104,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tests/test_ingestion_cor02.py",
+   "language": "python",
+   "sizeLines": 80,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tests/test_interactive_charts.py",
+   "language": "python",
+   "sizeLines": 247,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tests/test_long_path_guard.py",
+   "language": "python",
+   "sizeLines": 82,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tests/test_narrative.py",
+   "language": "python",
+   "sizeLines": 241,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tests/test_parser.py",
+   "language": "python",
+   "sizeLines": 330,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tests/test_perf_parity.py",
+   "language": "python",
+   "sizeLines": 554,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tests/test_perf_parity_dynamics.py",
+   "language": "python",
+   "sizeLines": 167,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tests/test_perf_parity_emotion.py",
+   "language": "python",
+   "sizeLines": 244,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tests/test_perf_parity_network.py",
+   "language": "python",
+   "sizeLines": 218,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tests/test_perf_parity_sentiment.py",
+   "language": "python",
+   "sizeLines": 198,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tests/test_phase1_smoke.py",
+   "language": "python",
+   "sizeLines": 270,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tests/test_phase2_builder.py",
+   "language": "python",
+   "sizeLines": 81,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tests/test_phase2_cli.py",
+   "language": "python",
+   "sizeLines": 250,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tests/test_phase2_pipeline.py",
+   "language": "python",
+   "sizeLines": 148,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tests/test_phase2_report.py",
+   "language": "python",
+   "sizeLines": 284,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tests/test_phase2_telegram.py",
+   "language": "python",
+   "sizeLines": 123,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tests/test_phase2_whatsapp.py",
+   "language": "python",
+   "sizeLines": 148,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tests/test_phase4_alwayson.py",
+   "language": "python",
+   "sizeLines": 99,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tests/test_phase4_cli.py",
+   "language": "python",
+   "sizeLines": 327,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tests/test_phase4_nlp.py",
+   "language": "python",
+   "sizeLines": 263,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tests/test_phase4_nlp_gate.py",
+   "language": "python",
+   "sizeLines": 91,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tests/test_phase4_zip.py",
+   "language": "python",
+   "sizeLines": 159,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tests/test_phase4_zip_media.py",
+   "language": "python",
+   "sizeLines": 127,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tests/test_reporting.py",
+   "language": "python",
+   "sizeLines": 235,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tests/test_result_cache.py",
+   "language": "python",
+   "sizeLines": 591,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tests/test_rolling_health_sliding.py",
+   "language": "python",
+   "sizeLines": 472,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tests/test_version_cor01.py",
+   "language": "python",
+   "sizeLines": 46,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tests/test_ws_honesty.py",
+   "language": "python",
+   "sizeLines": 109,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tests/test_zip_input_cor03.py",
+   "language": "python",
+   "sizeLines": 69,
+   "fileCategory": "code"
+  }
+ ],
+ "totalFiles": 98,
+ "filteredByIgnore": 72,
+ "estimatedComplexity": "moderate",
+ "importMap": {
+  ".github/workflows/ci.yml": [],
+  "README.md": [],
+  "data/processed/example_parsed.csv": [],
+  "data/sample_chats/telegram_sample.json": [],
+  "data/sample_chats/whatsapp_sample.txt": [],
+  "docs/ARCHITECTURE.md": [],
+  "docs/CONFIGURATION.md": [],
+  "docs/DEVELOPMENT.md": [],
+  "docs/GETTING-STARTED.md": [],
+  "docs/TESTING.md": [],
+  "docs/design_incremental_rolling_health.md": [],
+  "notebooks/01_data_parsing.ipynb": [],
+  "notebooks/02_exploratory_analysis.ipynb": [],
+  "notebooks/03_sentiment_emotion.ipynb": [],
+  "notebooks/04_relationship_health.ipynb": [],
+  "notebooks/05_network_graph.ipynb": [],
+  "notebooks/06_summarization.ipynb": [],
+  "notebooks/07_final_integration.ipynb": [],
+  "pyproject.toml": [],
+  "scripts/benchmark.py": [],
+  "scripts/make_nlp_env.ps1": [],
+  "src/chat_analyzer/__init__.py": [],
+  "src/chat_analyzer/__main__.py": [
+   "src/chat_analyzer/cli/__init__.py"
+  ],
+  "src/chat_analyzer/analysis/__init__.py": [
+   "src/chat_analyzer/analysis/relationship_health.py"
+  ],
+  "src/chat_analyzer/analysis/eda.py": [],
+  "src/chat_analyzer/analysis/emotion.py": [],
+  "src/chat_analyzer/analysis/narrative.py": [],
+  "src/chat_analyzer/analysis/network_graph.py": [],
+  "src/chat_analyzer/analysis/relationship_health.py": [],
+  "src/chat_analyzer/analysis/sentiment.py": [],
+  "src/chat_analyzer/analysis/summarizer.py": [],
+  "src/chat_analyzer/assets/LICENSE.echarts": [],
+  "src/chat_analyzer/assets/LICENSE.echarts-gl": [],
+  "src/chat_analyzer/cli/__init__.py": [
+   "src/chat_analyzer/cli/main.py"
+  ],
+  "src/chat_analyzer/cli/adapters.py": [
+   "src/chat_analyzer/cli/contracts.py",
+   "src/chat_analyzer/utils/preprocessing.py"
+  ],
+  "src/chat_analyzer/cli/chart_json.py": [],
+  "src/chat_analyzer/cli/contracts.py": [],
+  "src/chat_analyzer/cli/main.py": [
+   "src/chat_analyzer/cli/__init__.py",
+   "src/chat_analyzer/cli/nlp_gate.py"
+  ],
+  "src/chat_analyzer/cli/nlp_gate.py": [],
+  "src/chat_analyzer/cli/pipeline.py": [
+   "src/chat_analyzer/cli/chart_json.py",
+   "src/chat_analyzer/cli/contracts.py",
+   "src/chat_analyzer/ingest/ingestion.py"
+  ],
+  "src/chat_analyzer/cli/render.py": [
+   "src/chat_analyzer/cli/contracts.py"
+  ],
+  "src/chat_analyzer/cli/report_html.py": [
+   "src/chat_analyzer/cli/contracts.py"
+  ],
+  "src/chat_analyzer/cli/result_cache.py": [
+   "src/chat_analyzer/cli/__init__.py",
+   "src/chat_analyzer/cli/nlp_gate.py"
+  ],
+  "src/chat_analyzer/cli/zip_input.py": [],
+  "src/chat_analyzer/ingest/__init__.py": [
+   "src/chat_analyzer/ingest/ingestion.py"
+  ],
+  "src/chat_analyzer/ingest/ingestion.py": [],
+  "src/chat_analyzer/parser/__init__.py": [
+   "src/chat_analyzer/parser/telegram_parser.py",
+   "src/chat_analyzer/parser/whatsapp_parser.py"
+  ],
+  "src/chat_analyzer/parser/telegram_parser.py": [],
+  "src/chat_analyzer/parser/whatsapp_parser.py": [],
+  "src/chat_analyzer/reporting/__init__.py": [
+   "src/chat_analyzer/reporting/pdf_report.py"
+  ],
+  "src/chat_analyzer/reporting/pdf_report.py": [],
+  "src/chat_analyzer/reporting/weekly_digest.py": [],
+  "src/chat_analyzer/utils/__init__.py": [
+   "src/chat_analyzer/utils/preprocessing.py",
+   "src/chat_analyzer/utils/visualization.py"
+  ],
+  "src/chat_analyzer/utils/preprocessing.py": [],
+  "src/chat_analyzer/utils/visualization.py": [],
+  "tests/__init__.py": [],
+  "tests/fixtures/telegram_bare_entity.json": [],
+  "tests/fixtures/telegram_full_export.json": [],
+  "tests/fixtures/whatsapp_all_skipped.txt": [],
+  "tests/fixtures/whatsapp_system_skip.txt": [],
+  "tests/golden/telegram_sample.csv": [],
+  "tests/golden/whatsapp_sample.csv": [],
+  "tests/test_analysis.py": [],
+  "tests/test_eda_parity.py": [],
+  "tests/test_emotion_parallel.py": [],
+  "tests/test_emotion_quarterly.py": [],
+  "tests/test_emotion_sampling.py": [],
+  "tests/test_end_to_end.py": [],
+  "tests/test_golden_parity.py": [],
+  "tests/test_ingestion_cor02.py": [],
+  "tests/test_interactive_charts.py": [
+   "tests/test_phase2_report.py"
+  ],
+  "tests/test_long_path_guard.py": [],
+  "tests/test_narrative.py": [],
+  "tests/test_parser.py": [],
+  "tests/test_perf_parity.py": [],
+  "tests/test_perf_parity_dynamics.py": [],
+  "tests/test_perf_parity_emotion.py": [],
+  "tests/test_perf_parity_network.py": [],
+  "tests/test_perf_parity_sentiment.py": [],
+  "tests/test_phase1_smoke.py": [],
+  "tests/test_phase2_builder.py": [],
+  "tests/test_phase2_cli.py": [],
+  "tests/test_phase2_pipeline.py": [],
+  "tests/test_phase2_report.py": [],
+  "tests/test_phase2_telegram.py": [],
+  "tests/test_phase2_whatsapp.py": [],
+  "tests/test_phase4_alwayson.py": [],
+  "tests/test_phase4_cli.py": [],
+  "tests/test_phase4_nlp.py": [],
+  "tests/test_phase4_nlp_gate.py": [],
+  "tests/test_phase4_zip.py": [],
+  "tests/test_phase4_zip_media.py": [],
+  "tests/test_reporting.py": [],
+  "tests/test_result_cache.py": [],
+  "tests/test_rolling_health_sliding.py": [],
+  "tests/test_version_cor01.py": [],
+  "tests/test_ws_honesty.py": [],
+  "tests/test_zip_input_cor03.py": []
+ }
+}
